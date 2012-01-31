@@ -1,5 +1,5 @@
 /*
- * Copyright 2004-2011 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright 2004-2012 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -3151,7 +3151,6 @@ static int udc_suspend(struct fsl_udc *udc)
 	/* For some buggy hardware designs, see comment of this function for detail */
 	/* udc_wait_b_session_low(); */
 
-	udc->stopped = 1;
 
 	/* The dp should be still pulled up
 	 * if there is usb cable or usb charger on port.
@@ -3162,6 +3161,7 @@ static int udc_suspend(struct fsl_udc *udc)
 		/* stop the controller */
 		usbcmd = fsl_readl(&dr_regs->usbcmd) & ~USB_CMD_RUN_STOP;
 		fsl_writel(usbcmd, &dr_regs->usbcmd);
+		udc->stopped = 1;
 	}
 
 	dr_phy_low_power_mode(udc, true);
@@ -3181,10 +3181,11 @@ out:
 static int fsl_udc_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	int ret;
-#ifdef CONFIG_USB_OTG
-	if (udc_controller->transceiver->gadget == NULL)
+	if (get_gadget_data(&udc_controller->gadget) == NULL) {
+		/* if no gadget is binded, quit */
 		return 0;
-#endif
+	}
+
 	if (udc_controller->stopped)
 		dr_clk_gate(true);
 	if (((!(udc_controller->gadget.is_otg)) ||
@@ -3214,11 +3215,10 @@ static int fsl_udc_resume(struct platform_device *pdev)
 		wait_event_interruptible(wake_up_pdata->wq, !wake_up_pdata->usb_wakeup_is_pending);
 	}
 
-#ifdef CONFIG_USB_OTG
-	if (udc_controller->transceiver->gadget == NULL) {
+	if (get_gadget_data(&udc_controller->gadget) == NULL) {
+		/* if no gadget is binded, quit */
 		return 0;
 	}
-#endif
 	mutex_lock(&udc_resume_mutex);
 
 	pr_debug("%s(): stopped %d  suspended %d\n", __func__,
