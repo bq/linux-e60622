@@ -177,6 +177,7 @@ struct mmc_host {
 #define MMC_CAP_NONREMOVABLE	(1 << 8)	/* Nonremovable e.g. eMMC */
 #define MMC_CAP_WAIT_WHILE_BUSY	(1 << 9)	/* Waits while card is busy */
 #define MMC_CAP_DATA_DDR	(1 << 10)	/* Can the host do ddr transfers */
+#define MMC_CAP2_DETECT_ON_ERR	(1 << 8)	/* On I/O err check card removal */
 
 	mmc_pm_flag_t		pm_caps;	/* supported pm features */
 
