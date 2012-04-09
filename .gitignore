@@ -31,7 +31,12 @@ modules.builtin
 *.lzo
 *.patch
 *.gcno
-
+# gallen add rule [.
+svn-commit.*
+.svn
+*.cmd
+make.log
+# gallen add rule ].
 #
 # Top-level generic files
 #
@@ -49,6 +54,10 @@ modules.builtin
 #
 !.gitignore
 !.mailmap
+
+# gallen add [.
+!.config
+# gallen add ].
 
 #
 # Generated include files

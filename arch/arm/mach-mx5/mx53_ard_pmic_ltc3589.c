@@ -188,12 +188,14 @@ static struct i2c_board_info __initdata ltc3589_i2c_device = {
 	.platform_data = &ltc3589_plat,
 };
 
+#if 0
 static __init int mx53_init_i2c(void)
 {
 	return i2c_register_board_info(1, &ltc3589_i2c_device, 1);
 }
 
 subsys_initcall(mx53_init_i2c);
+#endif
 
 static __init int ltc3589_pmic_init(void)
 {

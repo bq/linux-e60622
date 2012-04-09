@@ -38,6 +38,10 @@
 
 #include "regs-pxp.h"
 
+#include <linux/delay.h>
+#define GDEBUG 0
+#include <linux/gallen_dbg.h>
+
 #define	PXP_DOWNSCALE_THRESHOLD		0x4000
 
 static LIST_HEAD(head);
@@ -661,8 +665,10 @@ static void pxp_clk_disable(struct pxps *pxp)
 		return;
 	}
 
-	clk_disable(pxp->clk);
-	pxp->clk_stat = CLK_STAT_OFF;
+	if ((pxp->pxp_ongoing == 0) && list_empty(&head)) {
+		clk_disable(pxp->clk);
+		pxp->clk_stat = CLK_STAT_OFF;
+	}
 
 	mutex_unlock(&pxp->clk_mutex);
 }
@@ -740,10 +746,12 @@ static void pxpdma_dostart_work(struct pxps *pxp)
 {
 	struct pxp_channel *pxp_chan = NULL;
 	unsigned long flags, flags1;
-
+	
+	GALLEN_DBGLOCAL_BEGIN();mdelay(10);
 	while (__raw_readl(pxp->base + HW_PXP_CTRL) & BM_PXP_CTRL_ENABLE)
 		;
 
+	GALLEN_DBGLOCAL_PRINTMSG("[1]");mdelay(1);
 	spin_lock_irqsave(&pxp->lock, flags);
 	if (list_empty(&head)) {
 		pxp->pxp_ongoing = 0;
@@ -762,12 +770,14 @@ static void pxpdma_dostart_work(struct pxps *pxp)
 	}
 	spin_unlock_irqrestore(&pxp_chan->lock, flags1);
 
+	GALLEN_DBGLOCAL_PRINTMSG("[2]");mdelay(1);
 	/* Configure PxP */
 	pxp_config(pxp, pxp_chan);
 
 	pxp_start(pxp);
 
 	spin_unlock_irqrestore(&pxp->lock, flags);
+	GALLEN_DBGLOCAL_END();mdelay(10);
 }
 
 static void pxpdma_dequeue(struct pxp_channel *pxp_chan, struct list_head *list)
@@ -1065,31 +1075,42 @@ static void pxp_issue_pending(struct dma_chan *chan)
 	struct pxp_dma *pxp_dma = to_pxp_dma(chan->device);
 	struct pxps *pxp = to_pxp(pxp_dma);
 	unsigned long flags0, flags;
+	
+	GALLEN_DBGLOCAL_BEGIN();
 
 	spin_lock_irqsave(&pxp->lock, flags0);
 	spin_lock_irqsave(&pxp_chan->lock, flags);
 
+	GALLEN_DBGLOCAL_PRINTMSG("1");
 	if (!list_empty(&pxp_chan->queue)) {
+		GALLEN_DBGLOCAL_PRINTMSG("2");
+		GALLEN_DBGLOCAL_RUNLOG(0);
 		pxpdma_dequeue(pxp_chan, &pxp_chan->active_list);
 		pxp_chan->status = PXP_CHANNEL_READY;
 		list_add_tail(&pxp_chan->list, &head);
 	} else {
+		GALLEN_DBGLOCAL_PRINTMSG("3");
 		spin_unlock_irqrestore(&pxp_chan->lock, flags);
 		spin_unlock_irqrestore(&pxp->lock, flags0);
+		GALLEN_DBGLOCAL_ESC();
 		return;
 	}
 	spin_unlock_irqrestore(&pxp_chan->lock, flags);
 	spin_unlock_irqrestore(&pxp->lock, flags0);
 
+	GALLEN_DBGLOCAL_PRINTMSG("4");
 	pxp_clk_enable(pxp);
 	if (!wait_event_interruptible_timeout(pxp->done, PXP_WAITCON, 2 * HZ) ||
 		signal_pending(current)) {
 		pxp_clk_disable(pxp);
+		GALLEN_DBGLOCAL_ESC();
 		return;
 	}
+	GALLEN_DBGLOCAL_PRINTMSG("5");
 
 	pxp->pxp_ongoing = 1;
 	pxpdma_dostart_work(pxp);
+	GALLEN_DBGLOCAL_END();
 }
 
 static void __pxp_terminate_all(struct dma_chan *chan)

@@ -309,6 +309,11 @@ static struct clk ckil_clk = {
 static int apll_enable(struct clk *clk)
 {
 	__raw_writel(1, apll_base + MXC_ANADIG_MISC_SET);
+	
+	if (!WAIT(__raw_readl(apll_base + MXC_ANADIG_PLLCTRL)
+		  & MXC_ANADIG_APLL_LOCK, 80000))
+		panic("apll_enable failed!\n");
+		
 	return 0;
 }
 
@@ -378,23 +383,10 @@ static int pfd_enable(struct clk *clk)
 		apbh_dma_clk.enable(&apbh_dma_clk);
 	index = _get_mux8(clk, &pfd0_clk, &pfd1_clk, &pfd2_clk, &pfd3_clk,
 			&pfd4_clk, &pfd5_clk, &pfd6_clk, &pfd7_clk);
-	__raw_writel(1 << (index + MXC_ANADIG_PFD_DIS_OFFSET),
-			apll_base + MXC_ANADIG_PLLCTRL_CLR);
 	/* clear clk gate bit */
 	__raw_writel((1 << (clk->enable_shift + 7)),
 			apll_base + (int)clk->enable_reg + 8);
 
-	/* check lock bit */
-	if (!WAIT(__raw_readl(apll_base + MXC_ANADIG_PLLCTRL)
-		  & MXC_ANADIG_APLL_LOCK, 50000)) {
-		__raw_writel(MXC_ANADIG_APLL_FORCE_LOCK,
-			     apll_base + MXC_ANADIG_PLLCTRL_CLR);
-		__raw_writel(MXC_ANADIG_APLL_FORCE_LOCK,
-			     apll_base + MXC_ANADIG_PLLCTRL_SET);
-		if (!WAIT(__raw_readl(apll_base + MXC_ANADIG_PLLCTRL)
-			  & MXC_ANADIG_APLL_LOCK, SPIN_DELAY))
-			panic("pfd_enable failed!\n");
-	}
 	if (apbh_dma_clk.usecount == 0)
 		apbh_dma_clk.disable(&apbh_dma_clk);
 	return 0;
@@ -411,8 +403,6 @@ static void pfd_disable(struct clk *clk)
 	/* set clk gate bit */
 	__raw_writel((1 << (clk->enable_shift + 7)),
 			apll_base + (int)clk->enable_reg + 4);
-	__raw_writel(1 << (index + MXC_ANADIG_PFD_DIS_OFFSET),
-			apll_base + MXC_ANADIG_PLLCTRL_SET);
 	if (apbh_dma_clk.usecount == 0)
 		apbh_dma_clk.disable(&apbh_dma_clk);
 }
@@ -1585,7 +1575,7 @@ static struct clk pwm1_clk[] = {
 
 static struct clk pwm2_clk[] = {
 	{
-	 .parent = &ipg_perclk,
+	 .parent = &ipg_clk,
 	 .id = 1,
 	 .enable_reg = MXC_CCM_CCGR2,
 	 .enable_shift = MXC_CCM_CCGRx_CG8_OFFSET,
@@ -3170,8 +3160,13 @@ static struct clk_lookup lookups[] = {
 	_REGISTER_CLOCK(NULL, "ahb_max_clk", ahb_max_clk),
 	_REGISTER_CLOCK("mxc_sdma", "sdma_ahb_clk", sdma_clk[0]),
 	_REGISTER_CLOCK("mxc_sdma", "sdma_ipg_clk", sdma_clk[1]),
+#if 1
+	_REGISTER_CLOCK("mxcintuart.0", NULL, uart2_clk[0]),
+	_REGISTER_CLOCK("mxcintuart.1", NULL, uart1_clk[0]),
+#else
 	_REGISTER_CLOCK("mxcintuart.0", NULL, uart1_clk[0]),
 	_REGISTER_CLOCK("mxcintuart.1", NULL, uart2_clk[0]),
+#endif
 	_REGISTER_CLOCK("mxcintuart.2", NULL, uart3_clk[0]),
 	_REGISTER_CLOCK("mxcintuart.3", NULL, uart4_clk[0]),
 	_REGISTER_CLOCK("mxcintuart.4", NULL, uart5_clk[0]),
@@ -3351,7 +3346,7 @@ int __init mx50_clocks_init(unsigned long ckil, unsigned long osc, unsigned long
 
 	clk_enable(&main_bus_clk);
 
-	clk_enable(&ocotp_clk);
+//	clk_enable(&ocotp_clk);
 
 	databahn = ioremap(MX50_DATABAHN_BASE_ADDR, SZ_16K);
 
@@ -3422,7 +3417,7 @@ int __init mx50_clocks_init(unsigned long ckil, unsigned long osc, unsigned long
 	clk_set_parent(&usb_phy_clk[1], &osc_clk);
 
 	/* move gpmi-nfc to 24MHz */
-	clk_set_parent(&gpmi_nfc_clk[0], &osc_clk);
+//	clk_set_parent(&gpmi_nfc_clk[0], &osc_clk);
 
 	/* set SDHC root clock as 200MHZ*/
 	clk_set_rate(&esdhc1_clk[0], 200000000);

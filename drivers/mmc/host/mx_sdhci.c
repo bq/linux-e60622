@@ -1548,10 +1548,7 @@ static void esdhc_cd_callback(struct work_struct *work)
 		if (host->detect_irq == 0)
 			break;
 		cd_status = host->plat_data->status(host->mmc->parent);
-		if (cd_status)
-			set_irq_type(host->detect_irq, IRQF_TRIGGER_FALLING);
-		else
-			set_irq_type(host->detect_irq, IRQF_TRIGGER_RISING);
+		set_irq_type(host->detect_irq, IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING);
 	} while (cd_status != host->plat_data->status(host->mmc->parent));
 
 	cd_status = host->plat_data->status(host->mmc->parent);
@@ -1742,6 +1739,7 @@ static irqreturn_t sdhci_irq(int irq, void *dev_id)
 \*****************************************************************************/
 
 #ifdef CONFIG_PM
+extern int gSleep_Mode_Suspend;
 
 static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 {
@@ -1753,6 +1751,12 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 		return 0;
 
 	DBG("Suspending...\n");
+	if (1 == pdev->id) {
+		printk ("[%s-%d] skip suspend for mmc%d\n",__func__,__LINE__,pdev->id);
+		if (!gSleep_Mode_Suspend)
+			enable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
+		return 0;	// Joseph 100323 test
+	}
 
 	for (i = 0; i < chip->num_slots; i++) {
 		if (!chip->hosts[i])
@@ -1784,6 +1788,12 @@ static int sdhci_resume(struct platform_device *pdev)
 		return 0;
 
 	DBG("Resuming...\n");
+	if (1 == pdev->id) {
+		printk ("[%s-%d] skip resume for mmc%d\n",__func__,__LINE__,pdev->id);
+		if (!gSleep_Mode_Suspend)
+			disable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
+		return 0;	// Joseph 100323 test
+	}
 
 	for (i = 0; i < chip->num_slots; i++) {
 		if (!chip->hosts[i])
@@ -1900,10 +1910,7 @@ static int __devinit sdhci_probe_slot(struct platform_device
 
 	do {
 		ret = host->plat_data->status(host->mmc->parent);
-		if (ret)
-			set_irq_type(host->detect_irq, IRQF_TRIGGER_FALLING);
-		else
-			set_irq_type(host->detect_irq, IRQF_TRIGGER_RISING);
+		set_irq_type(host->detect_irq, IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING);
 	} while (ret != host->plat_data->status(host->mmc->parent));
 
 	ret = host->plat_data->status(host->mmc->parent);

@@ -68,6 +68,7 @@ enum fsl_usb2_modes get_usb_mode(struct fsl_usb2_platform_data *pdata)
 
 static struct clk *usb_clk;
 static struct clk *usb_ahb_clk;
+static int USBH1_disabled;
 
 extern int gpio_usbotg_hs_active(void);
 extern int gpio_usbotg_hs_inactive(void);
@@ -290,6 +291,14 @@ static void usbh1_set_utmi_xcvr(void)
 		/* Over current polarity low active */
 		USB_PHY_CTR_FUNC |= USB_UH1_OC_POL;
 	}
+	udelay (1000);
+	if (0 == (0x0C000000 & UH1_PORTSC1)) {
+		printk ("<6>[%s-%d] %s() USB H1 not initialized !!\n",__FILE__,__LINE__,__func__);
+		USBH1_disabled=1;
+		clk_disable(usb_clk);
+		return;
+	}
+	USBH1_disabled=0;
 	/* set UTMI xcvr */
 	tmp = UH1_PORTSC1 & ~PORTSC_PTS_MASK;
 	tmp |= PORTSC_PTS_UTMI;
@@ -298,6 +307,10 @@ static void usbh1_set_utmi_xcvr(void)
 	/* Set the PHY clock to 24MHz */
 	USBH1_PHY_CTRL1 &= ~USB_UTMI_PHYCTRL2_PLLDIV_MASK;
 	USBH1_PHY_CTRL1 |= 0x01;
+	
+	// Joseph 20110624
+	USBH1_PHY_CTRL0 &= ~USB_UTMI_PHYCTRL_CHGRDETON;
+	USBH1_PHY_CTRL0 &= ~USB_UTMI_PHYCTRL_CHGRDETEN;
 
 	/* Workaround an IC issue for ehci driver:
 	 * when turn off root hub port power, EHCI set
@@ -324,7 +337,14 @@ static void usbh1_set_utmi_xcvr(void)
 	 * the ULPI transceiver to reset too.
 	 */
 	msleep(100);
-
+	
+#if 1
+	// force suspend otg port 
+	printk ("[%s-%d] %s() \n",__FILE__,__LINE__,__func__);
+	USB_PHY_CTR_FUNC |= USB_UTMI_PHYCTRL_OC_DIS;
+	USBCTRL &= ~UCTRL_OWIE;
+	USB_PHY_CTR_FUNC &= ~0x1000;
+#endif
 	/* Turn off the usbpll for UTMI tranceivers */
 	clk_disable(usb_clk);
 }
@@ -522,6 +542,8 @@ int fsl_usb_host_init(struct platform_device *pdev)
 		usbh1_set_utmi_xcvr();
 	}
 
+	if (USBH1_disabled)
+		return -1;
 	pr_debug("%s: %s success\n", __func__, pdata->name);
 	return 0;
 }
@@ -819,6 +841,7 @@ int usbotg_init(struct platform_device *pdev)
 		if (xops->init)
 			xops->init(xops);
 
+		USB_PHY_CTR_FUNC |= 0x1000;	// disable suspend test mode.
 		UOG_PORTSC1 = UOG_PORTSC1 & ~PORTSC_PHCD;
 		if (xops->xcvr_type == PORTSC_PTS_SERIAL) {
 			if (pdata->operating_mode == FSL_USB2_DR_HOST) {
@@ -836,6 +859,7 @@ int usbotg_init(struct platform_device *pdev)
 		}
 	}
 
+		
 	if (usb_register_remote_wakeup(pdev))
 		pr_debug("DR is not a wakeup source.\n");
 

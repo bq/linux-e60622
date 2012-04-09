@@ -48,6 +48,7 @@ extern void mx50_wait(u32 ccm_base, u32 databahn_addr,
 extern void stop_dvfs(void);
 extern void *wait_in_iram_base;
 extern void __iomem *apll_base;
+extern unsigned int mx50_ddr_type;
 
 static struct clk *gpc_dvfs_clk;
 static struct regulator *vpll;
@@ -93,6 +94,7 @@ void mxc_cpu_lp_set(enum mxc_cpu_pwr_mode mode)
 			ccm_clpcr |= (0x3 << MXC_CCM_CLPCR_STBY_COUNT_OFFSET);
 			ccm_clpcr |= MXC_CCM_CLPCR_VSTBY;
 			ccm_clpcr |= MXC_CCM_CLPCR_SBYOS;
+			ccm_clpcr |= MXC_CCM_CLPCR_BYPASS_PMIC_VFUNC_READY;
 			stop_mode = 1;
 		}
 
@@ -199,6 +201,7 @@ void arch_idle(void)
 				reg |= 1;
 				__raw_writel(reg, apll_base + 0x80);
 
+				if (mx50_ddr_type != MX50_DDR2) {
 				/* Move ARM to be sourced from 24MHz XTAL.
 				 * when ARM is in WFI.
 				 */
@@ -215,15 +218,18 @@ void arch_idle(void)
 				/* Set the ARM-PODF divider to 1. */
 				cpu_podf = __raw_readl(MXC_CCM_CACRR);
 				__raw_writel(0x01, MXC_CCM_CACRR);
+				}
 
 				wait_in_iram(ccm_base, databahn_base,
 					clk_get_usecount(sys_clk));
 
+				if (mx50_ddr_type != MX50_DDR2) {
 				/* Set the ARM-POD divider back
 				 * to the original.
 				 */
 				__raw_writel(cpu_podf, MXC_CCM_CACRR);
 				clk_set_parent(pll1_sw_clk, pll1_main_clk);
+				}
 			} else
 				wait_in_iram(ccm_base, databahn_base,
 					clk_get_usecount(sys_clk));

@@ -7,7 +7,7 @@
 #
 FONTMAPFILE = cp437.uni
 
-obj-y	 += mem.o random.o tty_io.o n_tty.o tty_ioctl.o tty_ldisc.o tty_buffer.o tty_port.o
+obj-y	 += mem.o random.o tty_io.o n_tty.o tty_ioctl.o tty_ldisc.o tty_buffer.o tty_port.o mma7660.o
 
 obj-$(CONFIG_FM_SI4702)		+= mxc_si4702.o
 obj-$(CONFIG_MXC_IIM)		+= mxc_iim.o

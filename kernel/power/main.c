@@ -204,6 +204,38 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 power_attr(state);
 
+static ssize_t state_extended_show(struct kobject *kobj, struct kobj_attribute *attr,
+			  char *buf)
+{
+	char *s = buf;
+	s += sprintf(s, "%s\n", "1");
+	return (s - buf);
+}
+
+static ssize_t state_extended_store(struct kobject *kobj, struct kobj_attribute *attr,
+			   const char *buf, size_t n)
+{
+	extern int gSleep_Mode_Suspend;
+	
+	if ('1' == *buf)
+		gSleep_Mode_Suspend = 1;
+	else 
+		gSleep_Mode_Suspend = 0;
+//	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
+
+	return n;
+}
+
+//power_attr(state_extended);
+static struct kobj_attribute state_extended_attr = {
+         .attr   = {
+                 .name = "state-extended",
+                 .mode = 0644,
+         },
+         .show   = state_extended_show,
+         .store  = state_extended_store,
+};
+ 
 #ifdef CONFIG_PM_TRACE
 int pm_trace_enabled;
 
@@ -276,6 +308,7 @@ static struct attribute * g[] = {
 	&pm_test_attr.attr,
 #endif
 #endif
+	&state_extended_attr.attr,
 	NULL,
 };
 

@@ -327,20 +327,154 @@ static struct i2c_driver pmic_driver = {
 	.id_table = mc13892_id,
 };
 
+#if 1	// Joseph 091210
+struct i2c_client *msp430_client;	// Joseph 091221
+extern void ntx_msp430_i2c_force_release (void);
+unsigned int msp430_read(unsigned int reg)
+{
+	struct i2c_client *client = msp430_client;
+	int i2c_ret;
+	int retry_count = 5;
+	u16 value = -1;
+	u8 buf0[2], buf1[2]={0,0};
+	u16 addr;
+	u16 flags;
+	struct i2c_msg msg[2] = {
+		{0, 0, 1, buf0},
+		{0, I2C_M_RD, 2, buf1},
+	};
+
+	if (!msp430_client) {
+		printk("[%s-%d] MSP430 not probed...\n",__FUNCTION__,__LINE__);
+		return 0;
+	}
+	
+	msg[0].addr = client->addr;
+	msg[0].flags = client->flags;
+	msg[1].addr = client->addr;
+	msg[1].flags |= client->flags;
+	
+	while (retry_count--) {
+		buf0[0] = reg & 0xff;
+		i2c_ret = i2c_transfer(client->adapter, msg, 2);
+		if (i2c_ret >= 0) {
+			value = buf1[0] << 8 | buf1[1];
+			break;
+		}
+		pr_err("%s: read reg error : Reg 0x%02x\n", __func__, reg);
+		ntx_msp430_i2c_force_release ();
+	}
+//	printk("[%s-%d] reg:0x%02x, value:0x%04x\n",__FUNCTION__,__LINE__, reg, value);
+	return value;
+}
+
+int msp430_write(unsigned int reg, unsigned int value)
+{
+	struct i2c_client *client = msp430_client;
+	u16 addr;
+	u16 flags;
+	u8 buf[4];
+	int i2c_ret;
+	struct i2c_msg msg = { 0, 0, 3, buf };
+
+	if (!msp430_client) {
+		printk("[%s-%d] MSP430 not probed...\n",__FUNCTION__,__LINE__);
+		return 0;
+	}
+	msg.addr = client->addr;
+	msg.flags = client->flags;
+	
+//	printk ("[%s-%d] 0x%02X 0x%04X\n",__FUNCTION__,__LINE__,reg,value);
+	pr_debug("w r:%02x,v:%04x\n", reg, value);
+	buf[0] = reg & 0xff;
+	buf[1] = (value & 0xff00) >> 8;
+	buf[2] = value & 0xff;
+
+	i2c_ret = i2c_transfer(client->adapter, &msg, 1);
+	if (i2c_ret < 0) {
+		pr_err("%s: write reg error : Reg 0x%02x = 0x%04x\n",
+		       __func__, reg, value);
+		ntx_msp430_i2c_force_release ();
+		return -EIO;
+	}
+
+	return i2c_ret;
+}
+
+static int __devinit msp430_probe(struct i2c_client *client,
+				const struct i2c_device_id *id)
+{
+	/*
+	int i2c_ret;
+	u16 value;
+	u8 buf0[2], buf1[2];
+	u16 addr = client->addr;
+	u16 flags = client->flags;
+	struct i2c_msg msg[2] = {
+		{addr, flags, 1, buf0},
+		{addr, flags | I2C_M_RD, 2, buf1},
+	};
+
+	
+	buf0[0] = 0;
+	i2c_ret = i2c_transfer(client->adapter, msg, 2);
+	if (i2c_ret < 0) {
+		pr_err("%s: read reg error : Reg 0\n", __func__);
+		return 0;
+	}
+	*/
+	msp430_client = client;
+
+	printk("[%s-%d] MSP430 firmware version %04X\n",__FUNCTION__,__LINE__, msp430_read(0));
+	msp430_write(0x30,0xFF00);	// Jospeh 100108 // start ADC
+
+	return PMIC_SUCCESS;
+}
+
+static const struct i2c_device_id msp430_id[] = {
+	{"msp430", 0},
+	{},
+};
+
+MODULE_DEVICE_TABLE(i2c, msp430_id);
+
+static struct i2c_driver msp430_driver = {
+	.driver = {
+		   .name = "msp430",
+		   .bus = NULL,
+		   },
+	.probe = msp430_probe,
+	.id_table = msp430_id,
+};
+#endif
+
 static int __init pmic_init(void)
 {
+#if 1
+//	printk("[%s-%d] ...\n",__FUNCTION__,__LINE__);
+	return i2c_add_driver(&msp430_driver);		// Joseph 091210
+#else
 	return i2c_add_driver(&pmic_driver);
+#endif
 }
 
 static void __exit pmic_exit(void)
 {
+#if 1
+	i2c_del_driver(&msp430_driver);
+#else
 	i2c_del_driver(&pmic_driver);
+#endif
 }
 
 /*
  * Module entry points
  */
+#if 1
+module_init(pmic_init);
+#else
 subsys_initcall_sync(pmic_init);
+#endif
 module_exit(pmic_exit);
 
 MODULE_DESCRIPTION("Core/Protocol driver for PMIC");

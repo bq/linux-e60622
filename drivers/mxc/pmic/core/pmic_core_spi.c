@@ -191,26 +191,28 @@ static int __devinit pmic_probe(struct spi_device *spi)
 		return PMIC_ERROR;
 	}
 
-	ret = pmic_start_event_thread(spi->irq);
-	if (ret) {
-		pr_err("mc13892 pmic driver init: \
-			fail to start event thread\n");
-		kfree(spi_get_drvdata(spi));
-		spi_set_drvdata(spi, NULL);
-		return PMIC_ERROR;
+	if (spi->irq) {	// Joseph 20110527
+		ret = pmic_start_event_thread(spi->irq);
+		if (ret) {
+			pr_err("mc13892 pmic driver init: \
+				fail to start event thread\n");
+			kfree(spi_get_drvdata(spi));
+			spi_set_drvdata(spi, NULL);
+			return PMIC_ERROR;
+		}
+	
+		/* Set and install PMIC IRQ handler */
+		set_irq_type(spi->irq, IRQF_TRIGGER_HIGH);
+		ret = request_irq(spi->irq, pmic_irq_handler, 0, "PMIC_IRQ", 0);
+		if (ret) {
+			kfree(spi_get_drvdata(spi));
+			spi_set_drvdata(spi, NULL);
+			dev_err((struct device *)spi, "gpio1: irq%d error.", spi->irq);
+			return ret;
+		}
+	
+		enable_irq_wake(spi->irq);
 	}
-
-	/* Set and install PMIC IRQ handler */
-	set_irq_type(spi->irq, IRQF_TRIGGER_HIGH);
-	ret = request_irq(spi->irq, pmic_irq_handler, 0, "PMIC_IRQ", 0);
-	if (ret) {
-		kfree(spi_get_drvdata(spi));
-		spi_set_drvdata(spi, NULL);
-		dev_err((struct device *)spi, "gpio1: irq%d error.", spi->irq);
-		return ret;
-	}
-
-	enable_irq_wake(spi->irq);
 
 	if (plat_data && plat_data->init) {
 		ret = plat_data->init(spi_get_drvdata(spi));

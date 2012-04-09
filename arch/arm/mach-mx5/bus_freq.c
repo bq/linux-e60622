@@ -184,7 +184,7 @@ void enter_lpapm_mode_mx50()
 	unsigned long flags;
 	spin_lock_irqsave(&ddr_freq_lock, flags);
 
-	set_ddr_freq(LP_APM_CLK);
+	set_ddr_freq(ddr_low_rate);
 	/* Set the parent of main_bus_clk to be PLL3 */
 
 	clk_set_parent(main_bus_clk, pll3);
@@ -232,12 +232,15 @@ void enter_lpapm_mode_mx50()
 
 	spin_unlock_irqrestore(&ddr_freq_lock, flags);
 
+#if 0  //DDR2 run at 133M, can not drop Vcc to 1.05
 	spin_lock_irqsave(&voltage_lock, flags);
 	lp_voltage = LP_LOW_VOLTAGE;
 	INIT_COMPLETION(voltage_change_cmpl);
 	queue_work(voltage_wq, &voltage_change_handler);
 	spin_unlock_irqrestore(&voltage_lock, flags);
+#endif
 
+#if 0 //remove for DDR2
 	if (clk_get_usecount(pll1_sw_clk) == 1) {
 		/* Relock PLL1 to 160MHz. */
 		clk_set_parent(pll1_sw_clk, pll2);
@@ -249,6 +252,7 @@ void enter_lpapm_mode_mx50()
 		/* Set the divider to ARM_PODF to 1. */
 		__raw_writel(0x0, MXC_CCM_CACRR);
 	}
+#endif
 	udelay(100);
 }
 
@@ -490,6 +494,7 @@ void exit_lpapm_mode_mx50(int high_bus_freq)
 	u32 reg;
 	unsigned long flags;
 
+#if 0 //remove for DDR2
 	if (clk_get_usecount(pll1_sw_clk) == 1) {
 		/* Relock PLL1 to 800MHz. */
 		clk_set_parent(pll1_sw_clk, pll2);
@@ -501,7 +506,9 @@ void exit_lpapm_mode_mx50(int high_bus_freq)
 		/* Set the divider to ARM_PODF to 5. */
 		__raw_writel(0x4, MXC_CCM_CACRR);
 	}
+#endif
 
+#if 0 //remove for DDR2
 	if (!completion_done(&voltage_change_cmpl))
 		wait_for_completion_interruptible(&voltage_change_cmpl);
 	spin_lock_irqsave(&voltage_lock, flags);
@@ -517,6 +524,7 @@ void exit_lpapm_mode_mx50(int high_bus_freq)
 		if (!completion_done(&voltage_change_cmpl))
 			wait_for_completion_interruptible(&voltage_change_cmpl);
 	}
+#endif
 
 	spin_lock_irqsave(&ddr_freq_lock, flags);
 	if (!low_bus_freq_mode) {
@@ -716,6 +724,16 @@ void set_ddr_freq(int ddr_rate)
 
 	if (cpu_is_mx50())
 		ret = update_ddr_freq(ddr_rate);
+
+#if 1
+{
+	unsigned int reg;
+    printk(KERN_NOTICE "set_ddr_freq ddr_rate =%d ret = %d \n",ddr_rate, ret);
+
+	reg = __raw_readl(MXC_CCM_CLK_DDR);
+    printk(KERN_NOTICE "after ddr divider = 0x%x \n",reg&0x3f);
+}
+#endif
 
 	spin_unlock_irqrestore(&ddr_freq_lock, flags);
 	if (!ret)
@@ -959,9 +977,15 @@ static int __devinit busfreq_probe(struct platform_device *pdev)
 			lp_normal_rate = pll2_rate / 3;
 			ddr_normal_rate = clk_get_rate(ddr_clk);
 			lp_med_rate = pll2_rate / 6;
-			ddr_low_rate = LP_APM_CLK;
+			if (mx50_ddr_type == MX50_DDR2)
+    			ddr_low_rate = pll2_rate / 3; /* 133M */
+            else
+    			ddr_low_rate = LP_APM_CLK;
+
 			if (mx50_ddr_type == MX50_LPDDR2)
 				ddr_med_rate = pll2_rate / 3;
+			else if (mx50_ddr_type == MX50_DDR2)
+    			ddr_med_rate = pll1_rate / 5;  /* 160M */
 			else
 				/* mDDR @ 133Mhz currently does not work */
 				ddr_med_rate = ddr_normal_rate;

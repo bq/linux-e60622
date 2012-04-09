@@ -86,6 +86,10 @@
 #define BIT_BP_GREEN_WID	2
 #define BIT_BP_BLUE_WID		2
 
+extern void ntx_led_blink (unsigned int channel, unsigned char period);
+extern void ntx_led_dc (unsigned int channel, unsigned char dc);
+extern void ntx_led_current (unsigned int channel, unsigned char value);
+
 int pmic_light_init_reg(void)
 {
 	CHECK_ERROR(pmic_write_reg(REG_LED_CTL0, 0, PMIC_ALL_BITS));
@@ -164,6 +168,8 @@ PMIC_STATUS mc13892_bklit_get_hi_current(enum lit_channel channel, int *mode)
 PMIC_STATUS mc13892_bklit_set_current(enum lit_channel channel,
 				      unsigned char level)
 {
+	ntx_led_current (channel, level);
+#if 0
 	unsigned int mask;
 	unsigned int value;
 	int reg;
@@ -210,7 +216,7 @@ PMIC_STATUS mc13892_bklit_set_current(enum lit_channel channel,
 		return PMIC_PARAMETER_ERROR;
 	}
 	CHECK_ERROR(pmic_write_reg(reg, value, mask));
-
+#endif
 	return PMIC_SUCCESS;
 }
 
@@ -286,6 +292,8 @@ PMIC_STATUS mc13892_bklit_get_current(enum lit_channel channel,
 PMIC_STATUS mc13892_bklit_set_dutycycle(enum lit_channel channel,
 					unsigned char dc)
 {
+	ntx_led_dc (channel, dc);
+#if 0
 	unsigned int mask;
 	unsigned int value;
 	int reg;
@@ -325,6 +333,7 @@ PMIC_STATUS mc13892_bklit_set_dutycycle(enum lit_channel channel,
 		return PMIC_PARAMETER_ERROR;
 	}
 	CHECK_ERROR(pmic_write_reg(reg, value, mask));
+#endif
 	return PMIC_SUCCESS;
 }
 
@@ -452,6 +461,8 @@ PMIC_STATUS mc13892_bklit_get_ramp(enum lit_channel channel, int *flag)
 
 PMIC_STATUS mc13892_bklit_set_blink_p(enum lit_channel channel, int period)
 {
+	ntx_led_blink (channel, period);
+#if 0
 	unsigned int mask;
 	unsigned int value;
 	int reg;
@@ -476,6 +487,7 @@ PMIC_STATUS mc13892_bklit_set_blink_p(enum lit_channel channel, int period)
 		return PMIC_PARAMETER_ERROR;
 	}
 	CHECK_ERROR(pmic_write_reg(reg, value, mask));
+#endif
 	return PMIC_SUCCESS;
 }
 
@@ -553,19 +565,19 @@ static int cmd(unsigned int index, int value)
 		ch = value;
 		break;
 	case SET_CURR:
-		pr_debug("set %d cur %d\n", ch, value);
+//		printk("set %d cur %d\n", ch, value);
 		ret = mc13892_bklit_set_current(ch, value);
 		break;
 	case SET_DC:
-		pr_debug("set %d dc %d\n", ch, value);
+//		printk("set %d dc %d\n", ch, value);
 		ret = mc13892_bklit_set_dutycycle(ch, value);
 		break;
 	case SET_RAMP:
-		pr_debug("set %d ramp %d\n", ch, value);
+//		printk("set %d ramp %d\n", ch, value);
 		ret = mc13892_bklit_set_ramp(ch, value);
 		break;
 	case SET_BP:
-		pr_debug("set %d bp %d\n", ch, value);
+//		printk("set %d bp %d\n", ch, value);
 		ret = mc13892_bklit_set_blink_p(ch, value);
 		break;
 	default:
@@ -642,7 +654,7 @@ static int pmic_light_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	pmic_light_init_reg();
+//	pmic_light_init_reg();
 
 	pr_debug("PMIC Light successfully loaded\n");
 	return 0;

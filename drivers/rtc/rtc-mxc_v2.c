@@ -172,6 +172,9 @@ static unsigned long rtc_status;
 
 static DEFINE_SPINLOCK(rtc_lock);
 
+extern int msp430_write(unsigned int reg, unsigned int value);
+extern unsigned int msp430_read(unsigned int reg);
+
 /*!
  * This function does write synchronization for writes to the lp srtc block.
  * To take care of the asynchronous CKIL clock, all writes from the IP domain
@@ -204,9 +207,21 @@ static int rtc_update_alarm(struct device *dev, struct rtc_time *alrm)
 	unsigned long now, time;
 	int ret;
 
+#if 0
 	now = __raw_readl(ioaddr + SRTC_LPSCMR);
 	rtc_time_to_tm(now, &now_tm);
-
+#else
+	unsigned int tmp;
+	tmp = msp430_read (0x20);
+	now_tm.tm_year = ((tmp >> 8) & 0x0FF)+100;
+	now_tm.tm_mon = (tmp & 0x0FF)-1;
+	tmp = msp430_read (0x21);
+	now_tm.tm_mday = (tmp >> 8) & 0x0FF;
+	now_tm.tm_hour = tmp & 0x0FF;
+	tmp = msp430_read (0x23);
+	now_tm.tm_min = (tmp >> 8) & 0x0FF;
+	now_tm.tm_sec = tmp & 0x0FF;
+#endif
 	alarm_tm.tm_year = now_tm.tm_year;
 	alarm_tm.tm_mon = now_tm.tm_mon;
 	alarm_tm.tm_mday = now_tm.tm_mday;
@@ -217,6 +232,7 @@ static int rtc_update_alarm(struct device *dev, struct rtc_time *alrm)
 
 	rtc_tm_to_time(&now_tm, &now);
 	rtc_tm_to_time(&alarm_tm, &time);
+	g_alarm_time=time;
 
 	if (time < now) {
 		time += 60 * 60 * 24;
@@ -224,10 +240,19 @@ static int rtc_update_alarm(struct device *dev, struct rtc_time *alrm)
 	}
 	ret = rtc_tm_to_time(&alarm_tm, &time);
 
+#if 0
 	__raw_writel(time, ioaddr + SRTC_LPSAR);
 
 	/* clear alarm interrupt status bit */
 	__raw_writel(SRTC_LPSR_ALP, ioaddr + SRTC_LPSR);
+#else
+	{
+		int interval = time-now;
+		printk ("[%s-%d] alarm %d\n",__func__,__LINE__,interval);
+		msp430_write (0x1B, (interval&0xFF00));
+		msp430_write (0x1C, ((interval<<8)& 0xFF00));
+	}
+#endif
 
 	return ret;
 }
@@ -372,6 +397,11 @@ static int mxc_rtc_ioctl(struct device *dev, unsigned int cmd,
 
 		return retVal;
 
+	case RTC_WAKEUP_FLAG:
+		tmp = msp430_read (0x60);
+		printk ("[%s-%d] Micro P MSP430 status 0x%04X ....\n", __func__, __LINE__,tmp);
+		put_user((0x8000 & tmp)?1:0, (unsigned long __user *)arg);
+		return 0;
 	}
 
 	return -ENOIOCTLCMD;
@@ -386,10 +416,25 @@ static int mxc_rtc_ioctl(struct device *dev, unsigned int cmd,
  */
 static int mxc_rtc_read_time(struct device *dev, struct rtc_time *tm)
 {
+#if 1
+	unsigned int tmp;
+//	printk ("[%s-%d]\n",__func__,__LINE__);
+	tmp = msp430_read (0x20);
+	tm->tm_year = ((tmp >> 8) & 0x0FF)+100;
+	tm->tm_mon = (tmp & 0x0FF)-1;
+	tmp = msp430_read (0x21);
+	tm->tm_mday = (tmp >> 8) & 0x0FF;
+	tm->tm_hour = tmp & 0x0FF;
+	tmp = msp430_read (0x23);
+	tm->tm_min = (tmp >> 8) & 0x0FF;
+	tm->tm_sec = tmp & 0x0FF;
+//	printk ("[%s-%d] set %d/%d/%d %d:%d:%d\n",__func__,__LINE__,tm->tm_year,tm->tm_mon,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
+#else
 	struct rtc_drv_data *pdata = dev_get_drvdata(dev);
 	void __iomem *ioaddr = pdata->ioaddr;
 
 	rtc_time_to_tm(__raw_readl(ioaddr + SRTC_LPSCMR), tm);
+#endif
 	return 0;
 }
 
@@ -402,6 +447,7 @@ static int mxc_rtc_read_time(struct device *dev, struct rtc_time *tm)
  */
 static int mxc_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
+#if 0	// Joseph 20110523, remove rtc
 	struct rtc_drv_data *pdata = dev_get_drvdata(dev);
 	void __iomem *ioaddr = pdata->ioaddr;
 	unsigned long time;
@@ -424,6 +470,15 @@ static int mxc_rtc_set_time(struct device *dev, struct rtc_time *tm)
 
 	/* update the difference between previous time and new time */
 	time_diff = new_time_47bit - old_time_47bit;
+#else
+	printk ("[%s-%d] set %d/%d/%d %d:%d:%d\n",__func__,__LINE__,tm->tm_year,tm->tm_mon,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
+	msp430_write (0x10, ((tm->tm_year-100)<<8));
+	msp430_write (0x11, ((tm->tm_mon+1)<<8));
+	msp430_write (0x12, (tm->tm_mday<<8));
+	msp430_write (0x13, (tm->tm_hour<<8));
+	msp430_write (0x14, (tm->tm_min<<8));
+	msp430_write (0x15, (tm->tm_sec<<8));
+#endif
 
 	/* signal all waiting threads that time changed */
 	complete_all(&srtc_completion);
@@ -446,15 +501,20 @@ static int mxc_rtc_set_time(struct device *dev, struct rtc_time *tm)
  *
  * @return  0 if successful; non-zero otherwise.
  */
+static unsigned long g_alarm_time;
 static int mxc_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 {
+#if 0	// Joseph 20110523, remove rtc
 	struct rtc_drv_data *pdata = dev_get_drvdata(dev);
 	void __iomem *ioaddr = pdata->ioaddr;
 
 	rtc_time_to_tm(__raw_readl(ioaddr + SRTC_LPSAR), &alrm->time);
 	alrm->pending =
 	    ((__raw_readl(ioaddr + SRTC_LPSR) & SRTC_LPSR_ALP) != 0) ? 1 : 0;
-
+#else
+	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
+	rtc_time_to_tm(g_alarm_time, &(alrm->time));
+#endif
 	return 0;
 }
 
@@ -479,6 +539,7 @@ static int mxc_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 			return -EINVAL;
 		}
 	}
+#if 0	// Joseph 20110523, remove rtc
 
 	spin_lock_irqsave(&rtc_lock, lock_flags);
 	lp_cr = __raw_readl(ioaddr + SRTC_LPCR);
@@ -510,6 +571,10 @@ out:
 	spin_unlock_irqrestore(&rtc_lock, lock_flags);
 	rtc_write_sync_lp(ioaddr);
 	return ret;
+#else
+	ret = rtc_update_alarm(dev, &alrm->time);
+	return 0;
+#endif
 }
 
 /*!
@@ -564,9 +629,8 @@ static int mxc_rtc_probe(struct platform_device *pdev)
 	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
 		return -ENOMEM;
-
 	pdata->clk = clk_get(&pdev->dev, "rtc_clk");
-	clk_enable(pdata->clk);
+//Joseph 20110523	clk_enable(pdata->clk);
 	pdata->baseaddr = res->start;
 	pdata->ioaddr = ioremap(pdata->baseaddr, 0x40);
 	ioaddr = pdata->ioaddr;
@@ -584,6 +648,7 @@ static int mxc_rtc_probe(struct platform_device *pdev)
 		}
 	}
 
+#if 0	// Joseph 20110523, remove rtc
 	clk = clk_get(&pdev->dev, "rtc_clk");
 	if (clk_get_rate(clk) != 32768) {
 		printk(KERN_ALERT "rtc clock is not valid");
@@ -621,7 +686,7 @@ static int mxc_rtc_probe(struct platform_device *pdev)
 
 	__raw_writel(0xFFFFFFFF, ioaddr + SRTC_LPSR);
 	udelay(100);
-
+#endif
 	rtc = rtc_device_register(pdev->name, &pdev->dev,
 				  &mxc_rtc_ops, THIS_MODULE);
 	if (IS_ERR(rtc)) {
@@ -676,6 +741,7 @@ static int __exit mxc_rtc_remove(struct platform_device *pdev)
  */
 static int mxc_rtc_suspend(struct platform_device *pdev, pm_message_t state)
 {
+#if 0	// Joseph 20110523, remove rtc
 	struct rtc_drv_data *pdata = platform_get_drvdata(pdev);
 
 	if (device_may_wakeup(&pdev->dev)) {
@@ -684,7 +750,7 @@ static int mxc_rtc_suspend(struct platform_device *pdev, pm_message_t state)
 		if (pdata->irq_enable)
 			disable_irq(pdata->irq);
 	}
-
+#endif
 	return 0;
 }
 
@@ -699,15 +765,17 @@ static int mxc_rtc_suspend(struct platform_device *pdev, pm_message_t state)
  */
 static int mxc_rtc_resume(struct platform_device *pdev)
 {
+#if 0	// Joseph 20110523, remove rtc
 	struct rtc_drv_data *pdata = platform_get_drvdata(pdev);
 
+	clk_enable(pdata->clk);
 	if (device_may_wakeup(&pdev->dev)) {
 		disable_irq_wake(pdata->irq);
 	} else {
 		if (pdata->irq_enable)
 			enable_irq(pdata->irq);
 	}
-
+#endif
 	return 0;
 }
 

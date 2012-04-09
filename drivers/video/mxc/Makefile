@@ -22,5 +22,5 @@ obj-$(CONFIG_FB_MXC_CLAA_WVGA_SYNC_PANEL)   += mxcfb_claa_wvga.o
 obj-$(CONFIG_FB_MXC_SEIKO_WVGA_SYNC_PANEL)   += mxcfb_seiko_wvga.o
 obj-$(CONFIG_FB_MXC_TVOUT_CH7024)           += ch7024.o
 obj-$(CONFIG_FB_MXC_CH7026)		    		+= mxcfb_ch7026.o
-obj-$(CONFIG_FB_MXC_EINK_PANEL)             += mxc_epdc_fb.o
-obj-$(CONFIG_FB_MXC_ELCDIF_FB)		    += mxc_elcdif_fb.o
+obj-$(CONFIG_FB_MXC_EINK_PANEL)             += mxc_epdc_fb.o epdfb_dc.o fake_s1d13522.o lk_lm75.o
+obj-$(CONFIG_FB_MXC_ELCDIF_FB)		    += mxc_elcdif_fb.o 

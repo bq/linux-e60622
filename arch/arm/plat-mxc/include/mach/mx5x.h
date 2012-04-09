@@ -160,6 +160,7 @@
 #define LOWPOWER_REFRESH_HOLD_MASK		0xFFFF
 #define LOWPOWER_REFRESH_HOLD_OFFSET	0
 #define MX50_LPDDR2				(0x5 << 8)
+#define MX50_DDR2				(0x4 << 8)
 #define MX50_MDDR					(0x1 << 8)
 
 #define DEBUG_BASE_ADDR	0x40000000

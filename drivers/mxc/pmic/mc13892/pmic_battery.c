@@ -23,6 +23,7 @@
 #include <linux/pmic_battery.h>
 #include <linux/pmic_adc.h>
 #include <linux/pmic_status.h>
+#include <linux/reboot.h>
 
 #define BIT_CHG_VOL_LSH		0
 #define BIT_CHG_VOL_WID		3
@@ -38,6 +39,9 @@
 #define BIT_CHG_CURRS_LSH 11
 #define BIT_CHG_CURRS_WID 1
 
+#define BIT_CHG_LOBATHS_LSH 14
+#define BIT_CHG_LOBATHS_WID 1
+
 #define TRICKLE_CHG_EN_LSH	7
 #define	LOW_POWER_BOOT_ACK_LSH	8
 #define BAT_TH_CHECK_DIS_LSH	9
@@ -46,6 +50,7 @@
 #define	REV_MOD_EN_LSH		13
 #define PLIM_DIS_LSH		17
 #define	CHG_LED_EN_LSH		18
+#define CHGTMRRST_LSH		19
 #define RESTART_CHG_STAT_LSH	20
 #define	AUTO_CHG_DIS_LSH	21
 #define CYCLING_DIS_LSH		22
@@ -59,6 +64,7 @@
 #define	REV_MOD_EN_WID		1
 #define PLIM_DIS_WID		1
 #define	CHG_LED_EN_WID		1
+#define CHGTMRRST_WID		1
 #define RESTART_CHG_STAT_WID	1
 #define	AUTO_CHG_DIS_WID	1
 #define CYCLING_DIS_WID		1
@@ -83,12 +89,21 @@
 #define ACC_COULOMB_PER_LSB 1
 #define ACC_CALIBRATION_DURATION_MSECS 20
 
-#define BAT_VOLTAGE_UNIT_UV 4692
-#define BAT_CURRENT_UNIT_UA 5870
+#define BAT_VOLTAGE_UNIT_UV (4800000/1023)
+#define BAT_CURRENT_UNIT_UA (3000000/511)
 #define CHG_VOLTAGE_UINT_UV 23474
 #define CHG_MIN_CURRENT_UA 3500
 
 #define COULOMB_TO_UAH(c) (10000 * c / 36)
+
+#define ICHRG_400MA	0x4
+#define ICHRG_480MA	0x5
+#define ICHRG_560MA	0x6
+#define ICHRG_640MA	0x7
+#define ICHRG_720MA 	0x8
+
+#define BAT_CAP_MAH 1000UL
+#define CHG_CUR_MA 400UL
 
 enum chg_setting {
        TRICKLE_CHG_EN,
@@ -99,10 +114,19 @@ enum chg_setting {
        REV_MOD_EN,
        PLIM_DIS,
        CHG_LED_EN,
+       CHGTMRRST,
        RESTART_CHG_STAT,
        AUTO_CHG_DIS,
        CYCLING_DIS,
        VI_PROGRAM_EN
+};
+
+enum chg_state {
+	CHG_POWER_OFF,
+	CHG_RESTART,
+	CHG_CHARGING,
+	CHG_DISCHARGING_WITH_CHARGER,
+	CHG_DISCHARGING,
 };
 
 /* Flag used to indicate if Charger workaround is active. */
@@ -110,14 +134,28 @@ int chg_wa_is_active;
 /* Flag used to indicate if Charger workaround timer is on. */
 int chg_wa_timer;
 int disable_chg_timer;
+static unsigned int g_low_batt_flag=0;
+static int g_dc_charger_connect=0;
 struct workqueue_struct *chg_wq;
 struct delayed_work chg_work;
+static unsigned long expire;
+static int state=CHG_RESTART;
+static int recent_voltage_uV[5];
+static int recent_index;
+static int g_battery_full_flag=0;
 
+struct mc13892_dev_info *g_ntx_bat_di;
+
+extern int ntx_charge_status (void);
+extern int ntx_get_battery_vol (void);
+
+#if 0
 static int pmic_set_chg_current(unsigned short curr)
 {
 	unsigned int mask;
 	unsigned int value;
 
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 	value = BITFVAL(BIT_CHG_CURR, curr);
 	mask = BITFMASK(BIT_CHG_CURR);
 	CHECK_ERROR(pmic_write_reg(REG_CHARGE, value, mask));
@@ -130,6 +168,7 @@ static int pmic_set_chg_misc(enum chg_setting type, unsigned short flag)
 
 	unsigned int reg_value = 0;
 	unsigned int mask = 0;
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 
 	switch (type) {
 	case TRICKLE_CHG_EN:
@@ -164,6 +203,10 @@ static int pmic_set_chg_misc(enum chg_setting type, unsigned short flag)
 		reg_value = BITFVAL(CHG_LED_EN, flag);
 		mask = BITFMASK(CHG_LED_EN);
 		break;
+	case CHGTMRRST:
+		reg_value = BITFVAL(CHGTMRRST, flag);
+		mask = BITFMASK(CHGTMRRST);
+		break;
 	case RESTART_CHG_STAT:
 		reg_value = BITFVAL(RESTART_CHG_STAT, flag);
 		mask = BITFMASK(RESTART_CHG_STAT);
@@ -188,36 +231,54 @@ static int pmic_set_chg_misc(enum chg_setting type, unsigned short flag)
 
 	return 0;
 }
+#endif
 
 static int pmic_get_batt_voltage(unsigned short *voltage)
 {
 	t_channel channel;
 	unsigned short result[8];
 
+#if 0
 	channel = BATTERY_VOLTAGE;
 	CHECK_ERROR(pmic_adc_convert(channel, result));
 	*voltage = result[0];
-
+#else
+	*voltage = 3800000;
+#endif
 	return 0;
 }
 
-static int pmic_get_batt_current(unsigned short *curr)
+static int pmic_get_batt_current(signed short *curr)
 {
 	t_channel channel;
-	unsigned short result[8];
+	signed short result[8];
+	bool valid_ch[8] = {1,0,1,0,0,1,0,1};
+	int i;
 
+#if 0
 	channel = BATTERY_CURRENT;
 	CHECK_ERROR(pmic_adc_convert(channel, result));
-	*curr = result[0];
+
+	*curr = 0;
+	for(i=0;i<8;i++)
+		if(valid_ch[i])
+			*curr += (result[i]&0x200) ? (0xffc00|result[i]) : result[i];
+	*curr /= 4;
+
+#else
+	*curr = 0;
+#endif
 
 	return 0;
 }
 
+#if 0
 static int coulomb_counter_calibration;
 static unsigned int coulomb_counter_start_time_msecs;
 
 static int pmic_start_coulomb_counter(void)
 {
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 	/* set scaler */
 	CHECK_ERROR(pmic_write_reg(REG_ACC1,
 		ACC_COULOMB_PER_LSB * ACC_ONEC_VALUE, BITFMASK(ACC1_ONEC)));
@@ -232,6 +293,7 @@ static int pmic_start_coulomb_counter(void)
 
 static int pmic_stop_coulomb_counter(void)
 {
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 	CHECK_ERROR(pmic_write_reg(
 		REG_ACC0, ACC_STOP_COUNTER, ACC_CONTROL_BIT_MASK));
 	return 0;
@@ -242,6 +304,7 @@ static int pmic_calibrate_coulomb_counter(void)
 	int ret;
 	unsigned int value;
 
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 	/* set scaler */
 	CHECK_ERROR(pmic_write_reg(REG_ACC1,
 		0x1, BITFMASK(ACC1_ONEC)));
@@ -289,27 +352,46 @@ static int pmic_get_charger_coulomb(int *coulomb)
 			/ (ACC_ONEC_VALUE * ACC_CALIBRATION_DURATION_MSECS);
 		*coulomb -= calibration;
 	}
-
 	return 0;
 }
 
 static int pmic_restart_charging(void)
 {
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 	pmic_set_chg_misc(BAT_TH_CHECK_DIS, 1);
 	pmic_set_chg_misc(AUTO_CHG_DIS, 0);
 	pmic_set_chg_misc(VI_PROGRAM_EN, 1);
-	pmic_set_chg_current(0x8);
+//	pmic_set_chg_current(ICHRG_400MA);
 	pmic_set_chg_misc(RESTART_CHG_STAT, 1);
 	pmic_set_chg_misc(PLIM_DIS, 3);
 	return 0;
 }
+
+static void init_charger_timer(void)
+{
+//	pmic_set_chg_misc(CHGTMRRST, 1);
+	expire = jiffies + ((BAT_CAP_MAH*3600UL*HZ)/CHG_CUR_MA);
+}
+
+static bool charger_timeout(void)
+{
+	return time_after(jiffies, expire);
+}
+
+static void reset_charger_timer(void)
+{
+//	if(!charger_timeout())
+//		pmic_set_chg_misc(CHGTMRRST, 1);
+}
+
+#endif
 
 struct mc13892_dev_info {
 	struct device *dev;
 
 	unsigned short voltage_raw;
 	int voltage_uV;
-	unsigned short current_raw;
+	signed short current_raw;
 	int current_uA;
 	int battery_status;
 	int full_counter;
@@ -333,18 +415,21 @@ static enum power_supply_property mc13892_battery_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
 	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_CAPACITY,
 };
 
 static enum power_supply_property mc13892_charger_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 };
 
+#if 0
 static int pmic_get_chg_value(unsigned int *value)
 {
 	t_channel channel;
 	unsigned short result[8], max1 = 0, min1 = 0, max2 = 0, min2 = 0, i;
 	unsigned int average = 0, average1 = 0, average2 = 0;
 
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 	channel = CHARGE_CURRENT;
 	CHECK_ERROR(pmic_adc_convert(channel, result));
 
@@ -385,52 +470,163 @@ static int pmic_get_chg_value(unsigned int *value)
 
 	return 0;
 }
+#endif
+
+int get_battery_mA(void) /* get charging current float into battery */
+{
+	int bat_curr, min_bat_curr=0;
+	signed short value=0;
+	int i=0;
+
+	for(i=0;i<3;i++)
+	{
+		pmic_get_batt_current(&value);
+		bat_curr = (value*3000)/512;
+		min_bat_curr=min(bat_curr, min_bat_curr);
+		mdelay(10);
+	}
+	return -min_bat_curr;
+}
+ 
+int get_battery_mV(void)
+{
+	unsigned short value=0;
+	pmic_get_batt_voltage(&value);
+	return(value*4800/1023);
+}
+
+void set_pmic_dc_charger_state(int dccharger)
+{
+	g_dc_charger_connect=dccharger;
+}
+EXPORT_SYMBOL(set_pmic_dc_charger_state);
 
 static void chg_thread(struct work_struct *work)
 {
-	int ret;
 	unsigned int value = 0;
-	int dets;
+	int charger, curr_mA;
 
-	if (disable_chg_timer) {
-		disable_chg_timer = 0;
-		pmic_set_chg_current(0x8);
-		queue_delayed_work(chg_wq, &chg_work, 100);
-		chg_wa_timer = 1;
-		return;
-	}
-
-	ret = pmic_read_reg(REG_INT_SENSE0, &value, BITFMASK(BIT_CHG_DETS));
-
-	if (ret == 0) {
-		dets = BITFEXT(value, BIT_CHG_DETS);
-		pr_debug("dets=%d\n", dets);
-
-		if (dets == 1) {
-			pmic_get_chg_value(&value);
-			pr_debug("average value=%d\n", value);
-			if ((value <= 3) | ((value & 0x200) != 0)) {
-				pr_debug("%s: Disable the charger\n", __func__);
-				pmic_set_chg_current(0);
-				disable_chg_timer = 1;
+#if 0
+	pmic_read_reg(REG_INT_SENSE0, &value, BITFMASK(BIT_CHG_DETS));
+	charger = BITFEXT(value, BIT_CHG_DETS);
+#else
+	charger = ntx_charge_status ();
+#endif
+	switch(state)
+	{
+	case CHG_RESTART:
+//		pmic_restart_charging();
+//		pmic_set_chg_current(0);
+		if(charger){
+#if 0
+			if(get_battery_mV()>3500){
+				init_charger_timer();
+				if(g_dc_charger_connect)
+				{
+					pr_notice("DC charger connected. Enable 560mA charging\n");
+					pmic_set_chg_current(ICHRG_560MA);
+				}
+				else
+				{
+					pmic_set_chg_current(ICHRG_400MA);
+				}
+				state = CHG_CHARGING;
 			}
-
-			queue_delayed_work(chg_wq, &chg_work, 100);
-			chg_wa_timer = 1;
+			else{
+				if(g_dc_charger_connect)
+				{
+					pr_notice("DC charger connected. Enable 560mA charging\n");
+					pmic_set_chg_current(ICHRG_560MA);
+				}
+				else
+					pmic_set_chg_current(ICHRG_400MA);
+				msleep(50);
+				if(get_battery_mA()>240){ /* if PMIC can provide 400mA */
+					init_charger_timer();
+					state = CHG_CHARGING;
+				}
+				else
+					state = CHG_POWER_OFF;
+			}
+#else
+			state = CHG_CHARGING;
+#endif
 		}
+		else
+			state = CHG_DISCHARGING;
+		queue_delayed_work(chg_wq, &chg_work, HZ*1);
+		break;
+
+	case CHG_POWER_OFF:
+		pr_notice("Battery level < 3.5V!\n");
+		pr_notice("After power off, PMIC will charge up battery.\n");
+//		pmic_set_chg_current(0x1); /* charge battery @ 80mA during power off */
+		orderly_poweroff(1);
+		break;
+
+	case CHG_CHARGING:
+#if 0
+		reset_charger_timer();
+		curr_mA=get_battery_mA();
+		if(curr_mA < 50)
+		{
+			g_battery_full_flag=1;
+		}
+		if(charger_timeout() || curr_mA <10){
+			g_battery_full_flag=0;
+			pmic_set_chg_current(0);
+			state = CHG_DISCHARGING_WITH_CHARGER;
+		}
+		if(!charger){
+			g_battery_full_flag=0;
+			pmic_set_chg_current(0);
+			state = CHG_DISCHARGING;
+		}
+#else
+		if (charger & 2) {
+		}
+		else {
+			g_battery_full_flag=1;
+			state = CHG_DISCHARGING;
+		}
+#endif
+		queue_delayed_work(chg_wq, &chg_work, HZ*5);
+		break;
+
+	case CHG_DISCHARGING:
+		if(charger)
+			state = CHG_RESTART;
+		queue_delayed_work(chg_wq, &chg_work, HZ*10);
+		break;
+
+	case CHG_DISCHARGING_WITH_CHARGER:
+		if(get_battery_mV()<4000)
+			state = CHG_RESTART;
+		if(!charger)
+			state = CHG_DISCHARGING;
+		queue_delayed_work(chg_wq, &chg_work, HZ*2);
+		break;
 	}
 }
-
+ 
 static int mc13892_charger_update_status(struct mc13892_dev_info *di)
 {
 	int ret;
 	unsigned int value;
 	int online;
 
+#if 0
 	ret = pmic_read_reg(REG_INT_SENSE0, &value, BITFMASK(BIT_CHG_DETS));
+#else
+	ret = 0;
+#endif
 
 	if (ret == 0) {
+#if 0
 		online = BITFEXT(value, BIT_CHG_DETS);
+#else
+		online = ntx_charge_status ();
+#endif
 		if (online != di->charger_online) {
 			di->charger_online = online;
 			dev_info(di->charger.dev, "charger status: %s\n",
@@ -440,17 +636,16 @@ static int mc13892_charger_update_status(struct mc13892_dev_info *di)
 			cancel_delayed_work(&di->monitor_work);
 			queue_delayed_work(di->monitor_wqueue,
 				&di->monitor_work, HZ / 10);
-			if (online) {
-				pmic_start_coulomb_counter();
-				pmic_restart_charging();
-				queue_delayed_work(chg_wq, &chg_work, 100);
+//			if (online)
+			if (online & 0x01)
+			{
+//				pmic_start_coulomb_counter();
 				chg_wa_timer = 1;
 			} else {
-				cancel_delayed_work(&chg_work);
-				chg_wa_timer = 0;
-				pmic_stop_coulomb_counter();
+	 			chg_wa_timer = 0;
+//				pmic_stop_coulomb_counter();
+			}
 		}
-	}
 	}
 
 	return ret;
@@ -475,6 +670,7 @@ static int mc13892_charger_get_property(struct power_supply *psy,
 
 static int mc13892_battery_read_status(struct mc13892_dev_info *di)
 {
+#if 0
 	int retval;
 	int coulomb;
 	retval = pmic_get_batt_voltage(&(di->voltage_raw));
@@ -482,20 +678,16 @@ static int mc13892_battery_read_status(struct mc13892_dev_info *di)
 		di->voltage_uV = di->voltage_raw * BAT_VOLTAGE_UNIT_UV;
 
 	retval = pmic_get_batt_current(&(di->current_raw));
-	if (retval == 0) {
-		if (di->current_raw & 0x200)
-			di->current_uA =
-				(0x1FF - (di->current_raw & 0x1FF)) *
-				BAT_CURRENT_UNIT_UA * (-1);
-		else
-			di->current_uA =
-				(di->current_raw & 0x1FF) * BAT_CURRENT_UNIT_UA;
-	}
+	if (retval == 0)
+			di->current_uA = di->current_raw * BAT_CURRENT_UNIT_UA;
+
 	retval = pmic_get_charger_coulomb(&coulomb);
 	if (retval == 0)
 		di->accum_current_uAh = COULOMB_TO_UAH(coulomb);
-
 	return retval;
+#else
+	return 0;
+#endif
 }
 
 static void mc13892_battery_update_status(struct mc13892_dev_info *di)
@@ -507,7 +699,8 @@ static void mc13892_battery_update_status(struct mc13892_dev_info *di)
 	if (di->battery_status == POWER_SUPPLY_STATUS_UNKNOWN)
 		di->full_counter = 0;
 
-	if (di->charger_online) {
+	if (di->charger_online & 0x01) {
+#if 0
 		retval = pmic_read_reg(REG_INT_SENSE0,
 					&value, BITFMASK(BIT_CHG_CURRS));
 
@@ -520,7 +713,14 @@ static void mc13892_battery_update_status(struct mc13892_dev_info *di)
 				di->battery_status =
 					POWER_SUPPLY_STATUS_NOT_CHARGING;
 		}
-
+#else
+		if (di->charger_online & 2)
+			di->battery_status =
+				POWER_SUPPLY_STATUS_CHARGING;
+		else
+			di->battery_status =
+				POWER_SUPPLY_STATUS_NOT_CHARGING;
+#endif
 		if (di->battery_status == POWER_SUPPLY_STATUS_NOT_CHARGING)
 			di->full_counter++;
 		else
@@ -554,9 +754,87 @@ static void mc13892_battery_work(struct work_struct *work)
 static void charger_online_event_callback(void *para)
 {
 	struct mc13892_dev_info *di = (struct mc13892_dev_info *) para;
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 	pr_info("\n\n DETECTED charger plug/unplug event\n");
 	mc13892_charger_update_status(di);
 }
+
+static void low_battery_low_event_callback (void *para)
+{
+	struct mc13892_dev_info *di = (struct mc13892_dev_info *) para;
+	
+	dev_info(di->bat.dev, "Low battery low\n");
+	g_low_batt_flag=1;
+}
+
+static void low_battery_high_event_callback (void *para)
+{
+	struct mc13892_dev_info *di = (struct mc13892_dev_info *) para;
+	unsigned int value;
+
+	pmic_read_reg(REG_INT_SENSE0, &value, BITFMASK(BIT_CHG_LOBATHS));
+
+	if( value )
+	{
+		dev_info(di->bat.dev, "Battery above 3.4V\n");
+		g_low_batt_flag=0;
+	}
+	else
+	{
+		dev_info(di->bat.dev, "Low battery high\n");
+		g_low_batt_flag=1;
+	}
+}
+
+static int battery_get_capacity(int now_voltage_uV)
+{
+	int ratio,i;
+	int over_voltage_uV;
+	int avg_voltage_uV;
+	int sum_voltage_uV = 0;
+
+	if(g_low_batt_flag)
+	{
+		//When LOBATH/LOBATL triggered, we should treat capacity as 0
+		return 0;
+	}
+
+	if(recent_index == -1)
+	{
+		recent_index = 0;
+		for(i=0;i<5;i++)
+			recent_voltage_uV[i] = now_voltage_uV;
+	}
+
+	recent_voltage_uV[recent_index] = now_voltage_uV;
+	if(recent_index == 4)
+		recent_index = 0;
+	else
+		recent_index++;
+
+	for(i=0;i<5;i++)
+	{
+		sum_voltage_uV += recent_voltage_uV[i];
+	}
+
+	avg_voltage_uV = sum_voltage_uV / 5;
+
+	if(now_voltage_uV <= 3400000)
+		return 0;
+	if(now_voltage_uV >= 4100000)
+		return 100;
+	over_voltage_uV = 4100000 - avg_voltage_uV;
+	ratio = (int)over_voltage_uV/8000;
+	return 100-ratio;
+
+}
+
+void ntx_charger_online_event_callback(void)
+{
+	mc13892_charger_update_status(g_ntx_bat_di);
+//	mc13892_battery_update_status(g_ntx_bat_di);
+}
+EXPORT_SYMBOL(ntx_charger_online_event_callback);
 
 
 static int mc13892_battery_get_property(struct power_supply *psy,
@@ -580,19 +858,44 @@ static int mc13892_battery_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+#if 0
 		val->intval = di->voltage_uV;
+#else
+		val->intval = ntx_get_battery_vol ();
+#endif
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		if(g_battery_full_flag)
+		{
+			/* Hardcode a current value to cheat upper layer charge is full */
+			val->intval = 50000;
+		}
+		else
+#if 0
 		val->intval = di->current_uA;
+#else
+		val->intval = 500000;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
+#if 0
 		val->intval = di->accum_current_uAh;
+#else
+		val->intval = 500000;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
 		val->intval = 3800000;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
 		val->intval = 3300000;
+		break;
+	case POWER_SUPPLY_PROP_CAPACITY:
+#if 1
+		val->intval = ntx_get_battery_vol ();
+#else
+		val->intval = battery_get_capacity(di->voltage_uV);
+#endif
 		break;
 	default:
 		return -EINVAL;
@@ -604,6 +907,7 @@ static int mc13892_battery_get_property(struct power_supply *psy,
 static ssize_t chg_wa_enable_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 	if (chg_wa_is_active & chg_wa_timer)
 		return sprintf(buf, "Charger LED workaround timer is on\n");
 	else
@@ -614,12 +918,12 @@ static ssize_t chg_wa_enable_store(struct device *dev,
 				 struct device_attribute *attr,
 				 const char *buf, size_t size)
 {
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
 	if (strstr(buf, "1") != NULL) {
 		if (chg_wa_is_active) {
 			if (chg_wa_timer)
 				printk(KERN_INFO "Charger timer is already on\n");
 			else {
-				queue_delayed_work(chg_wq, &chg_work, 100);
 				chg_wa_timer = 1;
 				printk(KERN_INFO "Turned on the timer\n");
 			}
@@ -627,7 +931,6 @@ static ssize_t chg_wa_enable_store(struct device *dev,
 	} else if (strstr(buf, "0") != NULL) {
 		if (chg_wa_is_active) {
 			if (chg_wa_timer) {
-				cancel_delayed_work(&chg_work);
 				chg_wa_timer = 0;
 				printk(KERN_INFO "Turned off charger timer\n");
 			 } else {
@@ -646,9 +949,20 @@ static int pmic_battery_remove(struct platform_device *pdev)
 	pmic_event_callback_t bat_event_callback;
 	struct mc13892_dev_info *di = platform_get_drvdata(pdev);
 
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
+#if 0
 	bat_event_callback.func = charger_online_event_callback;
 	bat_event_callback.param = (void *) di;
 	pmic_event_unsubscribe(EVENT_CHGDETI, bat_event_callback);
+
+	bat_event_callback.func = low_battery_low_event_callback;
+	bat_event_callback.param = (void *) di;
+	pmic_event_unsubscribe(EVENT_LOBATLI, bat_event_callback);
+
+	bat_event_callback.func = low_battery_high_event_callback;
+	bat_event_callback.param = (void *) di;
+	pmic_event_unsubscribe(EVENT_LOBATHI, bat_event_callback);
+#endif
 
 	cancel_rearming_delayed_workqueue(di->monitor_wqueue,
 					  &di->monitor_work);
@@ -674,6 +988,8 @@ static int pmic_battery_probe(struct platform_device *pdev)
 	pmic_event_callback_t bat_event_callback;
 	pmic_version_t pmic_version;
 
+printk ("[%s-%d] %s...\n",__FILE__,__LINE__,__func__);
+#if 0
 	/* Only apply battery driver for MC13892 V2.0 due to ENGR108085 */
 	pmic_version = pmic_get_version();
 	if (pmic_version.revision < 20) {
@@ -684,7 +1000,7 @@ static int pmic_battery_probe(struct platform_device *pdev)
 		pr_debug("mc13892 charger is not used for this platform\n");
 		return -1;
 	}
-
+#endif
 	di = kzalloc(sizeof(*di), GFP_KERNEL);
 	if (!di) {
 		retval = -ENOMEM;
@@ -710,6 +1026,7 @@ static int pmic_battery_probe(struct platform_device *pdev)
 		retval = -ESRCH;
 		goto workqueue_failed;
 	}
+	queue_delayed_work(chg_wq, &chg_work, HZ);
 
 	INIT_DELAYED_WORK(&di->monitor_work, mc13892_battery_work);
 	di->monitor_wqueue = create_singlethread_workqueue(dev_name(&pdev->dev));
@@ -735,9 +1052,28 @@ static int pmic_battery_probe(struct platform_device *pdev)
 		goto batt_failed;
 	}
 
+	g_ntx_bat_di = di;
+#if 0
 	bat_event_callback.func = charger_online_event_callback;
 	bat_event_callback.param = (void *) di;
 	pmic_event_subscribe(EVENT_CHGDETI, bat_event_callback);
+
+	bat_event_callback.func = low_battery_low_event_callback;
+	bat_event_callback.param = (void *) di;
+	retval = pmic_event_subscribe(EVENT_LOBATLI, bat_event_callback);
+	if(retval) {
+		printk(KERN_ERR
+		       "Battery: Cannot subscribe pmic event");
+	}
+
+	bat_event_callback.func = low_battery_high_event_callback;
+	bat_event_callback.param = (void *) di;
+	pmic_event_subscribe(EVENT_LOBATHI, bat_event_callback);
+	if(retval) {
+		printk(KERN_ERR
+		       "Battery: Cannot subscribe pmic event");
+	}
+#endif
 	retval = sysfs_create_file(&pdev->dev.kobj, &dev_attr_enable.attr);
 
 	if (retval) {
@@ -748,9 +1084,10 @@ static int pmic_battery_probe(struct platform_device *pdev)
 	chg_wa_is_active = 1;
 	chg_wa_timer = 0;
 	disable_chg_timer = 0;
+	recent_index = -1;
 
-	pmic_stop_coulomb_counter();
-	pmic_calibrate_coulomb_counter();
+//	pmic_stop_coulomb_counter();
+//	pmic_calibrate_coulomb_counter();
 	goto success;
 
 workqueue_failed:

@@ -299,6 +299,28 @@ Div_Found1:
     cmp   r4, r0
     beq    databahn_ddr_24
 
+    //check it is DDR2
+    ldr    r0, [r5]
+    ldr    r2, =0x400
+    and    r0, r0, #0xF00
+    cmp   r0, r2
+    bne    not_ddr2
+
+    /* Restore from the ddr settings array */
+
+    ldr    r1, [r8]              @size of array
+    add  r8, r8, #8           @skip first eight bytes in array
+update_ddr2:
+    ldr    r0, [r8, #0x0]   @ offset
+    ldr    r3, [r8, #0x4]   @ value
+    str    r3, [r5, r0]
+    add   r8, r8, #8
+    sub   r1, r1, #1
+    cmp  r1, #0
+    bgt   update_ddr2
+    b       Setup_Done
+
+not_ddr2:
     cmp    r7, #1
     beq    just_set_tref
 

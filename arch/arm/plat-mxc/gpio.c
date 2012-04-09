@@ -390,8 +390,10 @@ static int mxc_gpio_suspend(struct sys_device *dev, pm_message_t mesg)
 		isr_reg = port[i].base + GPIO_ISR;
 		imr_reg = port[i].base + GPIO_IMR;
 
-		if (__raw_readl(isr_reg) & port[i].suspend_wakeup)
+		if (__raw_readl(isr_reg) & port[i].suspend_wakeup) {
+			printk ("[%s-%d] port %d suspend flag %08X\n",__func__,__LINE__,i,__raw_readl(isr_reg) & port[i].suspend_wakeup);
 			return -EPERM;
+		}
 
 		port[i].saved_wakeup = __raw_readl(imr_reg);
 		__raw_writel(port[i].suspend_wakeup, imr_reg);

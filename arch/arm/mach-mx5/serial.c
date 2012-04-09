@@ -34,6 +34,48 @@
  * functions.
  */
 static uart_mxc_port mxc_ports[] = {
+#if 1
+	[0] = {
+	       .port = {
+			.iotype = SERIAL_IO_MEM,
+			.fifosize = 32,
+			.flags = ASYNC_BOOT_AUTOCONF,
+			.line = 0,
+			},
+	       .ints_muxed = 1,
+	       .mode = MODE_DCE,
+	       .ir_mode = NO_IRDA,
+	       .enabled = 1,
+	       .cts_threshold = UART2_UCR4_CTSTL,
+	       .dma_enabled = UART2_DMA_ENABLE,
+	       .dma_rxbuf_size = UART2_DMA_RXBUFSIZE,
+	       .rx_threshold = UART2_UFCR_RXTL,
+	       .tx_threshold = UART2_UFCR_TXTL,
+	       .dma_tx_id = MXC_DMA_UART2_TX,
+	       .dma_rx_id = MXC_DMA_UART2_RX,
+	       .rxd_mux = MXC_UART_RXDMUX,
+	       },
+	[1] = {
+	       .port = {
+			.iotype = SERIAL_IO_MEM,
+			.fifosize = 32,
+			.flags = ASYNC_BOOT_AUTOCONF,
+			.line = 1,
+			},
+	       .ints_muxed = 1,
+	       .mode = MODE_DCE,
+	       .ir_mode = NO_IRDA,
+	       .enabled = 1,
+	       .cts_threshold = UART1_UCR4_CTSTL,
+	       .dma_enabled = UART1_DMA_ENABLE,
+	       .dma_rxbuf_size = UART1_DMA_RXBUFSIZE,
+	       .rx_threshold = UART1_UFCR_RXTL,
+	       .tx_threshold = UART1_UFCR_TXTL,
+	       .dma_tx_id = MXC_DMA_UART1_TX,
+	       .dma_rx_id = MXC_DMA_UART1_RX,
+	       .rxd_mux = MXC_UART_RXDMUX,
+	       },
+#else
 	[0] = {
 	       .port = {
 			.iotype = SERIAL_IO_MEM,
@@ -74,6 +116,7 @@ static uart_mxc_port mxc_ports[] = {
 	       .dma_rx_id = MXC_DMA_UART2_RX,
 	       .rxd_mux = MXC_UART_RXDMUX,
 	       },
+#endif
 	[2] = {
 	       .port = {
 			.iotype = SERIAL_IO_MEM,
@@ -136,6 +179,51 @@ static uart_mxc_port mxc_ports[] = {
 	       },
 };
 
+#if 1
+static struct resource mxc_uart_resources1[] = {
+	{
+		.start = UART1_BASE_ADDR,
+		.end = UART1_BASE_ADDR + 0x0B5,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = MXC_INT_UART1,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct resource mxc_uart_resources2[] = {
+	{
+		.start = UART2_BASE_ADDR,
+		.end = UART2_BASE_ADDR + 0x0B5,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = MXC_INT_UART2,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device mxc_uart_device1 = {
+	.name = "mxcintuart",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(mxc_uart_resources2),
+	.resource = mxc_uart_resources2,
+	.dev = {
+		.platform_data = &mxc_ports[0],
+		},
+};
+
+static struct platform_device mxc_uart_device2 = {
+	.name = "mxcintuart",
+	.id = 1,
+       .num_resources = ARRAY_SIZE(mxc_uart_resources1),
+	.resource = mxc_uart_resources1,
+	.dev = {
+		.platform_data = &mxc_ports[1],
+		},
+};
+#else
 static struct resource mxc_uart_resources1[] = {
 	{
 		.start = UART1_BASE_ADDR,
@@ -179,6 +267,7 @@ static struct platform_device mxc_uart_device2 = {
 		.platform_data = &mxc_ports[1],
 		},
 };
+#endif
 
 static struct resource mxc_uart_resources3[] = {
 	{

@@ -89,6 +89,7 @@ struct mxcfb_rect {
 #define FB_POWERDOWN_DISABLE			-1
 
 struct mxcfb_alt_buffer_data {
+	void *virt_addr;
 	__u32 phys_addr;
 	__u32 width;	/* width of entire buffer */
 	__u32 height;	/* height of entire buffer */
@@ -140,6 +141,7 @@ struct mxcfb_waveform_modes {
 #define MXCFB_SET_PWRDOWN_DELAY		_IOW('F', 0x30, int32_t)
 #define MXCFB_GET_PWRDOWN_DELAY		_IOR('F', 0x31, int32_t)
 #define MXCFB_SET_UPDATE_SCHEME		_IOW('F', 0x32, __u32)
+#define MXCFB_SET_MERGE_ON_WAVEFORM_MISMATCH	_IOW('F', 0x37, int32_t)
 
 #ifdef __KERNEL__
 

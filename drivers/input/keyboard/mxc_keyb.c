@@ -274,6 +274,12 @@ static unsigned short mxckpd_keycodes_size;
 extern void gpio_keypad_active(void);
 extern void gpio_keypad_inactive(void);
 
+unsigned char NTX_KEY_CODE_ARRAY[] = {
+	103, 108, 106, 105, 	// Up, Down, Right, Left
+	28, 65, 66, 60, 		// Return, Vol+, Vol-
+	60, 61, 59, 62,  		// Rotate, Home, Hotkey , Menu
+};
+
 /*!
  * This function is called for generating scancodes for key press and
  * release on keypad for the board.
@@ -817,6 +823,8 @@ static void mxc_kpp_close(struct input_dev *dev)
 }
 
 #ifdef CONFIG_PM
+extern int gSleep_Mode_Suspend;
+
 /*!
  * This function puts the Keypad controller in low-power mode/state.
  * If Keypad is enabled as a wake source(i.e. it can resume the system
@@ -834,7 +842,7 @@ static int mxc_kpp_suspend(struct platform_device *pdev, pm_message_t state)
 	if (timer_pending(&kpp_dev.poll_timer))
 		return -1;
 
-	if (device_may_wakeup(&pdev->dev)) {
+	if (device_may_wakeup(&pdev->dev) && !gSleep_Mode_Suspend) {
 		enable_irq_wake(keypad->irq);
 	} else {
 		disable_irq(keypad->irq);
@@ -858,7 +866,7 @@ static int mxc_kpp_suspend(struct platform_device *pdev, pm_message_t state)
  */
 static int mxc_kpp_resume(struct platform_device *pdev)
 {
-	if (device_may_wakeup(&pdev->dev)) {
+	if (device_may_wakeup(&pdev->dev) && !gSleep_Mode_Suspend) {
 		disable_irq_wake(keypad->irq);
 	} else {
 		gpio_keypad_active();
@@ -1056,6 +1064,9 @@ static int mxc_kpp_probe(struct platform_device *pdev)
 
 	for (i = 0; i < mxckpd_keycodes_size; i++)
 		__set_bit(mxckpd_keycodes[i], mxckbd_dev->keybit);
+		
+	for (i = 0; i < sizeof(NTX_KEY_CODE_ARRAY); i++)
+		__set_bit(NTX_KEY_CODE_ARRAY[i], mxckbd_dev->keybit);
 
 	for (i = 0; i < kpp_dev.kpp_rows; i++) {
 		memset(press_scancode[i], -1,
@@ -1143,6 +1154,13 @@ static int mxc_kpp_remove(struct platform_device *pdev)
 	return 0;
 }
 
+void mxc_kpp_report_power(int isDown)
+{
+	if (mxckbd_dev)
+		input_event(mxckbd_dev, EV_KEY, KEY_POWER, isDown);
+}
+
+
 /*!
  * This structure contains pointers to the power management callback functions.
  */
@@ -1201,3 +1219,75 @@ module_exit(mxc_kpp_cleanup);
 MODULE_AUTHOR("Freescale Semiconductor, Inc.");
 MODULE_DESCRIPTION("MXC Keypad Controller Driver");
 MODULE_LICENSE("GPL");
+
+// kilton 20100210.
+// ==============================================================================
+//      0 on success and a non-zero value on failure.
+#define KEYTEST_MAJOR				262
+// chmod 664 /dev/input/keytest
+// mknod /dev/input/keytest c 262 0
+
+
+static int keytest_openDriver(struct inode *inode,struct file *filp)
+{
+	return 0;
+}
+
+#define	MXC_KPP_COMMAND_KEY_DOWN		1		
+#define	MXC_KPP_COMMAND_KEY_UP			0		
+
+// kilton 20100210.
+static int  mxc_kpp_ioctl(struct inode *inode, struct file *filp, unsigned int command, unsigned long arg)
+{
+	printk("mxc_kpp_ioctl Enter... \n");
+	
+	switch(command)
+	{
+		case MXC_KPP_COMMAND_KEY_DOWN:
+			input_event(mxckbd_dev, EV_KEY,(unsigned short)arg, 1);
+			printk("mxc_kpp_ioctl : key down [%d]\n", arg);
+			break;
+		case MXC_KPP_COMMAND_KEY_UP:
+			input_event(mxckbd_dev, EV_KEY,(unsigned short)arg, 0);
+			printk("mxc_kpp_ioctl : key up [%d]\n", arg);
+			break;
+		default:
+			printk("mxc_kpp_ioctl : do not get the command [%d]\n", command);
+			return -1;
+	}		
+	return 0;
+}
+
+static int keytest_releaseDriver(struct inode *inode,struct file *filp)
+{
+	return 0;
+}
+
+static const struct file_operations keytest_fops = {
+	.owner		= THIS_MODULE,
+    .open   	=   keytest_openDriver,
+    .ioctl	=   mxc_kpp_ioctl,
+    .release    =   keytest_releaseDriver,
+};
+
+static int __init mxc_kpp_keytest_init(void)
+{
+	int result;
+	result = register_chrdev(KEYTEST_MAJOR, "keytest", &keytest_fops);
+	if (result < 0) {
+		printk(KERN_WARNING "Keytest: can't get major %d\n",KEYTEST_MAJOR);
+		return result;
+	}
+	
+	return 0;
+}
+
+static void __exit mxc_kpp_keytest_cleanup(void)
+{
+	printk ("[DBG]%s,%s,%d[/DBG]\n", __FILE__,__FUNCTION__,__LINE__);	// kilton 20091120.
+	unregister_chrdev(KEYTEST_MAJOR, "keytest");
+	return ;
+}
+
+module_init(mxc_kpp_keytest_init);
+module_exit(mxc_kpp_keytest_cleanup);
