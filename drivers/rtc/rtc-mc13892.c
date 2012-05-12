@@ -87,20 +87,20 @@ static int mxc_rtc_ioctl(struct device *dev, unsigned int cmd,
    case RTC_UIE_OFF:
 		pr_debug("RTC update masked\n");
 //		pmic_event_mask(EVENT_1HZI);
-		return 0;
+		return -ENOIOCTLCMD;
 	case RTC_UIE_ON:
 		pr_debug("RTC update unmasked\n");
 //		pmic_event_unmask(EVENT_1HZI);
-		return 0;
+		return -ENOIOCTLCMD;
 	/* RTC_PIE_x repurposed for RTC enable */
 	case RTC_PIE_ON:
 		pr_debug("RTC enabled\n");
 //		CHECK_ERROR(pmic_write_reg(REG_RTC_ALARM, BITFVAL(RTC_DISABLE, 0), BITFMASK(RTC_DISABLE)));
-		return 0;
+		return -ENOIOCTLCMD;
 	case RTC_PIE_OFF:
 		pr_debug("RTC disabled\n");
 //		CHECK_ERROR(pmic_write_reg(REG_RTC_ALARM, BITFVAL(RTC_DISABLE, 1), BITFMASK(RTC_DISABLE)));
-		return 0;
+		return -ENOIOCTLCMD;
 	case RTC_WAKEUP_FLAG:
 		tmp = msp430_read (0x60);
 		printk ("[%s-%d] Micro P MSP430 status 0x%04X ....\n", __func__, __LINE__,tmp);
