@@ -76,11 +76,14 @@
 #include "ntx_hwconfig.h"
 
 
+#define EPD_TIMING_TW20110817		1
+#define EPD_TIMING_TW20110815		1
+
 #define SD1_WP	(3*32 + 19)	/*GPIO_4_19 */
 #define SD1_CD	(0*32 + 27)	/*GPIO_1_27 */
 #define SD2_WP	(4*32 + 16)	/*GPIO_5_16 */
 #define SD2_CD	(4*32 + 17) /*GPIO_5_17 */
-#define HP_DETECT	(3*32 + 15)	/*GPIO_4_15 */
+//#define HP_DETECT	(3*32 + 15)	/*GPIO_4_15 */
 #define CHG_PIN		(3*32 + 18)	/*GPIO_4_18 */
 #define EPDC_D0		(2*32 + 0)	/*GPIO_3_0 */
 #define EPDC_D1		(2*32 + 1)	/*GPIO_3_1 */
@@ -127,11 +130,16 @@
 #define TOUCH_INT		(4*32 + 15)	/*GPIO_5_15 */
 #define C_TOUCH_INT		(4*32 + 27)	/*GPIO_5_27 */
 #define G_SENSOR_INT	(4*32 + 25)	/*GPIO_5_25 */
+#define E50602_G_SENSOR_INT	(3*32 + 15)	/*GPIO_4_15 */
+
 
 extern int __init mx50_rdp_init_mc13892(void);
 extern struct cpu_wp *(*get_cpu_wp)(int *wp);
 extern void (*set_num_cpu_wp)(int num);
 extern struct dvfs_wp *(*get_dvfs_core_wp)(int *wp);
+extern void __iomem *apll_base;
+
+extern int check_hardware_name(void);
 
 static void mx50_suspend_enter(void);
 static void mx50_suspend_exit(void);
@@ -158,33 +166,14 @@ static iomux_v3_cfg_t mx50_rdp[] = {
 	/* SD2 */
 	MX50_PAD_SD2_CD__GPIO_5_17,
 	MX50_PAD_SD2_WP__GPIO_5_16,
-	MX50_PAD_SD2_CMD__SD2_CMD,
-	MX50_PAD_SD2_CLK__SD2_CLK,
-	MX50_PAD_SD2_D0__SD2_D0,
-	MX50_PAD_SD2_D1__SD2_D1,
-	MX50_PAD_SD2_D2__SD2_D2,
-	MX50_PAD_SD2_D3__SD2_D3,
 #if 0
 	MX50_PAD_SD2_D4__SD2_D4,
 	MX50_PAD_SD2_D5__SD2_D5,
 	MX50_PAD_SD2_D6__SD2_D6,
 	MX50_PAD_SD2_D7__SD2_D7,
-	/* SD3 */
-	MX50_PAD_SD3_CMD__SD3_CMD,
-	MX50_PAD_SD3_CLK__SD3_CLK,
-	MX50_PAD_SD3_D0__SD3_D0,
-	MX50_PAD_SD3_D1__SD3_D1,
-	MX50_PAD_SD3_D2__SD3_D2,
-	MX50_PAD_SD3_D3__SD3_D3,
 #endif
-	
-	MX50_PAD_SD3_CMD__GPIO_5_18,
-	MX50_PAD_SD3_CLK__GPIO_5_19,
-	MX50_PAD_SD3_D0__GPIO_5_20,
-	MX50_PAD_SD3_D1__GPIO_5_21,
-	MX50_PAD_SD3_D2__GPIO_5_22,
-	MX50_PAD_SD3_D3__GPIO_5_23,
-	
+
+
 #if 0
 	MX50_PAD_SD3_D4__SD3_D4,
 	MX50_PAD_SD3_D5__SD3_D5,
@@ -418,6 +407,53 @@ static iomux_v3_cfg_t mx50_rdp[] = {
 
 };
 
+
+iomux_v3_cfg_t mx50_sd3_enable_pads[] = {
+	/* SD3 */
+	MX50_PAD_SD3_CMD__SD3_CMD,
+	MX50_PAD_SD3_CLK__SD3_CLK,
+	MX50_PAD_SD3_D0__SD3_D0,
+	MX50_PAD_SD3_D1__SD3_D1,
+	MX50_PAD_SD3_D2__SD3_D2,
+	MX50_PAD_SD3_D3__SD3_D3,
+};
+iomux_v3_cfg_t mx50_sd3_disable_pads[] = {
+	/* SD3 */
+	MX50_PAD_SD3_CMD__GPIO_5_18,
+	MX50_PAD_SD3_CLK__GPIO_5_19,
+	MX50_PAD_SD3_D0__GPIO_5_20,
+	MX50_PAD_SD3_D1__GPIO_5_21,
+	MX50_PAD_SD3_D2__GPIO_5_22,
+	MX50_PAD_SD3_D3__GPIO_5_23,
+};
+unsigned long gdw_mx50_sd3_enable_pads=ARRAY_SIZE(mx50_sd3_enable_pads);
+unsigned long gdw_mx50_sd3_disable_pads=ARRAY_SIZE(mx50_sd3_disable_pads);
+
+
+
+iomux_v3_cfg_t mx50_sd2_enable_pads[] = {
+	/* SD2 */
+	MX50_PAD_SD2_CMD__SD2_CMD,
+	MX50_PAD_SD2_CLK__SD2_CLK,
+	MX50_PAD_SD2_D0__SD2_D0,
+	MX50_PAD_SD2_D1__SD2_D1,
+	MX50_PAD_SD2_D2__SD2_D2,
+	MX50_PAD_SD2_D3__SD2_D3,
+};
+iomux_v3_cfg_t mx50_sd2_disable_pads[] = {
+	/* SD2 */
+	MX50_PAD_SD2_CMD__GPIO_5_7,
+	MX50_PAD_SD2_CLK__GPIO_5_6,
+	MX50_PAD_SD2_D0__GPIO_5_8,
+	MX50_PAD_SD2_D1__GPIO_5_9,
+	MX50_PAD_SD2_D2__GPIO_5_10,
+	MX50_PAD_SD2_D3__GPIO_5_11,
+};
+unsigned long gdw_mx50_sd2_enable_pads=ARRAY_SIZE(mx50_sd2_enable_pads);
+unsigned long gdw_mx50_sd2_disable_pads=ARRAY_SIZE(mx50_sd2_disable_pads);
+
+
+
 static iomux_v3_cfg_t mx50_gpmi_nand[] = {
 	MX50_PIN_EIM_DA8__NANDF_CLE,
 	MX50_PIN_EIM_DA9__NANDF_ALE,
@@ -500,13 +536,6 @@ static iomux_v3_cfg_t suspend_enter_pads[] = {
 	MX50_PAD_SD1_D1__GPIO_5_3,
 	MX50_PAD_SD1_D2__GPIO_5_4,
 	MX50_PAD_SD1_D3__GPIO_5_5,
-	
-	MX50_PAD_SD2_CLK__GPIO_5_6,
-	MX50_PAD_SD2_CMD__GPIO_5_7,
-	MX50_PAD_SD2_D0__GPIO_5_8,
-	MX50_PAD_SD2_D1__GPIO_5_9,
-	MX50_PAD_SD2_D2__GPIO_5_10,
-	MX50_PAD_SD2_D3__GPIO_5_11,
 	
 	MX50_PAD_SD3_CMD__GPIO_5_18,
 	MX50_PAD_SD3_CLK__GPIO_5_19,
@@ -622,8 +651,8 @@ static struct cpu_wp cpu_wp_auto[] = {
 	 .cpu_rate = 800000000,
 	 .pdf = 0,
 	 .mfi = 8,
-	 .mfd = 2,
-	 .mfn = 1,
+	 .mfd = 179,
+	 .mfn = 60,
 	 .cpu_podf = 0,
 	 .cpu_voltage = 1050000,},
 	{
@@ -635,7 +664,30 @@ static struct cpu_wp cpu_wp_auto[] = {
 	 .pll_rate = 800000000,
 	 .cpu_rate = 160000000,
 	 .cpu_podf = 4,
-	 .cpu_voltage = 850000,},
+	 .cpu_voltage = 900000,},
+};
+
+/* working point(wp): 0 - 1000MHz; 1 - 500MHz, 2 - 166MHz; */
+static struct cpu_wp fast_cpu_wp_auto[] = {
+	{
+	 .pll_rate = 1000000000,
+	 .cpu_rate = 1000000000,
+	 .pdf = 0,
+	 .mfi = 10,
+	 .mfd = 179,
+	 .mfn = 75,
+	 .cpu_podf = 0,
+	 .cpu_voltage = 1275000,},
+	{
+	 .pll_rate = 1000000000,
+	 .cpu_rate = 500000000,
+	 .cpu_podf = 1,
+	 .cpu_voltage = 1050000,},
+	{
+	 .pll_rate = 1000000000,
+	 .cpu_rate = 166666666,
+	 .cpu_podf = 5,
+	 .cpu_voltage = 900000,},
 };
 
 static struct dvfs_wp *mx50_rdp_get_dvfs_core_table(int *wp)
@@ -648,6 +700,12 @@ static struct cpu_wp *mx50_rdp_get_cpu_wp(int *wp)
 {
 	*wp = num_cpu_wp;
 	return cpu_wp_auto;
+}
+
+static struct cpu_wp *mx50_rdp_get_fast_cpu_wp(int *wp)
+{
+    *wp = num_cpu_wp;
+    return fast_cpu_wp_auto;
 }
 
 static void mx50_rdp_set_num_cpu_wp(int num)
@@ -666,14 +724,14 @@ static struct fec_platform_data fec_data = {
 
 #if 1
 static u16 keymapping[] = {
-	KEY_HOME, KEY_POWER, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	61, KEY_POWER, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
 };
 
 static u16 E60622_keymapping[] = {
 	61, 62, 28, 105, 	// Home, Menu, Return, Left
 	106, 65, 66, -1, 	// Right, Vol+, Vol-
 	-1, -1, 105, -1, 		// , , Left, 
-	-1, -1, -1, -1,
+	-1, -1, -1, 116,  //, , ,KEY_POWER 
 };
 
 static u16 E60632_keymapping[] = {
@@ -682,6 +740,42 @@ static u16 E60632_keymapping[] = {
 	-1, -1, -1, -1, 		// , , , 
 	-1, -1, -1, -1,
 };
+
+static u16 E50602_keymapping[] = {
+	105, 106, 103, 108, 	// Left, Right, Up, Down
+	28, 61, 62, -1, 		// Return, Home, Menu
+	-1, -1, -1, -1, 		// , , , 
+	-1, -1, -1, -1,
+};
+
+static u16 E60682_keymapping[] = {
+	28, 106, 105, 61, 		// Return, Right, Left, Home
+	62, 103, 108, -1, 		// Menu, Up, Down
+	-1, -1, -1, -1, 		// , , , 
+	-1, -1, -1, -1,
+};
+
+static u16 E606A2_keymapping[] = {
+	61, 62, 29, -1, 	// Home, Menu, Back,    // Use 29 as BACK , 28 remains as ENTER 
+	-1, -1, -1, -1, 	// , , ,
+	-1, -1, -1, -1, 	// , , , 
+	-1, -1, -1, 116,     // , , ,KEY_POWER 
+};
+
+static u16 E606B2_keymapping[] = {
+	90, -1, -1, -1, 	// FrontLight, , ,     
+	-1, -1, -1, -1, 	// , , ,
+	-1, -1, -1, -1, 	// , , , 
+	-1, -1, -1, 116,     // , , ,KEY_POWER 
+};
+
+static u16 NoKey_keymapping[] = {
+	-1, -1, -1, -1, 	// , , ,     
+	-1, -1, -1, -1, 	// , , ,
+	-1, -1, -1, -1, 	// , , , 
+	-1, -1, KEY_H, 116,     // , , , 
+};
+
 #else
 static u16 keymapping[] = {
 	KEY_9, KEY_0, KEY_O, KEY_P, KEY_L, KEY_DELETE, KEY_SLASH, KEY_ENTER,
@@ -1035,22 +1129,157 @@ static void epdc_disable_pins(void)
 	gpio_direction_output(EPDC_D6, 0);
 	gpio_direction_output(EPDC_D7, 0);
 	gpio_direction_output(EPDC_GDCLK, 0);
-	gpio_direction_output(EPDC_GDSP, 0);
+//	gpio_direction_output(EPDC_GDSP, 0);
 	gpio_direction_output(EPDC_GDOE, 0);
 	gpio_direction_output(EPDC_GDRL, 0);
 	gpio_direction_output(EPDC_SDCLK, 0);
 	gpio_direction_output(EPDC_SDOE, 0);
 	gpio_direction_output(EPDC_SDLE, 0);
-	gpio_direction_output(EPDC_SDSHR, 0);
+//	gpio_direction_output(EPDC_SDSHR, 0);
 	gpio_direction_output(EPDC_BDR0, 0);
 	gpio_direction_output(EPDC_BDR1, 0);
 //	gpio_direction_output(EPDC_VCOM, 0);
-	gpio_direction_output(EPDC_SDCE0, 0);
-	gpio_direction_output(EPDC_SDCE1, 0);
-	gpio_direction_output(EPDC_SDCE2, 0);
+//	gpio_direction_output(EPDC_SDCE0, 0);
+//	gpio_direction_output(EPDC_SDCE1, 0);
+//	gpio_direction_output(EPDC_SDCE2, 0);
 }
 
+#if defined(EPD_TIMING_TW20110817)//[
+static struct fb_videomode ed060sc8_mode = {
+.name = "E60SC8",
+.refresh = 85,
+.xres = 800,
+.yres = 600,
+.pixclock = 30000000,
+.left_margin = 8,
+.right_margin = 164,
+.upper_margin = 4,
+.lower_margin = 18,
+.hsync_len = 4,
+.vsync_len = 1,
+.sync = 0,
+.vmode = FB_VMODE_NONINTERLACED,
+.flag = 0,
+};
 
+// gallen add for ED060XC5 test .
+static struct fb_videomode ed060xc5_mode = {
+.name = "E60XC5",
+.refresh = 85,
+.xres = 1024,
+.yres = 758,
+.pixclock = 40000000,
+.left_margin = 12,
+.right_margin = 72,
+.upper_margin = 4,
+.lower_margin = 5,
+.hsync_len = 8,
+.vsync_len = 2,
+.sync = 0,
+.vmode = FB_VMODE_NONINTERLACED,
+.flag = 0,
+};
+
+static struct fb_videomode e60_v110_mode = {
+.name = "E60_V110",
+.refresh = 50,
+.xres = 800,
+.yres = 600,
+.pixclock = 18604700,
+.left_margin = 8,
+.right_margin = 176,
+.upper_margin = 4,
+.lower_margin = 2,
+.hsync_len = 4,
+.vsync_len = 1,
+.sync = 0,
+.vmode = FB_VMODE_NONINTERLACED,
+.flag = 0,
+};
+static struct mxc_epdc_fb_mode panel_modes[] = {
+{
+& ed060sc8_mode,
+4,            /* vscan_holdoff */
+10,          /* sdoed_width */
+20,          /* sdoed_delay */
+10,          /* sdoez_width */
+20,          /* sdoez_delay */
+465,        /* gdclk_hp_offs */
+250,        /* gdsp_offs changed delay to 8.3 uS */
+0,            /* gdoe_offs */
+8,            /* gdclk_offs changed delay to 4.5 SDCLK */
+1,            /* num_ce */
+},
+{
+& e60_v110_mode,
+4,            /* vscan_holdoff */
+10,          /* sdoed_width */
+20,          /* sdoed_delay */
+10,          /* sdoez_width */
+20,          /* sdoez_delay */
+465,        /* gdclk_hp_offs */
+250,        /* gdsp_offs changed delay to 8.3 uS */
+0,            /* gdoe_offs */
+8,            /* gdclk_offs changed delay to 4.5 SDCLK */
+1,            /* num_ce */
+},
+{
+& ed060xc5_mode,
+4,            /* vscan_holdoff */
+10,          /* sdoed_width */
+20,          /* sdoed_delay */
+10,          /* sdoez_width */
+20,          /* sdoez_delay */
+492,        /* gdclk_hp_offs */
+29,        /* gdsp_offs changed delay to 8.3 uS */
+0,            /* gdoe_offs */
+23,            /* gdclk_offs changed delay to 4.5 SDCLK */
+1,            /* num_ce */
+},
+};
+ 
+#elif defined(EPD_TIMING_TW20110815) //][
+static struct fb_videomode ed060sc8_mode = {
+	.name = "E60SC8",
+	.refresh = 85,
+	.xres = 800,
+	.yres = 600,
+	.pixclock = 30000000,
+	.left_margin = 8,
+	.right_margin = 164,
+	.upper_margin = 4,
+	.lower_margin = 8,
+	.hsync_len = 4,
+	.vsync_len = 1,
+	.sync = 0,
+	.vmode = FB_VMODE_NONINTERLACED,
+	.flag = 0,
+};
+
+static struct mxc_epdc_fb_mode panel_modes[] = {
+{
+
+/*
+
+* mode address
+
+*/
+	&ed060sc8_mode,
+	4,  // EPDC_TCE_CTRL_VSCAN_HOLDOFF
+	10, // EPDC_TCE_OE_SDOED_WIDTH
+	20, // EPDC_TCE_OE_SDOED_DLY
+	10, // EPDC_TCE_OE_SDOEZ_WIDTH
+	20, // EPDC_TCE_OE_SDOEZ_DLY
+	465,// EPDC_TCE_TIMING2_GDCLK_HP
+	20, // EPDC_TCE_TIMING2_GDSP_OFFSET
+	0,  // EPDC_TCE_TIMING3_GDOE_OFFSET
+	9,  // EPDC_TCE_TIMING3_GDCLK_OFFSET
+	1,  // number of CE
+},
+
+};
+
+#else //][
 #if 0 //[
 static struct fb_videomode e60_v110_mode = {
 	.name = "E60_V110",
@@ -1178,7 +1407,6 @@ static struct fb_videomode ed060sc8_mode = {
 
 };
 #endif //]
- 
 
 static struct mxc_epdc_fb_mode panel_modes[] = {
 	{
@@ -1214,6 +1442,7 @@ static struct mxc_epdc_fb_mode panel_modes[] = {
 	},
 
 };
+#endif //]
 
 static struct mxc_epdc_fb_platform_data epdc_data = {
 	.epdc_mode = panel_modes,
@@ -1310,6 +1539,7 @@ static int mxc_alc5623_clock_enable(int enable)
 	if (enable) {
 		pwm_config(pwm_dev, 40, 60);
 		pwm_enable(pwm_dev);
+		msleep (100);
 	}
 	else
 		pwm_disable(pwm_dev);
@@ -1318,6 +1548,9 @@ static int mxc_alc5623_clock_enable(int enable)
 
 static struct imxi2c_platform_data mxci2c_data = {
        .bitrate = 400000,
+};
+static struct imxi2c_platform_data mxci2c_300K_data = {
+       .bitrate = 300000,
 };
 static struct imxi2c_platform_data mxci2c_100K_data = {
        .bitrate = 100000,
@@ -1348,7 +1581,15 @@ static struct i2c_board_info mxc_i2c0_E60622_board_info[] __initdata = {
 	{
 	 .type = "mma7660",
 	 .addr = 0x4C,
-	 .irq = IOMUX_TO_IRQ(G_SENSOR_INT),
+	 .irq = gpio_to_irq(G_SENSOR_INT),
+	 },
+};
+
+static struct i2c_board_info mxc_i2c0_E50602_board_info[] __initdata = {
+	{
+	 .type = "mma7660",
+	 .addr = 0x4C,
+	 .irq = gpio_to_irq(E50602_G_SENSOR_INT),
 	 },
 };
 
@@ -1422,20 +1663,53 @@ extern int gWifiEnabled;
 
 static unsigned int sdhc_get_card_det_status(struct device *dev)
 {
-	int ret = 0;
-	if (to_platform_device(dev)->id == 0)
 #if 0
-		ret = gpio_get_value(SD1_CD);
+	return 0;
 #else
-		ret = 0;
+	int ret = 0;
+	int iHWID;
+	int iDevID;
+
+	iHWID = check_hardware_name();
+	iDevID = to_platform_device(dev)->id;
+
+	//printk("%s(), devid=%d,wifi=%d\n",__FUNCTION__,iDevID,gWifiEnabled);
+
+
+	if(9==iHWID) {
+			// E5061X .
+		if (0==iDevID) {
+			ret = 1; //no external SD ! 
+		}
+		else if(1==iDevID) {
+			ret = (gWifiEnabled)?0:1;
+		}
+		else if(2==iDevID) {
+			ret = 0; //internal mSD .
+		}
+	}
+	else {
+		if (iDevID == 0) {
+#if 0
+			ret = gpio_get_value(SD1_CD);
+#else
+			ret = 0;
 #endif
-	else if (to_platform_device(dev)->id == 1)
-		ret = gpio_get_value(SD2_CD);
-	else if (to_platform_device(dev)->id == 2)
-		ret = (gWifiEnabled)?0:1;
+		}
+		else if (iDevID == 1)
+		{
+			ret = gpio_get_value(SD2_CD);
+		}
+		else if (iDevID == 2)
+		{
+			ret = (gWifiEnabled)?0:1;
+		}
+	}
 
 	return ret;
+#endif
 }
+
 
 static struct mxc_mmc_platform_data mmc1_data = {
 	.ocr_mask = MMC_VDD_27_28 | MMC_VDD_28_29 | MMC_VDD_29_30
@@ -1453,7 +1727,7 @@ static struct mxc_mmc_platform_data mmc1_data = {
 static struct mxc_mmc_platform_data mmc2_data = {
 	.ocr_mask = MMC_VDD_27_28 | MMC_VDD_28_29 | MMC_VDD_29_30
 		| MMC_VDD_31_32,
-	.caps = MMC_CAP_4_BIT_DATA | MMC_CAP_8_BIT_DATA,
+	.caps = MMC_CAP_4_BIT_DATA /*| MMC_CAP_8_BIT_DATA*/,
 	.min_clk = 400000,
 	.max_clk = 50000000,
 	.card_inserted_state = 0,
@@ -1464,10 +1738,10 @@ static struct mxc_mmc_platform_data mmc2_data = {
 	.power_mmc = NULL,
 };
 
-static struct mxc_mmc_platform_data mmc3_data = {
+static struct mxc_mmc_platform_data mmc_wifi_data = {
 	.ocr_mask = MMC_VDD_27_28 | MMC_VDD_28_29 | MMC_VDD_29_30
 		| MMC_VDD_31_32,
-	.caps = MMC_CAP_4_BIT_DATA | MMC_CAP_8_BIT_DATA,
+	.caps = MMC_CAP_4_BIT_DATA /*| MMC_CAP_8_BIT_DATA*/,
 	.min_clk = 400000,
 //	.max_clk = 50000000,
 	.max_clk = 25000000,
@@ -1500,7 +1774,7 @@ static struct mxc_audio_platform_data sgtl5000_data = {
 	.ssi_num = 1,
 	.src_port = 2,
 	.ext_port = 3,
-	.hp_irq = gpio_to_irq(HP_DETECT),
+//	.hp_irq = gpio_to_irq(HP_DETECT),
 	.hp_status = headphone_det_status,
 	.amp_enable = mxc_sgtl5000_amp_enable,
 	.clock_enable = mxc_sgtl5000_clock_enable,
@@ -1738,6 +2012,23 @@ static void mx50_suspend_enter()
 {
 	iomux_v3_cfg_t *p = suspend_enter_pads;
 	int i;
+
+	/* Clear the SELF_BIAS bit and power down
+	*  the band-gap.
+	*/
+
+	__raw_writel(MXC_ANADIG_PFD_DIS_MASK<<MXC_ANADIG_PFD_DIS_OFFSET,
+		apll_base + MXC_ANADIG_PLLCTRL_SET);
+
+	__raw_writel(MXC_ANADIG_PLL_POWERUP,
+		apll_base + MXC_ANADIG_MISC_CLR);
+
+	__raw_writel(MXC_ANADIG_REF_SELFBIAS_OFF,
+		apll_base + MXC_ANADIG_MISC_CLR);
+	__raw_writel(MXC_ANADIG_REF_PWD,       
+		apll_base + MXC_ANADIG_MISC_SET);
+
+
 	/* Set PADCTRL to 0 for all IOMUX. */
 	for (i = 0; i < ARRAY_SIZE(suspend_enter_pads); i++) {
 		suspend_exit_pads[i] = *p;
@@ -1748,6 +2039,9 @@ static void mx50_suspend_enter()
 			ARRAY_SIZE(suspend_exit_pads));
 	mxc_iomux_v3_setup_multiple_pads(suspend_enter_pads,
 			ARRAY_SIZE(suspend_enter_pads));
+
+	mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, \
+		ARRAY_SIZE(mx50_sd2_disable_pads));
 			
 	ntx_gpio_suspend ();
 
@@ -1756,7 +2050,26 @@ static void mx50_suspend_enter()
 
 static void mx50_suspend_exit()
 {
+
+  /* Power Up the band-gap and set the SELFBIAS bit. */
+  __raw_writel(MXC_ANADIG_REF_PWD,
+      apll_base + MXC_ANADIG_MISC_CLR);
+  udelay(100);
+  __raw_writel(MXC_ANADIG_REF_SELFBIAS_OFF,
+      apll_base + MXC_ANADIG_MISC_SET);
+	
+	__raw_writel(MXC_ANADIG_PFD_DIS_MASK<<MXC_ANADIG_PFD_DIS_OFFSET,
+		apll_base + MXC_ANADIG_PLLCTRL_CLR);
+
+	__raw_writel(MXC_ANADIG_PLL_POWERUP,
+		apll_base + MXC_ANADIG_MISC_SET);
+	udelay(10);
+
 	ntx_gpio_resume ();
+
+	mxc_iomux_v3_setup_multiple_pads(mx50_sd2_enable_pads, \
+		ARRAY_SIZE(mx50_sd2_enable_pads));
+
 	mxc_iomux_v3_setup_multiple_pads(suspend_exit_pads,
 			ARRAY_SIZE(suspend_exit_pads));
 //	fec_gpio_iomux_init();
@@ -1767,7 +2080,7 @@ static struct mxc_pm_platform_data mx50_pm_data = {
 	.suspend_exit = mx50_suspend_exit,
 };
 
-/*!
+/*
  * Board specific fixup function. It is called by \b setup_arch() in
  * setup.c file very early on during kernel starts. It allows the user to
  * statically fill in the proper values for the passed-in parameters. None of
@@ -1781,12 +2094,37 @@ static struct mxc_pm_platform_data mx50_pm_data = {
 static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
 				   char **cmdline, struct meminfo *mi)
 {
+	struct tag *t;
+	char *str;
+	int capable_to_1GHz = 0;	
+
 	mxc_set_cpu_type(MXC_CPU_MX50);
 
-	get_cpu_wp = mx50_rdp_get_cpu_wp;
+	for_each_tag(t, tags) 
+	{
+		if (t->hdr.tag == ATAG_CMDLINE) 
+		{
+			str = t->u.cmdline.cmdline;
+			if( str != NULL &&
+				strstr(str, "mx50_1GHz") != NULL ) 
+			{
+				capable_to_1GHz = 1;
+			}
+		}
+	}
+
+	if( capable_to_1GHz )
+	{
+		get_cpu_wp = mx50_rdp_get_fast_cpu_wp;
+		num_cpu_wp = ARRAY_SIZE(fast_cpu_wp_auto);
+	}
+	else
+	{
+		get_cpu_wp = mx50_rdp_get_cpu_wp;
+		num_cpu_wp = ARRAY_SIZE(cpu_wp_auto);
+	}
 	set_num_cpu_wp = mx50_rdp_set_num_cpu_wp;
 	get_dvfs_core_wp = mx50_rdp_get_dvfs_core_table;
-	num_cpu_wp = ARRAY_SIZE(cpu_wp_auto);
 }
 
 static void __init mx50_rdp_io_init(void)
@@ -1806,6 +2144,25 @@ static void __init mx50_rdp_io_init(void)
 
 	mxc_iomux_v3_setup_multiple_pads(mx50_rdp, \
 			ARRAY_SIZE(mx50_rdp));
+
+
+	if(9==check_hardware_name()) {
+		// SD3 should be enabled in E50612 (internal SD)
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd3_enable_pads, \
+				ARRAY_SIZE(mx50_sd3_enable_pads));
+		// SD2 should be disabled in E50612 (WIFI interface)
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, \
+			ARRAY_SIZE(mx50_sd2_disable_pads));
+	}
+	else {
+		// SD3 should be disabled in others MODEL (WIFI interface)
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd3_disable_pads, \
+				ARRAY_SIZE(mx50_sd3_disable_pads));
+		// SD2 should be enabled in others MODEL (External SD)
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_enable_pads, \
+			ARRAY_SIZE(mx50_sd2_enable_pads));
+	}
+
 
 //	gpio_request(SD1_WP, "sdhc1-wp");
 //	gpio_direction_input(SD1_WP);
@@ -1891,7 +2248,6 @@ static * _MemoryRequest(u32 addr, u32 len, const char * name)
     return mem;
 }
 
-extern int check_hardware_name(void);
 
 static int _MYINIT_TEXT hwcfg_p_setup(char *str)
 {
@@ -1958,6 +2314,7 @@ static void _parse_cmdline(void)
 		if(pcPatternStart) {
 			pcPatternVal=pcPatternStart + ulPatternLen ;
 			pcPatternValEnd = strchr(pcPatternVal,' ');
+			cTempStore='\0';
 			if(pcPatternValEnd) {
 				cTempStore = *pcPatternValEnd;
 				*pcPatternValEnd = '\0';
@@ -2001,13 +2358,21 @@ struct platform_device mxc_usb_plug_device = {
  */
 static void __init mxc_board_init(void)
 {
+	int iHWID;
+
 	_parse_cmdline();
+
+	iHWID = check_hardware_name();
 	
 	/* SD card detect irqs */
+	if(9!=iHWID) {
+		// not E5061X ...
+		 
 //	mxcsdhc1_device.resource[2].start = gpio_to_irq(SD1_CD);
 //	mxcsdhc1_device.resource[2].end = gpio_to_irq(SD1_CD);
-	mxcsdhc2_device.resource[2].start = gpio_to_irq(SD2_CD);
-	mxcsdhc2_device.resource[2].end = gpio_to_irq(SD2_CD);
+		mxcsdhc2_device.resource[2].start = gpio_to_irq(SD2_CD);
+		mxcsdhc2_device.resource[2].end = gpio_to_irq(SD2_CD);
+	}
 
 	mxc_cpu_common_init();
 	mx50_rdp_io_init();
@@ -2015,11 +2380,20 @@ static void __init mxc_board_init(void)
 //	mxc_register_device(&mxcspi1_device, &mxcspi1_data);
 	mxc_register_device(&mxcspi3_device, &mxcspi3_data);
 
+//	if (board_is_mx50_rd3())
+//		dvfs_core_data.reg_id = "SW1A";
+	mxc_register_device(&mxc_dvfs_core_device, &dvfs_core_data);
+//	if (board_is_mx50_rd3())
+//		bus_freq_data.gp_reg_id = "SW1A";
+	mxc_register_device(&busfreq_device, &bus_freq_data);
+
 	mxc_register_device(&mxc_dma_device, NULL);
 	mxc_register_device(&mxs_dma_apbh_device, &dma_apbh_data);
 //	mxc_register_device(&mxc_wdt_device, NULL);
-	mxc_register_device(&mxci2c_devices[0], &mxci2c_data);
-	mxc_register_device(&mxci2c_devices[1], &mxci2c_data);
+//	mxc_register_device(&mxci2c_devices[0], &mxci2c_data);
+	mxc_register_device(&mxci2c_devices[0], &mxci2c_300K_data);
+//	mxc_register_device(&mxci2c_devices[1], &mxci2c_data);
+	mxc_register_device(&mxci2c_devices[1], &mxci2c_100K_data);
 	mxc_register_device(&mxci2c_devices[2], &mxci2c_100K_data);
 	
 	mxc_register_device(&mxc_rtc_device, NULL);
@@ -2028,15 +2402,26 @@ static void __init mxc_board_init(void)
 	mxc_register_device(&mxc_pxp_device, NULL);
 	mxc_register_device(&mxc_pxp_client_device, NULL);
 	mxc_register_device(&mxc_pxp_v4l2, NULL);
-	mxc_register_device(&busfreq_device, &bus_freq_data);
 	mxc_register_device(&pm_device, &mx50_pm_data);
-	mxc_register_device(&mxc_dvfs_core_device, &dvfs_core_data);
 //	if (enable_keypad)
-	switch (check_hardware_name()) {
+	
+
+	switch (iHWID) {
 	case 1:	//E60612
 		i2c_register_board_info(0, mxc_i2c0_E60612_board_info,	ARRAY_SIZE(mxc_i2c0_E60612_board_info));
 		break;
-		
+	case 2:	// E50602
+		i2c_register_board_info(0, mxc_i2c0_E50602_board_info,	ARRAY_SIZE(mxc_i2c0_E50602_board_info));
+		printk("%s() Set E50602 key mapping !!\n",__FUNCTION__);
+		keypad_plat_data.matrix = E50602_keymapping;
+		break;
+	case 3:	// E60682
+		i2c_register_board_info(0, mxc_i2c0_E60622_board_info,	ARRAY_SIZE(mxc_i2c0_E60622_board_info));
+		i2c_register_board_info(1, mxc_i2c1_board_info,	ARRAY_SIZE(mxc_i2c1_board_info));
+		printk("%s() Set E60682 key mapping !!\n",__FUNCTION__);
+		keypad_plat_data.matrix = E60682_keymapping;
+		mxc_register_device(&mxc_alc5623_device, &alc5623_data);
+		break;
 	case 4:	// E60622
 		i2c_register_board_info(0, mxc_i2c0_E60622_board_info,	ARRAY_SIZE(mxc_i2c0_E60622_board_info));
 		i2c_register_board_info(1, mxc_i2c1_board_info,	ARRAY_SIZE(mxc_i2c1_board_info));
@@ -2048,6 +2433,20 @@ static void __init mxc_board_init(void)
 		printk("%s() Set E60632 key mapping !!\n",__FUNCTION__);
 		keypad_plat_data.matrix = E60632_keymapping;
 		break;
+	case 9:	//E50612
+		i2c_register_board_info(0, mxc_i2c0_E60612_board_info,	ARRAY_SIZE(mxc_i2c0_E60612_board_info));
+		keypad_plat_data.matrix = NoKey_keymapping;
+		break;
+	case 10:	//E606A2
+		i2c_register_board_info(0, mxc_i2c0_E60612_board_info,	ARRAY_SIZE(mxc_i2c0_E60612_board_info));
+		printk("%s() Set E606A2 key mapping !!\n",__FUNCTION__);
+		keypad_plat_data.matrix = E606A2_keymapping;
+		break;
+	case 14:	//E606B2
+		i2c_register_board_info(0, mxc_i2c0_E60612_board_info,	ARRAY_SIZE(mxc_i2c0_E60612_board_info));
+		printk("%s() Set E606B2 key mapping !!\n",__FUNCTION__);
+		keypad_plat_data.matrix = E606B2_keymapping;
+		break;
 	default:
 		printk("%s() Undefined key mapping !!\n",__FUNCTION__);
 		break;
@@ -2055,9 +2454,21 @@ static void __init mxc_board_init(void)
 	mxc_register_device(&mxc_keypad_device, &keypad_plat_data);
 	i2c_register_board_info(2, mxc_i2c2_board_info,	ARRAY_SIZE(mxc_i2c2_board_info));
 
-	mxc_register_device(&mxcsdhc1_device, &mmc1_data);
-	mxc_register_device(&mxcsdhc2_device, &mmc2_data);
-	mxc_register_device(&mxcsdhc3_device, &mmc3_data);
+#if 1
+	if(9==iHWID) {
+		// E5061X .
+		mxc_register_device(&mxcsdhc3_device, &mmc1_data);
+		mxc_register_device(&mxcsdhc1_device, &mmc2_data);
+		mxc_register_device(&mxcsdhc2_device, &mmc_wifi_data);
+	}
+	else 
+#endif
+	{
+		mxc_register_device(&mxcsdhc1_device, &mmc1_data);
+		mxc_register_device(&mxcsdhc2_device, &mmc2_data);
+		mxc_register_device(&mxcsdhc3_device, &mmc_wifi_data);
+	}
+
 	mxc_register_device(&mxc_ssi1_device, NULL);
 	mxc_register_device(&mxc_ssi2_device, NULL);
 //	mxc_register_device(&mxc_fec_device, &fec_data);

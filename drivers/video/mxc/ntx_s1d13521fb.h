@@ -102,14 +102,17 @@
   #define _INIT_ROTMODE       				3    // rotation mode = 270 degrees
 
 #elif defined(__6_INCH__)
-  #define _PANEL_WIDTH								600
-  #define _PANEL_HEIGHT								800
+  #define _PANEL_WIDTH				_INIT_VSIZE
+  #define _PANEL_HEIGHT				_INIT_HSIZE
 
-  #define S1D_DISPLAY_WIDTH           600
-  #define S1D_DISPLAY_HEIGHT          800
+  #define S1D_DISPLAY_WIDTH           _INIT_VSIZE
+  #define S1D_DISPLAY_HEIGHT          _INIT_HSIZE
 
-  #define _INIT_HSIZE         				800  
-  #define _INIT_VSIZE         				600
+  //#define _INIT_HSIZE         				800  // max panel original width .
+  //#define _INIT_VSIZE         				600	 // max panel original height .
+  #define _INIT_HSIZE         				1024  // max panel original width .
+  #define _INIT_VSIZE         				768	 // max panel original height .
+  
   #define _INIT_FSLEN         				4
   #define _INIT_FBLEN         				4
   #define _INIT_FELEN         				10

@@ -16,23 +16,33 @@
 #include <linux/delay.h>
 #include <linux/hrtimer.h>
 #include <linux/gpio.h>
+#include "ntx_hwconfig.h"
+extern volatile NTX_HWCONFIG *gptHWCFG;
 
 static const char ZFORCE_TS_NAME[]	= "zForce-ir-touch";
 #define TS_POLL_PERIOD	msecs_to_jiffies(10) /* ms delay between samples */
 
 #define tp_int_pin			183
 
-#define ZFORCE_TS_WIDTH			600
-#define ZFORCE_TS_HIGHT			800
+#define DEFAULT_PANEL_W		600
+#define DEFAULT_PANEL_H		800
+//#define ZFORCE_TS_WIDTH			600
+//#define ZFORCE_TS_HIGHT			800
 
-#define ZFORCE_TS_X_MAX 		ZFORCE_TS_WIDTH<<1
-#define ZFORCE_TS_Y_MAX 		ZFORCE_TS_HIGHT<<1
+//#define ZFORCE_TS_X_MAX 		ZFORCE_TS_WIDTH<<1
+//#define ZFORCE_TS_Y_MAX 		ZFORCE_TS_HIGHT<<1
 #define IDX_QUEUE_SIZE		20
-#define IDX_PACKET_SIZE		9
+#define IDX_PACKET_SIZE		129
 
 static struct workqueue_struct *zForce_wq;
-static uint16_t g_touch_pressed;
+static uint16_t g_touch_pressed, g_touch_triggered;
+static int g_zforce_initial_step;
 
+
+static unsigned long ZFORCE_TS_WIDTH=DEFAULT_PANEL_W;
+static unsigned long ZFORCE_TS_HIGHT=DEFAULT_PANEL_H;
+static unsigned long ZFORCE_TS_X_MAX=DEFAULT_PANEL_W<<1; 
+static unsigned long ZFORCE_TS_Y_MAX=DEFAULT_PANEL_H<<1; 
 
 static struct zForce_data {
 	int intr_gpio;
@@ -42,13 +52,20 @@ static struct zForce_data {
 	wait_queue_head_t wait;
 } zForce_ir_touch_data;
 
-static const uint8_t cmd_Resolution[] = {0x02, (ZFORCE_TS_WIDTH&0xFF), (ZFORCE_TS_WIDTH>>8), (ZFORCE_TS_HIGHT&0xFF), (ZFORCE_TS_HIGHT>>8)};
+static uint8_t cmd_Resolution_v2[] = {0xEE, 0x05, 0x02, (DEFAULT_PANEL_W&0xFF), (DEFAULT_PANEL_W>>8), (DEFAULT_PANEL_H&0xFF), (DEFAULT_PANEL_H>>8)};
+static const uint8_t cmd_TouchData_v2[] = {0xEE, 0x01, 0x04};
+static const uint8_t cmd_Frequency_v2[] = {0xEE, 0x07, 0x08, 10, 00, 100, 00, 100, 00};
+static const uint8_t cmd_getFirmwareVer_v2[] = {0xEE, 0x01, 0x1E};
+static const uint8_t cmd_Active_v2[] = {0xEE, 0x01, 0x01};
+static const uint8_t cmd_Deactive_v2[] = {0xEE, 0x01, 0x00};
+
+static uint8_t cmd_Resolution[] = {0x02, (DEFAULT_PANEL_W&0xFF), (DEFAULT_PANEL_W>>8), (DEFAULT_PANEL_H&0xFF), (DEFAULT_PANEL_H>>8)};
 static const uint8_t cmd_TouchData[] = {0x04};
 static const uint8_t cmd_Frequency[] = {0x08,10,100};
 static const uint8_t cmd_getFirmwareVer[] = {0x0A};
 static const uint8_t cmd_Active[] = {0x01};
 static const uint8_t cmd_Deactive[] = {0x00};
-	
+
 extern unsigned int msp430_read(unsigned int reg);
 /*--------------------------------------------------------------*/
 static int zForce_ir_touch_detect_int_level(void)
@@ -84,8 +101,12 @@ static int __zForce_ir_touch_init(struct i2c_client *client)
 {
 	uint8_t buf_recv[10] = { 0 };
 	uint8_t buf[10];
-	
-	return i2c_master_send(client, cmd_Active, 1);
+
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		return i2c_master_send(client, cmd_Active_v2, sizeof(cmd_Active_v2));
+	}else{
+		return i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
+	}	
 }
 
 static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
@@ -114,12 +135,21 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 			break;
 		case 1:
 			printk ("[%s-%d] command Activate (%d) ...\n",__func__,__LINE__,buf[1]);
-			i2c_master_send(client, cmd_Resolution, 5);
-			i2c_master_send(client, cmd_Frequency, 3);
+			if(8==gptHWCFG->m_val.bTouchCtrl) {   //neonode v2
+				i2c_master_send(client, cmd_Resolution_v2, sizeof(cmd_Resolution_v2));
+			}else{
+				i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
+			}
+			g_zforce_initial_step = 1;
 			break;
 		case 2:
 			printk ("[%s-%d] command Resolution (%d) ...\n",__func__,__LINE__,buf[1]);
-			i2c_master_send(client, cmd_TouchData, 1);
+			if(8==gptHWCFG->m_val.bTouchCtrl) {    //neonode v2
+				i2c_master_send(client, cmd_Frequency_v2, sizeof(cmd_Frequency_v2));
+			}else{
+				i2c_master_send(client, cmd_Frequency, sizeof(cmd_Frequency));
+			}	
+			g_zforce_initial_step = 2;
 			break;
 		case 3:
 			printk ("[%s-%d] command Configuration ...\n",__func__,__LINE__);
@@ -127,15 +157,60 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 		case 4:
 //			printk ("[%s-%d] command Touch Data (count %d)...\n",__func__,__LINE__,buf[1]);
 //			printk ("[%02X %02X %02X %02X %02X %02X %02X]\n",buf[2],buf[3],buf[4],buf[5],buf[6],buf[7],buf[8]);
-			memmove (buf, &buf[2], 7*buf[1]);
+			if(8==gptHWCFG->m_val.bTouchCtrl) {    //neonode v2
+				memmove (buf, &buf[2], 9*buf[1]);
+			}else{
+				memmove (buf, &buf[2], 7*buf[1]);
+			}
 			result = 1;
+			break;
+		case 7:
+			printk ("[%s-%d] command BootComplete (%d)...\n",__func__,__LINE__,buf[1]);
 			break;
 		case 8:
 			printk ("[%s-%d] command Frequency (%d) ...\n",__func__,__LINE__,buf[1]);
+			if(8==gptHWCFG->m_val.bTouchCtrl) {  //neonode v2
+				i2c_master_send(client, cmd_TouchData_v2, sizeof(cmd_TouchData_v2));
+			}else{
+				i2c_master_send(client, cmd_TouchData, sizeof(cmd_TouchData));
+			}	
+			g_zforce_initial_step = 8;
 			break;
 		case 0x0A:
 			printk ("[%s-%d] firmware version %02X%02X %02X%02X %02X%02X %02X%02X \n", __func__, __LINE__, \
 				buf[2], buf[1], buf[4], buf[3], buf[6], buf[5], buf[8], buf[7]);
+			break;
+		case 0x1E:
+			if(8==gptHWCFG->m_val.bTouchCtrl) {  //neonode v2
+				printk ("[%s-%d] firmware version %02X%02X %02X%02X %02X%02X %02X%02X \n", __func__, __LINE__, \
+					buf[2], buf[1], buf[4], buf[3], buf[6], buf[5], buf[8], buf[7]);
+			}
+			break;
+		case 0x25:
+			printk ("[%s-%d] command overrun (%d) ...\n",__func__,__LINE__,g_zforce_initial_step);
+			switch (g_zforce_initial_step) {
+				case 1:
+					if(8==gptHWCFG->m_val.bTouchCtrl) {   //neonode v2
+						i2c_master_send(client, cmd_Resolution_v2, sizeof(cmd_Resolution_v2));
+					}else{
+						i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
+					}
+					break;
+				case 2:
+					if(8==gptHWCFG->m_val.bTouchCtrl) {    //neonode v2
+						i2c_master_send(client, cmd_Frequency_v2, sizeof(cmd_Frequency_v2));
+					}else{
+						i2c_master_send(client, cmd_Frequency, sizeof(cmd_Frequency));
+					}
+					break;
+				case 8:
+					if(8==gptHWCFG->m_val.bTouchCtrl) {  //neonode v2
+						i2c_master_send(client, cmd_TouchData_v2, sizeof(cmd_TouchData_v2));
+					}else{
+						i2c_master_send(client, cmd_TouchData, sizeof(cmd_TouchData));
+					}	
+					break;
+			}
 			break;
 		default:
 			printk ("[%s-%d] undefined command %d (%d bytes)...\n",__func__,__LINE__, *buf, buf_recv[1]);
@@ -150,8 +225,14 @@ static void zForce_ir_touch_report_data(struct i2c_client *client, uint8_t *buf)
 	static uint16_t last_x, last_y;
 	static int	pressure = 100;
 	uint16_t x1, x2, y1, y2;
+	int state;
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		state = buf[4] & 0x03;
+	}else{
+		state = (buf[4] >> 6) & 0x03;
+	}
 	
-	if ((buf[4] & 0xC0) == 0x80) {
+	if (2 == state) {
 		input_report_abs(zForce_ir_touch_data.input, ABS_X, last_x);
 		input_report_abs(zForce_ir_touch_data.input, ABS_Y, last_y);
 		input_report_abs(zForce_ir_touch_data.input, ABS_PRESSURE, 0);	// Joseph 20101023
@@ -165,14 +246,16 @@ static void zForce_ir_touch_report_data(struct i2c_client *client, uint8_t *buf)
 		{
 			x1 = buf[0] | (buf[1] << 8);
 			y1 = buf[2] | (buf[3] << 8);
-			input_report_abs(zForce_ir_touch_data.input, ABS_Y, (ZFORCE_TS_WIDTH-x1-1));
+			x1 = ZFORCE_TS_WIDTH-x1-1;
+			input_report_abs(zForce_ir_touch_data.input, ABS_Y, x1);
 			input_report_abs(zForce_ir_touch_data.input, ABS_X, y1);
 			input_report_abs(zForce_ir_touch_data.input, ABS_PRESSURE, pressure);
-//			printk ("[%s-%d] touch down (%d, %d, %d)\n",__func__,__LINE__,(ZFORCE_TS_WIDTH-x1),y1, pressure);
+//			printk ("[%s-%d] touch down (%d, %d, %d)\n",__func__,__LINE__,x1,y1, pressure);
 		}
 		else {
 			y1 = buf[0] | (buf[1] << 8);
 			x1 = buf[2] | (buf[3] << 8);
+//			printk ("[%s-%d] touch down (%d, %d) (p=%d, %d, %d, %d, %d)\n",__func__,__LINE__,y1,x1,buf[4],buf[5],buf[6],buf[7],buf[8]);
 			input_report_abs(zForce_ir_touch_data.input, ABS_X, x1);
 			input_report_abs(zForce_ir_touch_data.input, ABS_Y, y1);
 			input_report_abs(zForce_ir_touch_data.input, ABS_PRESSURE, 1024);
@@ -209,16 +292,20 @@ static void zForce_ir_touch_work_func(struct work_struct *work)
 	}
 	if (!zForce_ir_touch_detect_int_level ())
 		schedule_delayed_work(&zForce_ir_touch_data.work, 1);
+	else
+		g_touch_triggered = 0;
 }
 
 static irqreturn_t zForce_ir_touch_ts_interrupt(int irq, void *dev_id)
 {
+	g_touch_triggered = 1;
 	schedule_delayed_work(&zForce_ir_touch_data.work, 0);
 	return IRQ_HANDLED;
 }
 
 void zForce_ir_touch_ts_triggered(void)
 {
+	g_touch_triggered = 1;
 	schedule_delayed_work(&zForce_ir_touch_data.work, 0);
 }
 
@@ -240,15 +327,27 @@ static ssize_t neo_ctl(struct device *dev, struct device_attribute *attr,
 	{
 		case 'a':
 			printk("NeoActivate \n");
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Active, sizeof(cmd_Active));
+			if(8==gptHWCFG->m_val.bTouchCtrl) {
+				i2c_master_send(zForce_ir_touch_data.client, cmd_Active_v2, sizeof(cmd_Active_v2));
+			}else{
+				i2c_master_send(zForce_ir_touch_data.client, cmd_Active, sizeof(cmd_Active));
+			}	
 			break;
 		case 'd':
 			printk("NeoDeactivate \n");
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive, sizeof(cmd_Deactive));
+			if(8==gptHWCFG->m_val.bTouchCtrl) {
+				i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
+			}else{
+				i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive, sizeof(cmd_Deactive));
+			}	
 			break;
 		case 's':
 			printk("NeoSetResolution \n");
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Resolution, sizeof(cmd_Resolution));
+			if(8==gptHWCFG->m_val.bTouchCtrl) {
+				i2c_master_send(zForce_ir_touch_data.client, cmd_Resolution_v2, sizeof(cmd_Resolution_v2));
+			}else{
+				i2c_master_send(zForce_ir_touch_data.client, cmd_Resolution, sizeof(cmd_Resolution));
+			}	
 			break;
 		case 'l':
 			printk("Get LedSignalLevel \n");
@@ -262,15 +361,19 @@ extern int gSleep_Mode_Suspend;
 
 static int zForce_ir_touch_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
-	if (g_touch_pressed || !zForce_ir_touch_detect_int_level ()) 
+//	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
+	if (g_touch_pressed || g_touch_triggered || !zForce_ir_touch_detect_int_level ()) 
 	{
 		zForce_ir_touch_ts_triggered ();
 		printk ("[%s-%d] zForce touch event not processed.\n",__func__,__LINE__);
 		return -1;
 	}
 	if (gSleep_Mode_Suspend) {
-		i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive, 1);
+		if(8==gptHWCFG->m_val.bTouchCtrl) {
+			i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
+		}else{
+			i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive, sizeof(cmd_Deactive));
+		}	
 		msleep(200);
 		disable_irq_wake(zForce_ir_touch_data.client->irq);
 	}
@@ -280,7 +383,11 @@ static int zForce_ir_touch_suspend(struct platform_device *pdev, pm_message_t st
 static int zForce_ir_touch_resume(struct platform_device *pdev)
 {
 	if (gSleep_Mode_Suspend) {
-		i2c_master_send(zForce_ir_touch_data.client, cmd_Active, 1);
+		if(8==gptHWCFG->m_val.bTouchCtrl) {
+			i2c_master_send(zForce_ir_touch_data.client, cmd_Active_v2, sizeof(cmd_Active_v2));
+		}else{
+			i2c_master_send(zForce_ir_touch_data.client, cmd_Active, sizeof(cmd_Active));
+		}	
 		enable_irq_wake(zForce_ir_touch_data.client->irq);
 	}
 	if (!zForce_ir_touch_detect_int_level ()) {
@@ -295,8 +402,12 @@ static int zforce_i2c_open(struct input_dev *dev)
 	struct i2c_client *client = input_get_drvdata(dev);
 
 	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
-	i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
-	i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		i2c_master_send(client, cmd_Active_v2, sizeof(cmd_Active_v2));
+	}else{
+		i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
+	}	
+//	i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
 	
 	return 0;
 }
@@ -306,7 +417,11 @@ static void zforce_i2c_close(struct input_dev *dev)
 	struct i2c_client *client = input_get_drvdata(dev);
 	
 	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
-	i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
+	}else{
+		i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
+	}	
 }
 
 static int zForce_ir_touch_probe(
@@ -365,6 +480,37 @@ static int zForce_ir_touch_probe(
 	input_set_abs_params(zForce_ir_touch_data.input, ABS_PRESSURE, 0, 2048, 0, 0);
 	input_set_abs_params(zForce_ir_touch_data.input, ABS_HAT0X, 0, ZFORCE_TS_X_MAX, 0, 0);
 	input_set_abs_params(zForce_ir_touch_data.input, ABS_HAT0Y, 0, ZFORCE_TS_Y_MAX, 0, 0);
+
+	{
+		if(1==gptHWCFG->m_val.bDisplayResolution) {
+			// 1024x758 .
+			ZFORCE_TS_WIDTH=758;
+			ZFORCE_TS_HIGHT=1024;
+		}
+		else if(2==gptHWCFG->m_val.bDisplayResolution) {
+			// 1024x768
+			ZFORCE_TS_WIDTH=768;
+			ZFORCE_TS_HIGHT=1024;
+		}
+		else {
+			// 800x600 
+			ZFORCE_TS_WIDTH=600;
+			ZFORCE_TS_HIGHT=800;
+		}
+
+		ZFORCE_TS_X_MAX=ZFORCE_TS_WIDTH<<1;
+		ZFORCE_TS_Y_MAX=ZFORCE_TS_HIGHT<<1;
+
+		cmd_Resolution[1] = (uint8_t)(ZFORCE_TS_WIDTH&0xff);
+		cmd_Resolution[2] = (uint8_t)(ZFORCE_TS_WIDTH>>8);
+		cmd_Resolution[3] = (uint8_t)(ZFORCE_TS_HIGHT&0xff);
+		cmd_Resolution[4] = (uint8_t)(ZFORCE_TS_HIGHT>>8);
+
+		cmd_Resolution_v2[3] = (uint8_t)(ZFORCE_TS_WIDTH&0xff);
+		cmd_Resolution_v2[4] = (uint8_t)(ZFORCE_TS_WIDTH>>8);
+		cmd_Resolution_v2[5] = (uint8_t)(ZFORCE_TS_HIGHT&0xff);
+		cmd_Resolution_v2[6] = (uint8_t)(ZFORCE_TS_HIGHT>>8);
+	}
 
 	err = input_register_device(zForce_ir_touch_data.input);
 	if (err < 0) {

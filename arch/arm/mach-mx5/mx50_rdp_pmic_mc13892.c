@@ -88,6 +88,7 @@
 
 #define	SWMODE_MASK	0xF
 #define SWMODE_AUTO	0x8
+#define SWMODE_PWM_AUTO	0x6
 
 /* CPU */
 static struct regulator_consumer_supply sw1_consumers[] = {
@@ -369,7 +370,7 @@ static int mc13892_regulator_init(struct mc13892 *mc13892)
 		register_mask = (SWMODE_MASK << SW1MODE_LSB) |
 		       (SWMODE_MASK << SW2MODE_LSB);
 		value &= ~register_mask;
-		value |= (SWMODE_AUTO << SW1MODE_LSB) |
+		value |= (SWMODE_PWM_AUTO << SW1MODE_LSB) |
 			(SWMODE_AUTO << SW2MODE_LSB);
 		pmic_write_reg(REG_SW_4, value, 0xffffff);
 

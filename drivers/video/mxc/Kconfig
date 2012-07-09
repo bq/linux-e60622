@@ -85,6 +85,12 @@ config FB_MXC_EINK_PANEL
 	select FB_DEFERRED_IO
 	tristate "E-Ink Panel Framebuffer"
 
+config FB_MXC_AUO_K1901
+	depends on FB_MXC
+	depends on DMA_ENGINE
+	select FB_DEFERRED_IO
+	tristate "AUO K1901 Framebuffer"
+
 config FB_MXC_EINK_AUTO_UPDATE_MODE
     bool "E-Ink Auto-update Mode Support"
     default n

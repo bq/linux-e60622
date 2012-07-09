@@ -50,7 +50,7 @@ int lm75_init(int iPort)
 {
 	int iRet = LM75_RET_SUCCESS;
 	int iChipIdx;
-
+	
 	GALLEN_DBGLOCAL_BEGIN();
 	
 	printk ("%s(%d) \n",__func__,iPort);
@@ -114,6 +114,10 @@ int lm75_get_temperature(int iChipIdx,int *O_piTemperature)
 	unsigned short wTemp;
 	unsigned char bA[2] = {0x00}; // pointer of temprature .
 	
+	unsigned char bTemp;
+	int iTemp;
+	
+	//printk("%s()\n",__FUNCTION__);
 	
 	if( NULL == gpI2C_adapter ) {
 		ERR_MSG("%s(%d):%s cannot get temp without init .!!\n",__FILE__,__LINE__,__FUNCTION__);
@@ -136,7 +140,17 @@ int lm75_get_temperature(int iChipIdx,int *O_piTemperature)
 	}
 	wTemp = bA[0]<<3|bA[1]>>5;
 	gtLM75_DataA[iChipIdx].wTempratureData = wTemp;
-	gtLM75_DataA[iChipIdx].iCurrent_temprature = (int)(bA[0]);
+	if(bA[0]&0x80) {
+		// negative .
+		bTemp=(~bA[0])+1;
+		iTemp = bTemp;
+		iTemp = (~iTemp)+1;
+	}
+	else {
+		// positive .
+		iTemp = (int)(bA[0]);
+	}	
+	gtLM75_DataA[iChipIdx].iCurrent_temprature = iTemp;
 	DBG_MSG("lm75 temprature data = 0x%x%x,%d\n",bA[0],bA[1],gtLM75_DataA[iChipIdx].iCurrent_temprature);
 	
 	//gtLM75_DataA[iChipIdx].iCurrent_temprature = bA[0];

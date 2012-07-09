@@ -4,16 +4,11 @@
 
 #include "fake_s1d13522.h"
 #include "lk_lm75.h"
-
+#include "lk_tps65185.h"
 #include <linux/completion.h>
 
 
 #define FW_IN_RAM	1
-
-
-#define _SCR_H	600
-#define _SCR_W	800
-
 
 #define WF_INIT	0
 #define WF_DU	1
@@ -24,8 +19,12 @@ static EPDFB_DC *gptDC;
 
 // global mxc update data ....
 static struct mxcfb_update_data g_mxc_upd_data;
-extern check_hardware_name(void);
+extern int check_hardware_name(void);
 
+
+
+#include "ntx_hwconfig.h"
+extern volatile NTX_HWCONFIG *gptHWCFG;
 
 static int giIsInited = 0;
 DECLARE_COMPLETION(mxc_epdc_fake13522_inited);
@@ -146,15 +145,19 @@ static int k_get_wfbpp(void)
 {
 	int i_wf_bpp=4;
 	
+	if(*(gpbWF_vaddr+0x10) == 0x2) {
+		i_wf_bpp=3;
+	}
+	
 	return i_wf_bpp;
 }
 
-static void k_set_partial(int iIsSetPartial)
+static int k_set_partial(int iIsSetPartial)
 {
 	u32 temp;
 	if(0==giIsInited) {
 		printk("[%s]:skip before init .",__FUNCTION__);
-		return ;
+		return -1;
 	}
 	
 	if(iIsSetPartial) {
@@ -163,6 +166,7 @@ static void k_set_partial(int iIsSetPartial)
 	else {
 		g_mxc_upd_data.update_mode = UPDATE_MODE_FULL;
 	}
+	return 0;
 }
 
 static unsigned char *k_get_realfbEx(unsigned long *O_pdwFBSize)
@@ -204,7 +208,7 @@ static void k_display_start(int iIsStart)
 
 		DBG_MSG("%s() (x,y)=(%u,%u),(w,h)(%u,%u)\n",__FUNCTION__,
 			g_mxc_upd_data.update_region.top,g_mxc_upd_data.update_region.left,
-			g_mxc_upd_data.update_region.height,g_mxc_upd_data.update_region.width);
+			g_mxc_upd_data.update_region.width,g_mxc_upd_data.update_region.height);
 
 		
 		iChk = mxc_epdc_fb_send_update(&g_mxc_upd_data,&g_fb_data->info);
@@ -221,12 +225,13 @@ static void k_display_start(int iIsStart)
 
 static int k_get_wfmode(void)
 {
+	int i_wf_mode;
 	if(0==giIsInited) {
 		printk("[%s]:skip before init .",__FUNCTION__);
 		return 0;
 	}
 	
-	int i_wf_mode = g_mxc_upd_data.waveform_mode;
+	i_wf_mode = g_mxc_upd_data.waveform_mode;
 	return i_wf_mode;
 }
 
@@ -275,20 +280,26 @@ static int k_wait_update_complete(void)
 	}
 	
 
-	if(1==g_mxc_upd_data.waveform_mode||4==g_mxc_upd_data.waveform_mode) {
+	//if(1==g_mxc_upd_data.waveform_mode||4==g_mxc_upd_data.waveform_mode) {
 		// skip wait update complete at DOC mode and A2 mode .
-		iRet = 0;
-	}
-	else if(k_is_updating()){
+		//iRet = 0;
+	//}
+	//else if(k_is_updating())
+	{
 		unsigned long dwJiffiesStart,dwJiffiesEnd;
 		dwJiffiesStart = jiffies ;
 		iRet = mxc_epdc_fb_wait_update_complete(g_mxc_upd_data.update_marker++,&g_fb_data->info);
 		dwJiffiesEnd = jiffies;
-		printk("[%s]waitupdate ret=%d,%u->%u\n",__FUNCTION__,iRet,dwJiffiesStart,dwJiffiesEnd);
+		printk("[%s]waitupdate ret=%d,%u->%u\n",__FUNCTION__,iRet,\
+			(unsigned int)dwJiffiesStart,(unsigned int)dwJiffiesEnd);
 	}
 	return iRet;
 }
 
+static volatile unsigned long gdwLastUpdateJiffies = 0;
+
+
+/////////////////////////////////////////////////////////////
 // calling by real epdc driver .
 static int k_set_temperature(struct fb_info *info)
 {
@@ -296,18 +307,30 @@ static int k_set_temperature(struct fb_info *info)
 	int iChk;
 	
 	static int giLastTemprature = DEFAULT_TEMP;
-	static unsigned long gdwLastUpdateJiffies = 0;
 	
-	//printk("%s()\n",__FUNCTION__);
-	if(0==gdwLastUpdateJiffies||time_after(jiffies,gdwLastUpdateJiffies+6000)) {
-		iChk = lm75_get_temperature(0,&giLastTemprature);
+
+	//printk("%s(),timeout_tick=%u,current_tick=%u\n",__FUNCTION__,
+	//		gdwLastUpdateJiffies,jiffies);
+	
+	if(0==gdwLastUpdateJiffies||time_after(jiffies,gdwLastUpdateJiffies)) {
+		
+		if(gptHWCFG&&6==gptHWCFG->m_val.bDisplayCtrl) {
+			// imx508 + tps16585 .
+			iChk = tps65185_get_temperature(&giLastTemprature);
+		}
+		else {
+			iChk = lm75_get_temperature(0,&giLastTemprature);
+		}
+		
 		if(iChk>=0) {
 			iChk = mxc_epdc_fb_set_temperature(giLastTemprature,info);
-			gdwLastUpdateJiffies = jiffies;
+			gdwLastUpdateJiffies = jiffies+(60*HZ);
 		}
 	}
 	return giLastTemprature;
 }
+
+////////////////////////////////////////////////////////////
 
 static int k_set_update_rect(unsigned short wX,unsigned short wY,
 	unsigned short wW,unsigned short wH)
@@ -319,26 +342,59 @@ static int k_set_update_rect(unsigned short wX,unsigned short wY,
 	}
 	
 	
-	#if 1
 	DBG_MSG("%s() x=%u,y=%u,w=%u,h=%u\n",__FUNCTION__,wX,wY,wW,wH);
 	g_mxc_upd_data.update_region.top = wY;
 	g_mxc_upd_data.update_region.left = wX;
 	g_mxc_upd_data.update_region.height = wH;
 	g_mxc_upd_data.update_region.width = wW;	
-	#else
-	g_mxc_upd_data.update_region.top = 0;
-	g_mxc_upd_data.update_region.left = 0;
-	g_mxc_upd_data.update_region.height = _SCR_H;
-	g_mxc_upd_data.update_region.width = _SCR_W;
-	#endif
+
 	
+	return iRet;
+}
+
+static int k_set_vcom(int iVCOM_set_mV)
+{
+	int iRet=0;
+	//printk("%s(%d):%s\n",__FILE__,__LINE__,__FUNCTION__);
+	if(gptHWCFG&&6==gptHWCFG->m_val.bDisplayCtrl) {
+		iRet = tps65185_vcom_set(iVCOM_set_mV,0);
+	}
+	else {
+	}
+
+	return iRet;
+}
+static int k_set_vcom_to_flash(int iVCOM_set_mV)
+{
+	int iRet=0;
+	//printk("%s(%d):%s\n",__FILE__,__LINE__,__FUNCTION__);
+	if(gptHWCFG&&6==gptHWCFG->m_val.bDisplayCtrl) {
+		iRet = tps65185_vcom_set(iVCOM_set_mV,1);
+	}
+	else {
+	}
+	return iRet;
+}
+
+static int k_get_vcom(int *O_piVCOM_get_mV)
+{
+	int iRet=0;
+	//printk("%s(%d):%s\n",__FILE__,__LINE__,__FUNCTION__);
+	if(gptHWCFG&&6==gptHWCFG->m_val.bDisplayCtrl) {
+		iRet = tps65185_vcom_get(O_piVCOM_get_mV);
+	}
+	else {
+	}
+
 	return iRet;
 }
 
 static int k_fake_s1d13522_init(unsigned char *pbInitDCbuf)
 {
-	//gptDC = fake_s1d13522_initEx(4,0);
-	gptDC = fake_s1d13522_initEx(default_bpp,g_fb_data->info.screen_base);
+	
+	gptDC = fake_s1d13522_initEx3(default_bpp,g_fb_data->info.screen_base,g_fb_data->info.var.xres,g_fb_data->info.var.yres, \
+				ALIGN(g_fb_data->info.var.xres,32),ALIGN(g_fb_data->info.var.yres,128));
+				
 	if(gptDC) {
 		gptDC->pfnGetWaveformBpp = k_get_wfbpp;
 		gptDC->pfnVcomEnable = k_vcom_enable;
@@ -351,6 +407,9 @@ static int k_fake_s1d13522_init(unsigned char *pbInitDCbuf)
 		gptDC->pfnIsUpdating = k_is_updating;
 		gptDC->pfnWaitUpdateComplete = k_wait_update_complete;
 		gptDC->pfnSetUpdateRect = k_set_update_rect;
+		gptDC->pfnSetVCOM = k_set_vcom;
+		gptDC->pfnGetVCOM = k_get_vcom;
+		gptDC->pfnSetVCOMToFlash = k_set_vcom_to_flash;
 		
 		//gptDC->dwFlags |= EPDFB_DC_FLAG_OFB_RGB565;
 		gptDC->dwFlags |= EPDFB_DC_FLAG_FLASHDIRTY;
@@ -358,8 +417,8 @@ static int k_fake_s1d13522_init(unsigned char *pbInitDCbuf)
 		// 
 		g_mxc_upd_data.update_region.top = 0;
 		g_mxc_upd_data.update_region.left = 0;
-		g_mxc_upd_data.update_region.height = _SCR_H;
-		g_mxc_upd_data.update_region.width = _SCR_W;
+		g_mxc_upd_data.update_region.height = g_fb_data->info.var.yres;
+		g_mxc_upd_data.update_region.width = g_fb_data->info.var.xres;
 		
 		//g_mxc_upd_data.waveform_mode = g_fb_data->wv_modes.mode_gc16;
 		g_mxc_upd_data.waveform_mode = WF_GC16;
@@ -369,12 +428,27 @@ static int k_fake_s1d13522_init(unsigned char *pbInitDCbuf)
 		g_mxc_upd_data.temp = TEMP_USE_AMBIENT;
 		g_mxc_upd_data.flags = 0;
 		//g_mxc_upd_data.alt_buffer_data = ;
-		
-		if (4 == check_hardware_name())
-			lm75_init (3);
-		else
-			lm75_init (2);
-		
+		//mxc_epdc_fb_set_upd_scheme(UPDATE_SCHEME_SNAPSHOT,&g_fb_data->info);
+
+		// printk("%s(%d):%s,Display=%s\n",__FILE__,__LINE__,__FUNCTION__,
+		//	NtxHwCfg_GetCfgFldStrVal(gptHWCFG,HWCFG_FLDIDX_DisplayCtrl));
+		if(gptHWCFG&&6==gptHWCFG->m_val.bDisplayCtrl) {
+			// imx508 + tps16585 .
+			tps65185_init(2,EPDTIMING_V110);
+		}
+		else {
+			if ((4 == check_hardware_name()) || (3 == check_hardware_name())) {
+				lm75_init (3);
+			}
+			else {
+				lm75_init (2);
+			}
+		}
+
+		epdc_powerup(g_fb_data);
+		draw_mode0(g_fb_data);
+		epdc_powerdown(g_fb_data);
+
 		giIsInited = 1;
 		complete_all(&mxc_epdc_fake13522_inited);
 		
@@ -383,6 +457,8 @@ static int k_fake_s1d13522_init(unsigned char *pbInitDCbuf)
 			//schedule();
 		//}
 		if(pbInitDCbuf) {
+			int ilogo_width ,ilogo_height;
+			
 			#if 1
 			if(k_get_wfbpp() == 4) 
 			{
@@ -393,8 +469,23 @@ static int k_fake_s1d13522_init(unsigned char *pbInitDCbuf)
 			}	
 			#endif	
 			
-			fake_s1d13522_display_img(0,0,gptDC->dwWidth,gptDC->dwHeight,
-				pbInitDCbuf,gptDC,4,0);
+			if(gptHWCFG&&1==gptHWCFG->m_val.bDisplayResolution) {
+				ilogo_width = 1024 ;
+				ilogo_height = 758 ;
+			}
+			else {
+				ilogo_width = 800 ;
+				ilogo_height = 600 ;
+			}
+			
+			if( gdwLOGO_size>=((ilogo_width*ilogo_height)>>1) ) {
+				fake_s1d13522_display_img(0,0,ilogo_width,ilogo_height,
+					pbInitDCbuf,gptDC,4,0);
+			}
+			else {
+				printk("logo skip : logosize %u < %u !! \n ",(unsigned int)gdwLOGO_size,
+					((ilogo_width*ilogo_height)>>1));
+			}
 				
 			
 		}

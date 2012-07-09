@@ -1154,11 +1154,20 @@ static int mxc_kpp_remove(struct platform_device *pdev)
 	return 0;
 }
 
+
+void mxc_kpp_report_key(int isDown,__u16 wKeyCode)
+{
+	if (mxckbd_dev) {
+		input_event(mxckbd_dev, EV_KEY, wKeyCode, isDown);
+	}
+}
+
 void mxc_kpp_report_power(int isDown)
 {
-	if (mxckbd_dev)
-		input_event(mxckbd_dev, EV_KEY, KEY_POWER, isDown);
+	mxc_kpp_report_key(isDown,KEY_POWER);
 }
+
+
 
 
 /*!

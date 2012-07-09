@@ -45,7 +45,13 @@ typedef struct tagNTXHWCFG_VAL {
 	unsigned char bProgressCnts;		//                                  ,Cnt .
 	unsigned char bContentType; // Book content type .
 	unsigned char bCPU; //main cpu type .
-	unsigned char bUIStyle; //main cpu type .
+	unsigned char bUIStyle; // UI style .
+	unsigned char bRamType; // Ram Type .
+	unsigned char bUIConfig; // UI config .
+	unsigned char bDisplayResolution;// Display resolution .
+	unsigned char bFrontLight;// Front Light .
+	unsigned char bCPUFreq;// CPU frequency  .
+	unsigned char bHallSensor;// Hall Sensor Controller  .
 } NTXHWCFG_VAL ;
 
 typedef struct tagNTX_HWCONFG{
@@ -88,7 +94,13 @@ extern const char * gszExternalMemA[];// external sd type .
 extern const char * gszRootFsTypeA[];// root fs type .
 extern const char * gszSysPartTypeA[];// system partition type .
 extern const char * gszCPUA[];// cpu type .
-extern const char * gszUIStyleA[];// cpu type .
+extern const char * gszUIStyleA[];// UI Style (netronix UI/customer UI) .
+extern const char * gszRAMTypeA[];// Ram Type .
+extern const char * gszUIConfigA[];// UI Config .
+extern const char * gszDisplayResolutionA[];// Display Resolution .
+extern const char * gszFrontLightA[];// Front Light .
+extern const char * gszCPUFreqA[];// CPU frequency .
+extern const char * gszHallSensorA[];// Hall Sensor .
 
 
 // the return value of hw config apis . >=0 is success ,others is fail .
@@ -139,6 +151,13 @@ extern const char * gszUIStyleA[];// cpu type .
 #define HWCFG_FLDIDX_CPU						27 // v0.6
 #define HWCFG_FLDIDX_UISTYLE					28 // v0.7
 
+#define HWCFG_FLDIDX_RAMTYPE					29 // v0.8
+#define HWCFG_FLDIDX_UICONFIG					30 // v0.9
+#define HWCFG_FLDIDX_DISPLAYRESOLUTION			31 // v1.0
+#define HWCFG_FLDIDX_FRONTLIGHT			32 // v1.1
+#define HWCFG_FLDIDX_CPUFREQ			33 // v1.2
+#define HWCFG_FLDIDX_HALLSENSOR			34 // v1.2
+
 
 NTX_HWCONFIG *NtxHwCfg_Load(const char *szFileName,int iIsSeek);
 int NtxHwCfg_Save(const char *szFileName,int iIsSeek);
@@ -164,6 +183,9 @@ const char *NtxHwCfg_GetCfgFldStrVal(NTX_HWCONFIG *pHdr,int iFieldIdx);
 int NtxHwCfg_SetCfgFldVal(NTX_HWCONFIG *pHdr,int iFieldIdx,int iFieldVal);
 int NtxHwCfg_SetCfgFldStrVal(NTX_HWCONFIG *pHdr,int iFieldIdx,const char *pszFieldStrVal);
 
+int NtxHwCfg_SetCfgFldValDefs(NTX_HWCONFIG *I_pHdr,int I_iFieldIdx,
+		const char **I_pszFieldValDefs,int I_iTotalVals);
+
 int NtxHwCfg_CompareHdrFldVersion(NTX_HWCONFIG *pHdr,int iFieldIdx);
 
 // get field value name in hardware config struct ...
@@ -177,3 +199,4 @@ int NtxHwCfg_CompareHdrFldVersion(NTX_HWCONFIG *pHdr,int iFieldIdx);
 #endif //] __cplusplus
 
 #endif //] __ntx_hwconfig_h
+

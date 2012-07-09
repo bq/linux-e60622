@@ -26,6 +26,7 @@
 #include <linux/idr.h>
 #include <linux/i2c.h>
 #include <asm/unaligned.h>
+#include <linux/interrupt.h>
 
 #define DRIVER_VERSION			"1.1.0"
 #define BQ27510_REG_FLAGS		0x0A
@@ -466,7 +467,7 @@ static void cmd_write_reg(const char *arg)
 	ret = i2c_smbus_write_byte_data(mma7660_client, reg, value);
 	ret = i2c_smbus_write_byte_data(mma7660_client, REG_MODE, modereg);
 
-	dev_info(&mma7660_client->dev, "write reg result %s\n",
+	dev_info(&mma7660_client->dev, "write reg %d to 0x%02X result %s\n",reg, value,
 		 ret ? "failed" : "success");
 	sprintf(res_buff, "OK:write reg 0x%02x data 0x%02x result %s\n",reg,value,
 		 ret ? "failed" : "success");
@@ -659,7 +660,7 @@ static ssize_t mma7660_show(struct device *dev,
         printk("mma7660 data read failed\n");
         return;
     }
-	printk("x %d y %d z %d tilt %d\n",x,y,z,tilt);
+	printk("x %d y %d z %d tilt 0x%02X\n",x,y,z,tilt);
   	//cmd_dumpreg();
 	return sprintf(buf,"%s",res_buff);
 }
@@ -771,9 +772,11 @@ static int mma7660_g_sensor_probe(struct i2c_client *client,
 	if (0 > retval)
 		goto batt_failed_4;
 	i2c_smbus_write_byte_data(client, REG_SPCNT, 0x00);		//No sleep count
-	i2c_smbus_write_byte_data(client, REG_INTSU, 0x03);		//Configure GINT Interrupt
+//	i2c_smbus_write_byte_data(client, REG_INTSU, 0x03);		//Configure GINT Interrupt
+	i2c_smbus_write_byte_data(client, REG_INTSU, 0x02);		//Configure GINT Interrupt
 	i2c_smbus_write_byte_data(client, REG_PDET, 0xE0);		//No tap detection enabled
-	i2c_smbus_write_byte_data(client, REG_SR, 	0x34);		//8 samples/s, TILT debounce filter = 2
+//	i2c_smbus_write_byte_data(client, REG_SR, 	0x34);		//8 samples/s, TILT debounce filter = 2
+	i2c_smbus_write_byte_data(client, REG_SR, 	0xDD);		//4 samples/s, TILT debounce filter = 6
 	i2c_smbus_write_byte_data(client, REG_PD, 	0x00);		//No tap detection debounce count enabled
 	i2c_smbus_write_byte_data(client, REG_MODE, 0x41);		//Active Mode, INT = push-pull and active low
 	
@@ -809,10 +812,31 @@ static int mma7660_g_sensor_remove(struct i2c_client *client)
 	return 0;
 }
 
+extern int gSleep_Mode_Suspend;
+static int gSensorDisabled;
 static int mma7660_g_sensor_resume(struct i2c_client *client)
 {
+	int retval = 0;
 //	printk ("[%s-%d] ...\n",__func__,__LINE__);
 //	i2c_smbus_write_byte_data(client, REG_MODE, 0x01);		/* active mode   */
+	if (gSleep_Mode_Suspend) {
+		if (gSensorDisabled) {
+			enable_irq_wake (mma7660_client->irq);
+			gSensorDisabled = 0;
+		}
+		//Configure MMA7660FC as Portrait/Landscape Detection
+		retval = i2c_smbus_write_byte_data(mma7660_client, REG_MODE, 0x00);		//Standby Mode
+		if (0 > retval)
+			return 0;
+		i2c_smbus_write_byte_data(mma7660_client, REG_SPCNT, 0x00);		//No sleep count
+	//	i2c_smbus_write_byte_data(client, REG_INTSU, 0x03);		//Configure GINT Interrupt
+		i2c_smbus_write_byte_data(client, REG_INTSU, 0x02);		//Configure GINT Interrupt
+		i2c_smbus_write_byte_data(client, REG_PDET, 0xE0);		//No tap detection enabled
+	//	i2c_smbus_write_byte_data(client, REG_SR, 	0x34);		//8 samples/s, TILT debounce filter = 2
+		i2c_smbus_write_byte_data(client, REG_SR, 	0xDD);		//4 samples/s, TILT debounce filter = 6
+		i2c_smbus_write_byte_data(mma7660_client, REG_PD, 	0x00);		//No tap detection debounce count enabled
+		i2c_smbus_write_byte_data(mma7660_client, REG_MODE, 0x41);		//Active Mode, INT = push-pull and active low
+	}
 	return 0;
 }
 
@@ -821,6 +845,10 @@ static int mma7660_g_sensor_suspend(struct i2c_client *client, pm_message_t stat
 //	printk ("[%s-%d] ...\n",__func__,__LINE__);
 //	i2c_smbus_write_byte_data(client, REG_MODE, 0x00);		/* standby mode   */
 	i2c_smbus_read_byte_data(mma7660_client, REG_TILT);		// read TILT to clear interrupt status
+	if (gSleep_Mode_Suspend) {
+		disable_irq_wake (mma7660_client->irq);
+		gSensorDisabled = 1;
+	}
 	return 0;
 }
 

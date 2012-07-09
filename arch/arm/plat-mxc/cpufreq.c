@@ -69,6 +69,7 @@ int set_cpu_freq(int freq)
 	int gp_volt = 0;
 	int i;
 
+	freq = clk_round_rate(cpu_clk, freq);
 	org_cpu_rate = clk_get_rate(cpu_clk);
 	if (org_cpu_rate == freq)
 		return ret;
@@ -82,6 +83,7 @@ int set_cpu_freq(int freq)
 		return ret;
 
 	/*Set the voltage for the GP domain. */
+#if 0
 	if (freq > org_cpu_rate) {
 		ret = regulator_set_voltage(gp_regulator, gp_volt, gp_volt);
 		if (ret < 0) {
@@ -89,13 +91,14 @@ int set_cpu_freq(int freq)
 			return ret;
 		}
 	}
-
+#endif
 	ret = clk_set_rate(cpu_clk, freq);
 	if (ret != 0) {
 		printk(KERN_DEBUG "cannot set CPU clock rate\n");
 		return ret;
 	}
 
+#if 0
 	if (freq < org_cpu_rate) {
 		ret = regulator_set_voltage(gp_regulator, gp_volt, gp_volt);
 		if (ret < 0) {
@@ -103,6 +106,7 @@ int set_cpu_freq(int freq)
 			return ret;
 		}
 	}
+#endif
 
 	return ret;
 }
@@ -221,13 +225,14 @@ static int __init mxc_cpufreq_driver_init(struct cpufreq_policy *policy)
 		return PTR_ERR(cpu_clk);
 	}
 
+#if 0
 	gp_regulator = regulator_get(NULL, gp_reg_id);
 	if (IS_ERR(gp_regulator)) {
 		clk_put(cpu_clk);
 		printk(KERN_ERR "%s: failed to get gp regulator\n", __func__);
 		return PTR_ERR(gp_regulator);
 	}
-
+#endif
 	/* Set the current working point. */
 	cpu_wp_tbl = get_cpu_wp(&cpu_wp_nr);
 
@@ -264,7 +269,9 @@ static int __init mxc_cpufreq_driver_init(struct cpufreq_policy *policy)
 
 	if (ret < 0) {
 		clk_put(cpu_clk);
+#if 0
 		regulator_put(gp_regulator);
+#endif
 		printk(KERN_ERR "%s: failed to register i.MXC CPUfreq\n",
 		       __func__);
 		return ret;
@@ -296,7 +303,9 @@ static int mxc_cpufreq_driver_exit(struct cpufreq_policy *policy)
 		set_high_bus_freq(1);
 
 	clk_put(cpu_clk);
+#if 0
 	regulator_put(gp_regulator);
+#endif
 	return 0;
 }
 

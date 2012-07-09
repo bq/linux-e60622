@@ -86,6 +86,11 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
 		c = (unsigned long long)period_cycles * duty_ns;
 		do_div(c, period_ns);
 		duty_cycles = c;
+		
+		if (0 == duty_cycles) {
+			duty_cycles = 1;
+			period_cycles = 0;
+		}
 
 		printk ("[%s-%d] prescale 0x%04X duity %d, period %d\n",__func__,__LINE__,prescale,duty_cycles,period_cycles);
 		writel(duty_cycles, pwm->mmio_base + MX3_PWMSAR);

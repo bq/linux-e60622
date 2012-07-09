@@ -17,7 +17,7 @@
 #include <linux/hrtimer.h>
 #include <linux/gpio.h>
 
-#define _WITH_DELAY_WORK_
+//#define _WITH_DELAY_WORK_
 static const char IT7260_TS_NAME[]	= "IT7260-touch";
 #define TS_POLL_PERIOD	msecs_to_jiffies(10) /* ms delay between samples */
 
@@ -196,8 +196,10 @@ static int it7260_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 	unsigned char ucQuery = 0;
 	int rc, bytes_to_recv = IDX_PACKET_SIZE;
 
-	if (buf == NULL)
+	if (buf == NULL) {
+		printk ("= Null buffer pointer =\n");
 		return -EINVAL;
+	}
 
 	i2cReadFromIt7260(client, 0x80, &ucQuery, 1);
 	if (ucQuery < 0) {
@@ -208,9 +210,11 @@ static int it7260_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 	if (ucQuery & 0x80) {
 		rc = i2cReadFromIt7260(client, 0xE0, buf, bytes_to_recv);
 		if (rc != bytes_to_recv) {
+			printk ("== read data error ( %d )===\n",rc);
 			return -EINVAL;
 		}
 	}
+//	printk("=== flag 0x%02X Point1 x=%d y=%d ===\n",buf[0], ((buf[3] & 0x0F) << 8) + buf[2], ((buf[3] & 0xF0) << 4) + buf[4]);
 	return rc;
 }
 
@@ -219,7 +223,11 @@ static int gQueueRear, gQueueFront;
 
 void it7260_touch_enqueue (void)
 {
-	it7260_touch_recv_data(it7260_touch_data.client, git7260Buffer[gQueueRear]);
+	int result;
+	
+	result = it7260_touch_recv_data(it7260_touch_data.client, git7260Buffer[gQueueRear]);
+	if (0 > result)
+		return;
 	if (((gQueueRear+1)%IDX_QUEUE_SIZE) == gQueueFront)
 		printk ("[%s-%d] touch queue full\n",__func__,__LINE__);
 	else
@@ -235,6 +243,7 @@ static void it7260_touch_report_data(struct i2c_client *client, uint8_t *pucPoin
 	int ret = 0;
 	int finger2_pressed = 0;
 	int xraw, yraw, xtmp, ytmp;
+	char pressure_point;
 	int i = 0;
 	
 	if (pucPoint[0] & 0xF0) {
@@ -250,15 +259,11 @@ static void it7260_touch_report_data(struct i2c_client *client, uint8_t *pucPoin
 	}
 	
 	if (pucPoint[0] & 0x01) {
-		char pressure_point, z, w;
-
 		xraw = ((pucPoint[3] & 0x0F) << 8) + pucPoint[2];
 		yraw = ((pucPoint[3] & 0xF0) << 4) + pucPoint[4];
-
 		pressure_point = pucPoint[5] & 0x0f;
-//		printk("=Read_Point1 x=%d y=%d p=%d=\n",xraw,yraw,pressure_point);
+//		printk(">>> flag 0x%02X Point1 x=%d y=%d (%d) <<<\n",pucPoint[0],xraw,yraw,gQueueFront);
 
-		input_report_key(it7260_touch_data.input, BTN_TOUCH, 1);
 #if 0
 		input_report_abs(it7260_touch_data.input, ABS_MT_TRACKING_ID, 1);
 		input_report_abs(it7260_touch_data.input, ABS_MT_TOUCH_MAJOR, 1);
@@ -271,13 +276,14 @@ static void it7260_touch_report_data(struct i2c_client *client, uint8_t *pucPoin
 #endif
 //		input_report_abs(it7260_touch_data.input, ABS_PRESSURE, pressure_point);
 		input_report_abs(it7260_touch_data.input, ABS_PRESSURE, 1024);
+		input_report_key(it7260_touch_data.input, BTN_TOUCH, 1);
 		//input_mt_sync(it7260_touch_data.input);
 		x[0] = xraw;
 		y[0] = yraw;
 		finger[0] = 1;
+		g_touch_pressed = 1;
 		//pr_info("=input Read_Point1 x=%d y=%d p=%d=\n",xraw,yraw,pressure_point);
 	} else {
-		input_report_abs(it7260_touch_data.input, ABS_PRESSURE, 0);
 #if 0
 		input_report_abs(it7260_touch_data.input, ABS_MT_TRACKING_ID, 1);
 		input_report_abs(it7260_touch_data.input, ABS_MT_TOUCH_MAJOR, 0);
@@ -289,7 +295,9 @@ static void it7260_touch_report_data(struct i2c_client *client, uint8_t *pucPoin
 		input_report_abs(it7260_touch_data.input, ABS_Y, y[0]);
 #endif
 		input_report_key(it7260_touch_data.input, BTN_TOUCH, 0);
+		input_report_abs(it7260_touch_data.input, ABS_PRESSURE, 0);
 		finger[0] = 0;
+		g_touch_pressed = 0;
 	}
 
 #if 0
@@ -334,9 +342,7 @@ static void it7260_touch_report_data(struct i2c_client *client, uint8_t *pucPoin
 
 static void it7260_touch_work_func(struct work_struct *work)
 {
-#ifdef	_WITH_DELAY_WORK_
 	it7260_touch_enqueue ();	
-#endif			
 	while (gQueueRear != gQueueFront){
 		it7260_touch_report_data(it7260_touch_data.client, git7260Buffer[gQueueFront]);
 		gQueueFront = (gQueueFront+1)%IDX_QUEUE_SIZE;
@@ -345,12 +351,12 @@ static void it7260_touch_work_func(struct work_struct *work)
 
 static irqreturn_t it7260_touch_ts_interrupt(int irq, void *dev_id)
 {
-//	printk ("[%s-%d] ...\n", __func__, __LINE__);
+	// printk ("[%s-%d] ...\n", __func__, __LINE__);
 #ifdef	_WITH_DELAY_WORK_
 	schedule_delayed_work(&it7260_touch_data.work, 0);
 #else
 //	disable_irq(it7260_touch_data.client->irq);
-	it7260_touch_enqueue ();	
+//	it7260_touch_enqueue ();	
 //	enable_irq(it7260_touch_data.client->irq);
 	queue_work(it7260_wq, &it7260_touch_data.work);
 #endif			
@@ -360,7 +366,7 @@ static irqreturn_t it7260_touch_ts_interrupt(int irq, void *dev_id)
 
 void it7260_touch_ts_triggered(void)
 {
-	it7260_touch_enqueue ();	
+//	it7260_touch_enqueue ();	
 #ifdef	_WITH_DELAY_WORK_
 	schedule_delayed_work(&it7260_touch_data.work, 0);
 #else
@@ -416,10 +422,11 @@ static int it7260_touch_suspend(struct platform_device *pdev, pm_message_t state
 
 static int it7260_touch_resume(struct platform_device *pdev)
 {
+#if 0
 	if (!it7260_touch_detect_int_level ()) {
 		it7260_touch_ts_triggered ();
 	}
-	
+#endif
 	return 0;
 }
 
@@ -436,23 +443,18 @@ static int it7260_touch_probe(
 	    return err;
 	}
 
-	gTSC2004_exist = 1;
-	
-#ifndef	_WITH_DELAY_WORK_
+	strlcpy(client->name, IT7260_TS_NAME, I2C_NAME_SIZE);
+#ifdef	_WITH_DELAY_WORK_
+	INIT_DELAYED_WORK(&it7260_touch_data.work, it7260_touch_work_func);
+#else
 	it7260_wq = create_singlethread_workqueue("it7260_wq");
 	if (!it7260_wq) {
 		err = -ENOMEM;
 		goto fail;
 	}
-#endif			
-	
-	strlcpy(client->name, IT7260_TS_NAME, I2C_NAME_SIZE);
-
-#ifdef	_WITH_DELAY_WORK_
-	INIT_DELAYED_WORK(&it7260_touch_data.work, it7260_touch_work_func);
-#else
 	INIT_WORK(&it7260_touch_data.work, it7260_touch_work_func);
 #endif			
+	gTSC2004_exist = 1;
 	
 	it7260_touch_data.input = input_allocate_device();
 	if (it7260_touch_data.input == NULL) {

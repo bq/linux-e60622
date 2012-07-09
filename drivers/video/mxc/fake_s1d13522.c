@@ -29,6 +29,10 @@
 #define _QT_SUPPORT				1
 
 
+//#define OUTPUT_IMGFILE_ENABLE		1
+#define OUTPUT_IMGFILE "/dev/shm/epdtemp"
+
+
 #define BusIssueReadReg(wRegIdx) S1D13522_reg_read(wRegIdx)
 #define BusIssueWriteReg(wRegIdx,wValue) S1D13522_reg_write(wRegIdx,wValue)
 
@@ -57,6 +61,8 @@ static epdfb_rotate_t gtRotate = epdfb_rotate_0;
 static int giPixelBits = 4;//
 static EPDFB_DC *gptEPD_dc_current ;// epd device content .
 
+static gwScrW=800,gwScrH=600;
+
 //static DECLARE_COMPLETION(fake13522_inited);
 
 //static u32 currHeight=800,currWidth=600;
@@ -81,12 +87,13 @@ static EPDFB_DC *gptEPD_dc_current ;// epd device content .
 
 #ifdef _PVI_IOCTL_INTERFACE	//[
 #define _PVI_IMAGE_SIZE		(S1D_DISPLAY_HEIGHT*S1D_DISPLAY_WIDTH/4)
+#define _PVI_IMAGE_SIZE_800x600		(800*600/4)
 
+//static BYTE *ImagePVI_BufferA[_PVI_IMAGE_SIZE];
+//static BYTE *ImagePVI = ImagePVI_BufferA;
+static BYTE *ImagePVI ;
 
-static BYTE *ImagePVI_BufferA[_PVI_IMAGE_SIZE];
-static BYTE *ImagePVI = ImagePVI_BufferA;
-
-static BYTE gbTemp4BitsFBA[_PANEL_HEIGHT*_PANEL_WIDTH/(8/S1D_DISPLAY_BPP)];
+//static BYTE gbTemp4BitsFBA[_PANEL_HEIGHT*_PANEL_WIDTH/(8/S1D_DISPLAY_BPP)];
 
 
 static struct timer_list 	pvi_refersh_timer;
@@ -136,13 +143,13 @@ static VOID PROGRESS_BAR(EPDFB_DC *pDC);
 #define _MYINIT_DATA	__initdata
 #endif//]
 
-volatile unsigned char _MYINIT_DATA *gpbLOGO_paddr;
+volatile unsigned char *gpbLOGO_paddr;
 volatile unsigned char *gpbLOGO_vaddr;
-volatile unsigned long _MYINIT_DATA gdwLOGO_size;
+volatile unsigned long gdwLOGO_size;
 
-volatile unsigned char _MYINIT_DATA *gpbWF_paddr;
+volatile unsigned char *gpbWF_paddr;
 volatile unsigned char *gpbWF_vaddr;
-volatile unsigned long _MYINIT_DATA gdwWF_size; ;
+volatile unsigned long gdwWF_size; ;
 
 
 
@@ -524,11 +531,17 @@ void fake_s1d13522_progress_start(EPDFB_DC *pDC)
 #endif //]SHOW_PROGRESS_BAR
 }
 
+void fake_s1d13522_progress_stop(void)
+{
+	gIsProgessRunning = 0;
+}
+
 /*********************************************************
  * 
  * 
  *********************************************************/
-EPDFB_DC *fake_s1d13522_initEx(unsigned char bBitsPerPixel,unsigned char *pbDCBuf)
+EPDFB_DC *fake_s1d13522_initEx3(unsigned char bBitsPerPixel,unsigned char *pbDCBuf,
+	unsigned short wScrW,unsigned short wScrH,unsigned short wFBW,unsigned short wFBH)
 {
 	EPDFB_DC *pDC = 0;
 
@@ -540,8 +553,11 @@ EPDFB_DC *fake_s1d13522_initEx(unsigned char bBitsPerPixel,unsigned char *pbDCBu
 	fake_s1d13522_parse_epd_cmdline();
 #endif //]
 
-	pDC = epdfbdc_create_ex(_INIT_HSIZE,_INIT_VSIZE,bBitsPerPixel,pbDCBuf,\
+	gwScrW = wScrW;
+	gwScrH = wScrH;
+	pDC = epdfbdc_create_ex2(wFBW,wFBH,gwScrW,gwScrH,bBitsPerPixel,pbDCBuf,\
 		EPDFB_DC_FLAG_REVERSEDRVDATA|EPDFB_DC_FLAG_SKIPRIGHTPIXEL);
+	
 
 	//currWidth = _INIT_HSIZE;
 	//currHeight = _INIT_VSIZE;
@@ -565,6 +581,17 @@ EPDFB_DC *fake_s1d13522_initEx(unsigned char bBitsPerPixel,unsigned char *pbDCBu
 	//complete_all(&fake13522_inited);
 	return pDC;
 }
+EPDFB_DC *fake_s1d13522_initEx2(unsigned char bBitsPerPixel,unsigned char *pbDCBuf,
+	unsigned short wScrW,unsigned short wScrH)
+{
+	return fake_s1d13522_initEx3(bBitsPerPixel,pbDCBuf,wScrW,wScrH,wScrW,wScrH);
+}
+EPDFB_DC *fake_s1d13522_initEx(unsigned char bBitsPerPixel,unsigned char *pbDCBuf)
+{
+	return fake_s1d13522_initEx2(bBitsPerPixel,pbDCBuf,800,600);
+}
+
+
 EPDFB_DC *fake_s1d13522_init(void)
 {
 	return fake_s1d13522_initEx(4,0);
@@ -610,11 +637,17 @@ int fake_s1d13522_display_img(u16 wX,u16 wY,u16 wW,u16 wH,u8 *pbImgBuf,
 	
 	ASSERT(pDC);
 	
-	DBG_MSG("%s() : x=%d,y=%d,w=%d,h=%d,r=%d,bit=%d,p=%p\n",__FUNCTION__,\
-		wX,wY,wW,wH,I_tRotate,iPixelBits,pbImgBuf);
+	DBG_MSG("%s() : x=%d,y=%d,w=%d,h=%d,r=%d,bit=%d,p=%p,dc.w=%d,dc.h=%d,dc.fb.w+=%d,dc.fb.h+=%d\n",__FUNCTION__,\
+		wX,wY,wW,wH,I_tRotate,iPixelBits,pbImgBuf,pDC->dwWidth,pDC->dwHeight,pDC->dwFBWExtra,pDC->dwFBHExtra);
 	
 	uiCnt = 0 ;
+
 	
+	
+	if(0==wW||0==wH) {
+		DBG_MSG("[%s] skip !!,W or H =0 !!\n",__FUNCTION__);
+		return -1;
+	}
 	
 	if( 1==pDC->iIsForceWaitUpdateFinished || pDC->iWFMode!=pDC->iLastWFMode ) 
 	{
@@ -675,15 +708,12 @@ int fake_s1d13522_display_img(u16 wX,u16 wY,u16 wW,u16 wH,u8 *pbImgBuf,
 	else {
 	}
 	
-	//epdfbdc_fbimg_normallize(pDC,&tEPD_img);
-	
-	epdfbdc_put_fbimg(pDC,&tEPD_img,tRotate);
 	if(pDC->pfnSetPartialUpdate) {
 		#ifdef __KERNEL__//[
 		//if( gptHWCFG && 0==gptHWCFG->m_val.bUIStyle ) 
 		if( gptHWCFG ) 
 		{
-			if(wW * wH == _INIT_HSIZE * _INIT_VSIZE) {
+			if(wW * wH == pDC->dwWidth * pDC->dwHeight) {
 				DBG_MSG("%s : fullscree update!\n",__FUNCTION__);
 				pDC->pfnSetPartialUpdate(0);
 			}
@@ -693,6 +723,17 @@ int fake_s1d13522_display_img(u16 wX,u16 wY,u16 wW,u16 wH,u8 *pbImgBuf,
 		}
 		#endif //]
 	}
+
+
+
+
+	if(pDC->pfnPutImg) {
+		pDC->pfnPutImg(&tEPD_img,tRotate);
+	}
+	else {
+		//epdfbdc_fbimg_normallize(pDC,&tEPD_img);
+		
+		epdfbdc_put_fbimg(pDC,&tEPD_img,tRotate);
 
 	epdfbdc_get_rotate_active(pDC,&tEPD_img.dwX,&tEPD_img.dwY,
 		&tEPD_img.dwW,&tEPD_img.dwH,tRotate);
@@ -752,7 +793,29 @@ int fake_s1d13522_display_img(u16 wX,u16 wY,u16 wW,u16 wH,u8 *pbImgBuf,
 			}
 		}
 	}
+	}
 	
+#ifdef OUTPUT_IMGFILE_ENABLE//[
+
+	{
+		EPDFB_DC *ptDC_temp;
+		char cfnbufA[256];
+		int iBits=8;
+		unsigned long _w=pDC->dwWidth,_h=pDC->dwHeight;
+
+
+		ptDC_temp = epdfbdc_create_ex ( _w,_h,iBits,0,pDC->dwFlags);
+		epdfbdc_put_dcimg(ptDC_temp,pDC,0,0,0,_w,_h,0,0);
+		sprintf(cfnbufA,"%s_%ux%u.raw%d",OUTPUT_IMGFILE,_w,_h,iBits);
+
+		printk("write raw img -> \"%s\" ,%d bits,%u bytes,w=%u,h=%u\n",cfnbufA,iBits,ptDC_temp->dwDCSize,_w,_h);
+		write_file_ex(cfnbufA,ptDC_temp->pbDCbuf, ptDC_temp->dwDCSize) ;
+		
+		printk("rawtoppm %u %u %s > xxx.ppm \n",pDC->dwWidth,pDC->dwHeight,cfnbufA);
+
+		epdfbdc_delete(ptDC_temp);
+	}
+#endif //]OUTPUT_IMGFILE_ENABLE
 		
 	
 	
@@ -790,7 +853,7 @@ int _Epson_displayCMD(PST_IMAGE_PGM pt,EPDFB_DC *pDC)
 	
 	
 //					setWaveform(par,pt->WaveForm+1);
-	if (pt->Width*pt->Height == _PANEL_WIDTH*_PANEL_HEIGHT) {
+	if (pt->Width*pt->Height == pDC->dwWidth*pDC->dwHeight) {
 		GALLEN_DBGLOCAL_RUNLOG(2);
 		ASSERT(pDC->pfnGetWaveformBpp);
 		if(4==iCurWfBpp) 
@@ -853,7 +916,8 @@ static EN_EPSON_ERROR_CODE S1D13522_reg_write(u16 wIndex, u16 wValue)
 			
 			if(0x0000==wRotate) {
 				//ASSERT(gptHWCFG);
-				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||6==gptHWCFG->m_val.bDisplayPanel)
+				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||\
+						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel)
 				{
 					// Left Out EPD Panel ...
 					GALLEN_DBGLOCAL_RUNLOG(12);
@@ -866,7 +930,8 @@ static EN_EPSON_ERROR_CODE S1D13522_reg_write(u16 wIndex, u16 wValue)
 			}
 			else if(0x0200==wRotate) {
 				ASSERT(gptHWCFG);
-				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||6==gptHWCFG->m_val.bDisplayPanel)
+				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||\
+						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel)
 				{
 					// Left Out EPD Panel ...
 					GALLEN_DBGLOCAL_RUNLOG(12);
@@ -879,7 +944,8 @@ static EN_EPSON_ERROR_CODE S1D13522_reg_write(u16 wIndex, u16 wValue)
 			}
 			else if(0x0100==wRotate) {
 				ASSERT(gptHWCFG);
-				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||6==gptHWCFG->m_val.bDisplayPanel)
+				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||\
+						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel)
 				{
 					// Left Out EPD Panel ...
 					GALLEN_DBGLOCAL_RUNLOG(24);
@@ -892,7 +958,8 @@ static EN_EPSON_ERROR_CODE S1D13522_reg_write(u16 wIndex, u16 wValue)
 			}
 			else if(0x0300==wRotate) {
 				ASSERT(gptHWCFG);
-				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||6==gptHWCFG->m_val.bDisplayPanel)
+				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||\
+						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel)
 				{
 					// Left Out EPD Panel ...
 					GALLEN_DBGLOCAL_RUNLOG(26);
@@ -969,6 +1036,7 @@ static EN_EPSON_ERROR_CODE S1D13522_reg_write(u16 wIndex, u16 wValue)
 		}
 	}break;
 	default :
+		WARNING_MSG("%s %d(0x%x) not support !\n",__FUNCTION__,wIndex,wIndex);
 		GALLEN_DBGLOCAL_RUNLOG(23);
 		break;
 	}
@@ -1017,7 +1085,7 @@ static u16 S1D13522_reg_read(u16 wIndex)
 		break;
 	
 	default :
-		WARNING_MSG("S1D13522 regiseter %d(0x%x) not support !\n",wIndex,wIndex);
+		WARNING_MSG("%s %d(0x%x) not support !\n",__FUNCTION__,wIndex,wIndex);
 		break;
 	}
 	return wRet;
@@ -1135,49 +1203,35 @@ EN_EPSON_ERROR_CODE ret=_EPSON_ERROR_SUCCESS;
   	}
 
 
-  CommandParam.param[0] = (0x2 << 4);// image 4 bits/pixel .
-  if(fPartial == FALSE)
-  	{
-#if (defined(__5_INCH__) || defined(__6_INCH__))
-   	  // gallen remove : ret=BusIssueCmd(LD_IMG, &CommandParam, 1);
-      length=((S1D_DISPLAY_WIDTH*S1D_DISPLAY_HEIGHT) >> 2);
-#elif defined(__8_INCH__)
-  	  // gallen remove : CommandParam.param[1]=(1024-800)/2;
-  	  // gallen remove : CommandParam.param[2]=(768-600)/2;
-  	  // gallen remove : CommandParam.param[3]=800;
-  	  // gallen remove : CommandParam.param[4]=600;
-   	  // gallen remove : ret=BusIssueCmd(LD_IMG_AREA, &CommandParam, 5);
-      length=(800*600) >> 2;      
-#elif defined(__9D7_INCH__)
-  	  // gallen remove : CommandParam.param[1]=(1200-800)/2;
-  	  // gallen remove : CommandParam.param[2]=(826-600)/2;
-  	  // gallen remove : CommandParam.param[3]=800;
-  	  // gallen remove : CommandParam.param[4]=600;
-   	  // gallen remove : ret=BusIssueCmd(LD_IMG_AREA, &CommandParam, 5);
-      length=(800*600) >> 2;
-#else
-			#error "unknow panel"
-#endif
-  	}
-  else
-  	{
-  	  // gallen remove : CommandParam.param[1]=ConfigPVI.StartX;
-  	  // gallen remove : CommandParam.param[2]=ConfigPVI.StartY;
-  	  // gallen remove : CommandParam.param[3]=ConfigPVI.Width;
-  	  // gallen remove : CommandParam.param[4]=ConfigPVI.Height;
-   	  // gallen remove : ret=BusIssueCmd(LD_IMG_AREA, &CommandParam, 5);
-      length=(ConfigPVI.Width*ConfigPVI.Height) >> 2;
-  	}
-  if(ret != _EPSON_ERROR_SUCCESS)
-  	{
-	    //DEBUGMSG(_MSG_ERROR, "%s] LD_IMG/LD_IMG_AREA fail !!!!!!!!!!!!\n", __FUNCTION__);
-  	  goto _PutImage_PVI2EPSON_Fail;
-  	}
-  pSource=(PBYTE) pData;
-  
+	CommandParam.param[0] = (0x2 << 4);// image 4 bits/pixel .
+	if(fPartial == FALSE)
+	{
+		length=(gwScrH*gwScrW) >> 2;
+	}
+	else
+	{
+		// gallen remove : CommandParam.param[1]=ConfigPVI.StartX;
+		// gallen remove : CommandParam.param[2]=ConfigPVI.StartY;
+		// gallen remove : CommandParam.param[3]=ConfigPVI.Width;
+		// gallen remove : CommandParam.param[4]=ConfigPVI.Height;
+		// gallen remove : ret=BusIssueCmd(LD_IMG_AREA, &CommandParam, 5);
+		length=(ConfigPVI.Width*ConfigPVI.Height) >> 2;
+	}
+	if(ret != _EPSON_ERROR_SUCCESS)
+	{
+		//DEBUGMSG(_MSG_ERROR, "%s] LD_IMG/LD_IMG_AREA fail !!!!!!!!!!!!\n", __FUNCTION__);
+		goto _PutImage_PVI2EPSON_Fail;
+	}
+	pSource=(PBYTE) pData;
+	
+	
+	DBG_MSG("%s() : ConfigPVI.Deepth=0x%x,ReverseGrade=0x%x\n",\
+		__FUNCTION__,ConfigPVI.Deepth,ConfigPVI.ReverseGrade);
+ 
+ 	#if 0//[ gallen remove 20110315: no more hardware check ,this is fake hardware .
   //pDest=(PUINT16) s1d13521fb_info.VirtualFramebufferAddr;
   pDest=(PUINT16) gbTemp4BitsFBA;
-  DBG_MSG("%s() : ConfigPVI.Deepth=0x%x\n",__FUNCTION__,ConfigPVI.Deepth);
+  
   if(ConfigPVI.Deepth == 2) {
     for(cc=length; cc--; pDest++, pSource++)
       {
@@ -1204,8 +1258,7 @@ EN_EPSON_ERROR_CODE ret=_EPSON_ERROR_SUCCESS;
       }
   }
       
-	#if 0//[ gallen remove 20110315: no more hardware check ,this is fake hardware .
-  ret=BusIssueWriteRegBuf(0x154, (PUINT16) s1d13521fb_info.VirtualFramebufferAddr, length);
+ ret=BusIssueWriteRegBuf(0x154, (PUINT16) s1d13521fb_info.VirtualFramebufferAddr, length);
   if(ret != _EPSON_ERROR_SUCCESS)
   	{
 	    //DEBUGMSG(_MSG_ERROR, "%s] Download image fail !!!!!!!!!!!!\n", __FUNCTION__);
@@ -1274,16 +1327,26 @@ printk ("[%s-%d] ............\n",__func__,__LINE__);
   	}
   	#else //][ gallen 
   	//gptEPD_dc_current->pfnIsUpdating
-	//fake_s1d13522_setwfmode(gptEPD_dc_current,(int)WaveForm);
+	printk("%s() : w.f=%d,partial=%d\n",__FUNCTION__,WaveForm,fPartial);
+	fake_s1d13522_setwfmode(gptEPD_dc_current,(int)WaveForm);
 	if(gptEPD_dc_current->pfnSetPartialUpdate) {
 		//DBG_MSG("[%s] %s update mode\n",__FUNCTION__,fPartial?"partial":"full");
-		//gptEPD_dc_current->pfnSetPartialUpdate(0);
+		gptEPD_dc_current->pfnSetPartialUpdate(fPartial);
 	}
 		
   ret=BusIssueWriteReg(0x330, ConfigPVI.Reg0x330);
-  	fake_s1d13522_display_img(ConfigPVI.StartX,ConfigPVI.StartY,
+  
+	#if 0
+
+	fake_s1d13522_display_img(ConfigPVI.StartX,ConfigPVI.StartY,
 		ConfigPVI.Width,ConfigPVI.Height,gbTemp4BitsFBA,
 		gptEPD_dc_current,4,gtRotate);
+	#else
+	fake_s1d13522_display_img(ConfigPVI.StartX,ConfigPVI.StartY,
+		ConfigPVI.Width,ConfigPVI.Height,pSource,
+		gptEPD_dc_current,ConfigPVI.Deepth,gtRotate);
+	#endif
+	
 	#endif //] gallen remove 20110315.
 	
 	
@@ -1319,6 +1382,15 @@ static void pvi_DoTimerForcedRefresh(ULONG dummy)
 int pvi_Init(VOID)
 {
   int temp,ret;
+  
+	if(gpbLOGO_vaddr&&gdwLOGO_size>=_PVI_IMAGE_SIZE) {
+		ImagePVI = gpbLOGO_vaddr;
+	}
+	else {
+		ImagePVI = kmalloc(_PVI_IMAGE_SIZE,GFP_KERNEL);
+		ASSERT(ImagePVI);
+	}
+  
   ConfigPVI.fAutoRefreshMode=FALSE;
   init_timer(&pvi_refersh_timer);
   pvi_refersh_timer.function=pvi_DoTimerForcedRefresh;
@@ -1339,8 +1411,13 @@ int pvi_Init(VOID)
 
 void pvi_Deinit(VOID)
 {
-  if(ConfigPVI.fAutoRefreshMode != FALSE)
-    del_timer_sync(&pvi_refersh_timer);
+	if(ConfigPVI.fAutoRefreshMode != FALSE) {
+		del_timer_sync(&pvi_refersh_timer);
+	}
+
+	if(ImagePVI&&ImagePVI!=gpbLOGO_vaddr) {
+		kfree(ImagePVI);ImagePVI=0;
+	}
 }
 #endif // FRANKLIN
 
@@ -1362,12 +1439,12 @@ int pvi_ioctl_DisplayImage(PTDisplayCommand puDisplayCommand)
 	if( ((ConfigPVI.CurRotateMode)==0x00) || 
 		((ConfigPVI.CurRotateMode)==0x02<<8) ) 
 	{
-		ConfigPVI.Width = _INIT_HSIZE;
-		ConfigPVI.Height = _INIT_VSIZE;
+		ConfigPVI.Width = gptEPD_dc_current->dwWidth;
+		ConfigPVI.Height = gptEPD_dc_current->dwHeight;
 	}
 	else {
-		ConfigPVI.Width = _INIT_VSIZE;
-		ConfigPVI.Height = _INIT_HSIZE;
+		ConfigPVI.Width = gptEPD_dc_current->dwHeight;
+		ConfigPVI.Height = gptEPD_dc_current->dwWidth;
 	}
 	
 	DBG_MSG("%s(): rotate=0x%x,w=%d,h=%d\n",__FUNCTION__,\
@@ -1395,7 +1472,14 @@ int pvi_ioctl_NewImage(PTDisplayCommand puDisplayCommand)
 		return -EFAULT;
 	}
 	//DEBUGMSG(_MSG_SEND_COMMAND, "dc_NewImage");
-	memcpy(ImagePVI, puDisplayCommand->Data, _PVI_IMAGE_SIZE);
+	dbgENTER();
+	if(!gptHWCFG||0==gptHWCFG->m_val.bDisplayResolution) {
+		memcpy(ImagePVI, puDisplayCommand->Data, _PVI_IMAGE_SIZE_800x600);
+	}
+	else {
+		memcpy(ImagePVI, puDisplayCommand->Data, _PVI_IMAGE_SIZE);
+	}
+	dbgLEAVE();
 	return 0;
 }
 
@@ -1486,7 +1570,7 @@ int pvi_ioctl_Reset(PTDisplayCommand puDisplayCommand)
 	if(ConfigPVI.fAutoRefreshMode != FALSE) {
 		del_timer_sync(&pvi_refersh_timer);
 	}
-	printk("\n==== [%s] 0x0a=0x%04x====\n", __FUNCTION__, BusIssueReadReg(0x0a));
+	//printk("\n==== [%s] 0x0a=0x%04x====\n", __FUNCTION__, BusIssueReadReg(0x0a));
 	return 0;
 }
 
@@ -2165,16 +2249,24 @@ static int Epson_LoadImageArea(PTloadImageArea area,EPDFB_DC *pDC)
 	int iIsSetDCFlags = 0;
 	int iShifBits;
 	
+	ASSERT(pDC);
+	ASSERT(area);
 	
 	GALLEN_DBGLOCAL_MUTEBEGIN();
-	GALLEN_DBGLOCAL_PRINTMSG("%s():x=%d,y=%d,w=%d,h=%d,mode=%d\n",__FUNCTION__,
-		area->XStart,area->YStart,area->Width,area->Height,area->mode);
+	GALLEN_DBGLOCAL_PRINTMSG("%s():x=%d,y=%d,w=%d,h=%d,mode=%d,cmd=%x\n",__FUNCTION__,
+		area->XStart,area->YStart,area->Width,area->Height,area->mode,area->cmd);
 	
 	if(pDC->pfnSetWaveformMode) {
 		pDC->pfnSetWaveformMode(area->mode);
 	}
 	
-	ASSERT(pDC);
+	if(UPD_FULL==area->cmd) {
+		pDC->pfnSetPartialUpdate(0);
+	}
+	else {
+		pDC->pfnSetPartialUpdate(1);
+	}
+	
 	
 	if(pDC->pfnGetRealFrameBufEx) {
 		GALLEN_DBGLOCAL_RUNLOG(0);
@@ -2210,27 +2302,46 @@ static int Epson_LoadImageArea(PTloadImageArea area,EPDFB_DC *pDC)
 		pbArea += dwFBSize ;
 
 		#if 1
+		
+		#if 1 //[
+		{
+			EPDFB_DC *ptEPD_dcimg ;
+
+			ptEPD_dcimg = epdfbdc_create_ex(pDC->dwHeight,pDC->dwWidth,\
+				giPixelBits,pbArea,pDC->dwFlags);
+			
+			epdfbdc_put_dcimg(pDC,ptEPD_dcimg,gtRotate,area->XStart,area->YStart,
+				area->Width,area->Height,area->XStart,area->YStart);
+			
+			epdfbdc_delete(ptEPD_dcimg);
+		}
+		#else //][!
 		{
 
 			int i;
 			unsigned char *pbRow;
-			fnDispStart pfnUpdStartStore = pDC->pfnDispStart;
-			fnVcomEnable pfnVcomEnableStore = pDC->pfnVcomEnable;
-			fnSetUpdateRect pfnSetUpdateRectStore = pDC->pfnSetUpdateRect;
-
-			pDC->pfnDispStart = 0; // ignore display start .
-			pDC->pfnVcomEnable = 0;
-			pDC->pfnSetUpdateRect = 0;
+			EPDFB_IMG tImg;
+			
+			tImg.dwX = area->XStart;
+			tImg.dwW = area->Width;
+			tImg.dwH = 1;
+			tImg.bPixelBits = (unsigned char)giPixelBits;
 			for(i=0;i<area->Height;i++)
 			{
 				pbRow = pbArea + (area->XStart>>iShifBits)+((area->YStart+i)*(pDC->dwHeight>>iShifBits));
-
-				fake_s1d13522_display_img(area->XStart,area->YStart+i,area->Width,1,\
-					pbRow,pDC,giPixelBits,gtRotate);
+				
+				tImg.dwY = area->YStart+i;
+				tImg.pbImgBuf = pbRow;
+				
+				epdfbdc_put_fbimg(pDC,&tImg,gtRotate);
+				//fake_s1d13522_display_img(area->XStart,area->YStart+i,area->Width,1,\
+				//	pbRow,pDC,giPixelBits,gtRotate);
 			}
-			pDC->pfnDispStart = pfnUpdStartStore;
-			pDC->pfnVcomEnable = pfnVcomEnableStore;
-			pDC->pfnSetUpdateRect = pfnSetUpdateRectStore;
+			
+
+		}
+		#endif//]
+		
 			if(pDC->pfnDispStart) {
 				if(pDC->pfnVcomEnable) {
 					pDC->pfnVcomEnable(1);
@@ -2253,8 +2364,6 @@ static int Epson_LoadImageArea(PTloadImageArea area,EPDFB_DC *pDC)
 					pDC->pfnVcomEnable(0);
 				}
 			}
-
-		}
 		
 		#else
 		switch(gtRotate) {
@@ -2283,8 +2392,37 @@ static int Epson_LoadImageArea(PTloadImageArea area,EPDFB_DC *pDC)
 int fake_s1d13522_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 {
 	GALLEN_DBGLOCAL_BEGIN();
-	var->xres               = S1D_DISPLAY_WIDTH;
-	var->yres               = S1D_DISPLAY_HEIGHT;
+	if(gptHWCFG&&1==gptHWCFG->m_val.bDisplayResolution) {
+		switch(gtRotate)
+		{
+		case epdfb_rotate_0:
+		case epdfb_rotate_180:
+			var->xres = 1024;
+			var->yres = 758;
+			break;	
+		case epdfb_rotate_90:
+		case epdfb_rotate_270:
+			var->xres = 758;
+			var->yres = 1024;
+			break;
+		}
+	}
+	else {
+		switch(gtRotate)
+		{
+		case epdfb_rotate_0:
+		case epdfb_rotate_180:
+			var->xres = 800;
+			var->yres = 600;
+			break;	
+		case epdfb_rotate_90:
+		case epdfb_rotate_270:
+			var->xres = 600;
+			var->yres = 800;
+			break;
+		}
+	}
+	
 	var->xres_virtual       = var->xres;
 	var->yres_virtual       = var->yres;
 	var->xoffset            = var->yoffset = 0;
@@ -2400,26 +2538,21 @@ int32_t fake_s1d13522_ioctl(unsigned int cmd,unsigned long arg,EPDFB_DC *pDC)
 			pt = kmalloc(sizeof(*pt),GFP_KERNEL);
 			if(pt) {
 				GALLEN_DBGLOCAL_RUNLOG(1);
-				#if 0//test .
-				{
-					extern unsigned int marvell_logo_800x600_size;
-					extern unsigned const char marvell_logo_800x600[] ;		
-					
-					pt->StartX = 0;
-					pt->StartY = 0;
-					pt->Width = _INIT_HSIZE;
-					pt->Height = _INIT_VSIZE;
-					
-					memcpy(pt->Data,marvell_logo_800x600,marvell_logo_800x600_size);
+
+				if(gptHWCFG&&1==gptHWCFG->m_val.bDisplayResolution) {
+					copy_from_user(pt,(ST_IMAGE_PGM *)arg,sizeof(ST_IMAGE_PGM));
+					GALLEN_DBGLOCAL_PRINTMSG("DISPLAY INFO : X=%ld,Y=%ld,W=%ld,H=%ld\n\twaveform=%ld,LUT no.=%ld,datap=%p,size=%ld\n",
+							pt->StartX,pt->StartY,pt->Width,pt->Height,
+							pt->WaveForm,pt->LUT_NO,pt->Data,sizeof(ST_IMAGE_PGM));
 				}
-				#else
-				copy_from_user(pt,(ST_IMAGE_PGM *)arg,sizeof(*pt));
-				#endif
+				else {
+					copy_from_user(pt,(ST_IMAGE_PGM_800x600 *)arg,sizeof(ST_IMAGE_PGM_800x600));
+					GALLEN_DBGLOCAL_PRINTMSG("DISPLAY INFO : X=%ld,Y=%ld,W=%ld,H=%ld\n\twaveform=%ld,LUT no.=%ld,datap=%p,size=%ld\n",
+							pt->StartX,pt->StartY,pt->Width,pt->Height,
+							pt->WaveForm,pt->LUT_NO,pt->Data,sizeof(ST_IMAGE_PGM_800x600));
+				}
 				
 				
-				GALLEN_DBGLOCAL_PRINTMSG("DISPLAY INFO : X=%ld,Y=%ld,W=%ld,H=%ld\n\twaveform=%ld,LUT no.=%ld,datap=%p,size=%ld\n",
-						pt->StartX,pt->StartY,pt->Width,pt->Height,
-						pt->WaveForm,pt->LUT_NO,pt->Data,sizeof(*pt));
 				
 				_Epson_displayCMD(pt,pDC);
 
@@ -2618,6 +2751,43 @@ int32_t fake_s1d13522_ioctl(unsigned int cmd,unsigned long arg,EPDFB_DC *pDC)
 			}
 		}
 		break;
+		
+		case EPDC_VCOM_SET:GALLEN_DBGLOCAL_RUNLOG(21);
+		{
+			int iVCOM_set_val=(int)arg;
+			if(pDC->pfnSetVCOM) {
+				ret = pDC->pfnSetVCOM(iVCOM_set_val)>=0?0:-ENOTTY;
+			}
+			else {
+				ret = -ENOTTY;
+			}
+		}
+		break;
+
+		case EPDC_VCOM_SET_TO_FLASH:GALLEN_DBGLOCAL_RUNLOG(22);
+		{
+			int iVCOM_set_val=(int)arg;
+			if(pDC->pfnSetVCOMToFlash) {
+				ret = pDC->pfnSetVCOMToFlash(iVCOM_set_val)>=0?0:-ENOTTY;
+			}
+			else {
+				ret = -ENOTTY;
+			}
+		}
+		break;
+
+		case EPDC_VCOM_GET:GALLEN_DBGLOCAL_RUNLOG(23);
+		{
+			int iVCOM_get_val;
+			if(pDC->pfnGetVCOM) {
+				pDC->pfnGetVCOM(&iVCOM_get_val);
+				copy_to_user(arg,&iVCOM_get_val,sizeof(iVCOM_get_val));
+			}
+			else {
+				ret = -ENOTTY;
+			}
+		}
+		break;
 
 		default :
 			ERR_MSG("[fake_21d13522] %s() : unsupported cmd (0x%x)\n",__FUNCTION__,cmd);
@@ -2654,6 +2824,8 @@ static VOID PROGRESS_BAR(EPDFB_DC *pDC)
 	
 	ASSERT(pDC);
 	
+	gIsProgessRunning = 1;
+
 	icons = gptHWCFG->m_val.bProgressCnts;
 	startX = (int)(gptHWCFG->m_val.bProgressXHiByte<<8|gptHWCFG->m_val.bProgressXLoByte);
 	startY = (int)(gptHWCFG->m_val.bProgressYHiByte<<8|gptHWCFG->m_val.bProgressYLoByte);
@@ -2672,7 +2844,7 @@ static VOID PROGRESS_BAR(EPDFB_DC *pDC)
 	ASSERT(pbDrawData);
 
 	
-	#if 0
+
 	
 	if(pDC->pfnWaitUpdateComplete) {
 		pDC->pfnWaitUpdateComplete();
@@ -2684,31 +2856,13 @@ static VOID PROGRESS_BAR(EPDFB_DC *pDC)
 		}
 	}
 	
-	//gtRotate = epdfb_rotate_0;
-	if(3==pDC->pfnGetWaveformBpp()) {
-		fake_s1d13522_setwfmode(pDC,3);
-	}
-	else {
-		fake_s1d13522_setwfmode(pDC,2);
-	}
-	fake_s1d13522_display_img(0,0,_PANEL_HEIGHT,_PANEL_WIDTH-1,gpbLOGO_vaddr,pDC,4,0);
-	
-	#endif 
-	
-	if(pDC->pfnWaitUpdateComplete) {
-		pDC->pfnWaitUpdateComplete();
-	}
-	else {
-		while(pDC->pfnIsUpdating()) {
-			//DBG0_MSG("%s(%d):wait for update done .\n");
-			schedule();
-		}
-	}
+	msleep(500);
 	
 	fake_s1d13522_setwfmode(pDC,1);
 	pDC->pfnSetPartialUpdate(1);
 
-	if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||6==gptHWCFG->m_val.bDisplayPanel)
+	if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||\
+			6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel)
 	{
 		L_tRotate = epdfb_rotate_270;
 	}
@@ -2717,42 +2871,14 @@ static VOID PROGRESS_BAR(EPDFB_DC *pDC)
 	}
 	//DBG0_MSG("pbDrawData=%p,size=%u,rotate=%d\n",pbDrawData,dwDrawDataSize,L_tRotate);
 
-#if 0 // test start .
-	i=0;
-	memset(pbDrawData , 0 , dwDrawDataSize);
-	fake_s1d13522_display_img(startX+(space*i),startY,width,height,\
-		pbDrawData,pDC,4,L_tRotate);
-		
-	sleep_on_timeout(&progress_WaitQueue,HZ);
-	if(pDC->pfnWaitUpdateComplete) {
-		pDC->pfnWaitUpdateComplete();
-	}
-	else {
-		while(pDC->pfnIsUpdating()) {
-			//DBG0_MSG("%s(%d):wait for update done .\n");
-			schedule();
-		}
-	}
+
 	
-	i=1;
-	memset(pbDrawData , 0 , dwDrawDataSize);
-	fake_s1d13522_display_img(startX+(space*i),startY,width,height,\
-		pbDrawData,pDC,4,L_tRotate);
-		
-	//memset(pbDrawData , 0xff , dwDrawDataSize);
-	//fake_s1d13522_display_img(startX+(space*i),startY,width,height,\
-	//	pbDrawData,pDC,4,L_tRotate);
-#endif // test end .
-		
-	schedule();
-	
-	gIsProgessRunning = 1;
 	while (gIsProgessRunning) {
 		for(i=0;i<icons && gIsProgessRunning;){
 		//DBG0_MSG("%s[%d]: rotate=%d\n",__FUNCTION__,__LINE__,L_tRotate);
 			if(pDC->pfnIsUpdating()) {
 				DBG_MSG("%s[%d]: wait update done ...\n",__FUNCTION__,__LINE__);
-				//schedule();
+				schedule();
 				continue;
 			}
 			else {
@@ -2768,7 +2894,7 @@ static VOID PROGRESS_BAR(EPDFB_DC *pDC)
 		//DBG0_MSG("%s[%d]: rotate=%d\n",__FUNCTION__,__LINE__,L_tRotate);
 			if(pDC->pfnIsUpdating()) {
 				DBG_MSG("%s[%d]: wait update done ...\n",__FUNCTION__,__LINE__);
-				//schedule();
+				schedule();
 				continue;
 			}
 			else {
