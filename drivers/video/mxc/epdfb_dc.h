@@ -27,6 +27,12 @@ typedef enum {
 	EPDFB_R_270 = 3,
 } EPDFB_ROTATE_T;
 
+typedef struct tagEPDFB_IMG {
+	unsigned long dwX,dwY;
+	unsigned long dwW,dwH;
+	unsigned char bPixelBits,bReserve;
+	unsigned char *pbImgBuf;
+} EPDFB_IMG;
 
 typedef void (*fnVcomEnable)(int iIsEnable);
 typedef void (*fnPwrOnOff)(int iIsOn);
@@ -43,16 +49,22 @@ typedef int (*fnIsUpdating)(void);
 typedef int (*fnWaitUpdateComplete)(void);
 typedef int (*fnSetUpdateRect)(unsigned short wX,unsigned short wY,
 	unsigned short wW,unsigned short wH);
+typedef int (*fnPutImg)(EPDFB_IMG *I_ptPutImage,EPDFB_ROTATE_T I_tRotate);
+typedef int (*fnSetVCOM)(int iVCOM_set_mV);
+typedef int (*fnSetVCOMToFlash)(int iVCOM_set_mV);
+typedef int (*fnGetVCOM)(int *O_piVCOM_get_mV);
 
 
 // epd framebuffer device content ...
 typedef struct tagEPDFB_DC {
 	// public :
-	unsigned long dwWidth;
-	unsigned long dwHeight;
+	unsigned long dwWidth;// visible DC width .
+	unsigned long dwHeight;// visible DC height .
+	unsigned long dwFBWExtra; // frame buffer width extra width .
+	unsigned long dwFBHExtra; // frame buffer height extra height .
 	unsigned char bPixelBits;
 	unsigned char bReservedA[1];
-	volatile unsigned char *pbDCbuf;
+	volatile unsigned char *pbDCbuf;// DC buffer .
 	
 	fnGetWaveformBpp pfnGetWaveformBpp;
 	fnVcomEnable pfnVcomEnable;
@@ -68,13 +80,17 @@ typedef struct tagEPDFB_DC {
 	fnPwrAutoOffIntervalMax pfnPwrAutoOffIntervalMax;
 	fnPwrOnOff pfnPwrOnOff;
 	fnAutoOffEnable pfnAutoOffEnable;
+	fnPutImg pfnPutImg;
+	fnSetVCOM pfnSetVCOM;
+	fnSetVCOMToFlash pfnSetVCOMToFlash;
+	fnGetVCOM pfnGetVCOM;
 	
 	// private : do not modify these member var .
 	//  only for epdfbdc manager .
 	unsigned long dwMagicPrivateBegin;
 	
-	unsigned long dwDCSize;
-	unsigned long dwBufSize;
+	unsigned long dwDCSize; // visible dc size .
+	unsigned long dwBufSize; // dc buffer real size .
 	
 	unsigned long dwDCWidthBytes;
 	unsigned long dwFlags;
@@ -85,12 +101,6 @@ typedef struct tagEPDFB_DC {
 	
 } EPDFB_DC;
 
-typedef struct tagEPDFB_IMG {
-	unsigned long dwX,dwY;
-	unsigned long dwW,dwH;
-	unsigned char bPixelBits,bReserve;
-	unsigned char *pbImgBuf;
-} EPDFB_IMG;
 
 #define epdfbdc_create_e60mt2()	epdfbdc_create(800,600,4,0)
 
@@ -115,13 +125,27 @@ EPDFB_DC *epdfbdc_create(unsigned long dwW,unsigned long dwH,\
 EPDFB_DC *epdfbdc_create_ex(unsigned long dwW,unsigned long dwH,\
 	unsigned char bPixelBits,unsigned char *pbDCbuf,unsigned long dwCreateFlag);
 	
+EPDFB_DC *epdfbdc_create_ex2(unsigned long dwFBW,unsigned long dwFBH,\
+	unsigned long dwW,unsigned long dwH,\
+	unsigned char bPixelBits,unsigned char *pbDCbuf,unsigned long dwCreateFlag);
+
+
 EPDFB_DC_RET epdfbdc_delete(EPDFB_DC *I_pEPD_dc);
+
+
+
 
 EPDFB_DC_RET epdfbdc_fbimg_normallize(EPDFB_DC *I_pEPD_dc,\
 	EPDFB_IMG *IO_pEPD_img);
 
 EPDFB_DC_RET epdfbdc_put_fbimg(EPDFB_DC *I_pEPD_dc,\
 	EPDFB_IMG *I_pEPD_img,EPDFB_ROTATE_T I_tRotateDegree);
+
+EPDFB_DC_RET epdfbdc_put_dcimg(EPDFB_DC *pEPD_dc,
+	EPDFB_DC *pEPD_dcimg,EPDFB_ROTATE_T tRotateDegree,
+	unsigned long I_dwDCimgX,unsigned long I_dwDCimgY,
+	unsigned long I_dwDCimgW,unsigned long I_dwDCimgH,
+	unsigned long I_dwDCPutX,unsigned long I_dwDCPutY);
 
 EPDFB_DC_RET epdfbdc_get_dirty_region(EPDFB_DC *I_pEPD_dc,\
 	unsigned long *O_pdwDirtyOffsetStart,unsigned long *O_pdwDirtyOffsetEnd);

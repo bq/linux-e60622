@@ -204,19 +204,18 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 power_attr(state);
 
+extern int gSleep_Mode_Suspend;
 static ssize_t state_extended_show(struct kobject *kobj, struct kobj_attribute *attr,
 			  char *buf)
 {
 	char *s = buf;
-	s += sprintf(s, "%s\n", "1");
+	s += sprintf(s, "%d\n", gSleep_Mode_Suspend);
 	return (s - buf);
 }
 
 static ssize_t state_extended_store(struct kobject *kobj, struct kobj_attribute *attr,
 			   const char *buf, size_t n)
 {
-	extern int gSleep_Mode_Suspend;
-	
 	if ('1' == *buf)
 		gSleep_Mode_Suspend = 1;
 	else 

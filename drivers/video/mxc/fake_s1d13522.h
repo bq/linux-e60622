@@ -26,11 +26,15 @@ extern volatile unsigned long gdwWF_size;
 EPDFB_DC *fake_s1d13522_init(void);
 EPDFB_DC *fake_s1d13522_initEx(unsigned char bBitsPerPixel,unsigned char *pbDCBuf);
 int fake_s1d13522_release(EPDFB_DC *pDC);
-
-
+EPDFB_DC *fake_s1d13522_initEx2(unsigned char bBitsPerPixel,unsigned char *pbDCBuf,
+	unsigned short wScrW,unsigned short wScrH);
+EPDFB_DC *fake_s1d13522_initEx3(unsigned char bBitsPerPixel,unsigned char *pbDCBuf,
+	unsigned short wScrW,unsigned short wScrH,unsigned short wFBW,unsigned short wFBH);
+	
 int32_t fake_s1d13522_ioctl(unsigned int cmd,unsigned long arg,EPDFB_DC *pDC);
 void fake_s1d13522_progress_start(EPDFB_DC *pDC);
 
+void fake_s1d13522_progress_stop(void);
 
 void fake_s1d13522_parse_epd_cmdline(void);
 

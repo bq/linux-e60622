@@ -39,6 +39,7 @@
 
 #include "pmic.h"
 extern int msp430_write(unsigned int reg, unsigned int value);
+extern int msp430_poweroff();
 
 /*
  * Defines
@@ -349,7 +350,8 @@ void mc13892_power_off(void)
 #else
    	while (1) {
 		printk("Kernel---Power Down ---\n");
-		msp430_write(0x50, 0x0100);
+		msp430_poweroff();
+
       	msleep(1400);
 	}
 #endif

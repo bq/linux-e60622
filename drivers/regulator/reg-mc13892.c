@@ -337,9 +337,25 @@ static int mc13892_sw_set_voltage(struct regulator_dev *reg, int MiniV, int uV)
 
 	switch (sw) {
 	case MC13892_SW1:
-		register1 = REG_SW_0;
-		register_val = BITFVAL(SW1, voltage);
-		register_mask = BITFMASK(SW1);
+		if(voltage >= 18) {
+			// change voltage after op mode at high voltage
+			CHECK_ERROR(pmic_write_reg(REG_SW_4, 0x06, 0x0f));
+
+			register1 = REG_SW_0;
+			register_val = BITFVAL(SW1, voltage);
+			register_mask = BITFMASK(SW1);
+		}
+		else {
+			// change voltage before op mode at low voltage
+			register1 = REG_SW_0;
+			register_val = BITFVAL(SW1, voltage);
+			register_val |= (hi << SWXHI_LSH);
+			register_mask = BITFMASK(SW1);
+			register_mask |= (1 << SWXHI_LSH);
+			CHECK_ERROR(pmic_write_reg(register1, register_val, register_mask));
+
+			return pmic_write_reg(REG_SW_4, 0x08, 0x0f);
+		}
 		break;
 	case MC13892_SW2:
 		register1 = REG_SW_1;

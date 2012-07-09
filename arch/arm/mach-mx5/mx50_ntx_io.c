@@ -9,6 +9,8 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
+
+#include <generated/autoconf.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -18,6 +20,30 @@
 #include <linux/miscdevice.h>
 #include <linux/irq.h>
 #include <linux/freezer.h>
+
+
+#define NTX_GPIO_KEYS		0
+#ifdef NTX_GPIO_KEYS //[
+
+#include <mach/common.h>
+#include <linux/gpio_keys.h>
+#include <linux/input.h>
+
+#endif //] NTX_GPIO_KEYS
+
+
+
+//#define GPIOFN_PWRKEY	1
+
+#ifdef GPIOFN_PWRKEY//[
+	#include "../../../drivers/input/keyboard/gpiofn.h"
+#endif //]GPIOFN_PWRKEY
+
+
+#define _WIFI_ALWAYS_ON_	// wifi always on for startic
+//#define DIGITIZER_TEST		// PVI digitizer test
+
+#include "ntx_hwconfig.h"
 
 #define GPIO_ACIN_PG	(3*32 + 19)	/*GPIO_4_19 */
 #define GPIO_CHG		(3*32 + 18)	/*GPIO_4_18 */
@@ -31,14 +57,18 @@
 #define GPIO_WIFI_INT	(3*32 + 8)	/*GPIO_4_8 */
 #define GPIO_MSP_INT	(3*32 + 11)	/*GPIO_4_11 */
 #define SD2_CD			(4*32 + 17) /*GPIO_5_17 */
-#define SD2_WP			(4*32 + 16)	/*GPIO_5_16 */
+//#define SD2_WP			(4*32 + 16)	/*GPIO_5_16 */
 #define TOUCH_PWR		(3*32 + 16)	/*GPIO_4_16 */
 #define TOUCH_RST		(4*32 + 28)	/*GPIO_5_28 */
 #define TOUCH_EN		(4*32 + 26)	/*GPIO_5_26 */
 #define TOUCH_INT		(4*32 + 15)	/*GPIO_5_15 */
+#define C_TOUCH_INT		(4*32 + 27)	/*GPIO_5_27 */
 #define GPIO_I2C3_SDA	(5*32 + 23)	/*GPIO_6_23 */
 #define GPIO_I2C3_SCL	(5*32 + 22)	/*GPIO_6_22 */
 #define GPIO_AUDIO_PWR	(3*32 + 17)	/*GPIO_4_17 */
+#define G_SENSOR_INT	(4*32 + 25)	/*GPIO_5_25 */
+#define E50602_G_SENSOR_INT	(3*32 + 15)	/*GPIO_4_15 */
+#define FL_EN			(3*32 + 14) /*GPIO_4_14 */
 
 #define GPIO_KEY_COL_0		(3*32 + 0)	/*GPIO_4_0 */
 #define GPIO_KEY_ROW_0		(3*32 + 1)	/*GPIO_4_1 */
@@ -52,17 +82,50 @@
 #define GPIO_HWID_1			(5*32 + 14)	/*GPIO_6_14 */
 #define GPIO_HWID_2			(5*32 + 15)	/*GPIO_6_15 */
 #define GPIO_HWID_3			(5*32 + 17)	/*GPIO_6_17 */
+#define GPIO_HWID_4			(4*32 + 16)	/*GPIO_5_16 */
+
+#define EIM_DA0    (0*32 + 0) /*GPIO_1_0*/
+#define EIM_DA1    (0*32 + 1) /*GPIO_1_1*/
+#define EIM_DA2    (0*32 + 2) /*GPIO_1_2*/
+#define EIM_DA3    (0*32 + 3) /*GPIO_1_3*/
+#define EIM_DA4    (0*32 + 4) /*GPIO_1_4*/
+#define EIM_DA5    (0*32 + 5) /*GPIO_1_5*/
+#define EIM_DA6    (0*32 + 6) /*GPIO_1_6*/
+#define EIM_DA7    (0*32 + 7) /*GPIO_1_7*/
+#define EIM_DA8    (0*32 + 8) /*GPIO_1_8*/
+#define EIM_DA9    (0*32 + 9) /*GPIO_1_9*/
+#define EIM_DA10   (0*32 + 10) /*GPIO_1_10*/
+#define EIM_DA11   (0*32 + 11) /*GPIO_1_11*/
+#define EIM_DA12   (0*32 + 12) /*GPIO_1_12*/
+#define EIM_DA13   (0*32 + 13) /*GPIO_1_13*/
+#define EIM_DA14   (0*32 + 14) /*GPIO_1_14*/
+#define EIM_DA15   (0*32 + 15) /*GPIO_1_15*/
+#define EIM_CS2    (0*32 + 16) /*GPIO_1_16*/
+#define EIM_CS1    (0*32 + 17) /*GPIO_1_17*/
+#define EIM_CS0    (0*32 + 18) /*GPIO_1_18*/
+#define EIM_EB0    (0*32 + 19) /*GPIO_1_19*/
+#define EIM_EB1    (0*32 + 20) /*GPIO_1_20*/
+#define EIM_WAIT   (0*32 + 21) /*GPIO_1_21*/
+#define EIM_BCLK   (0*32 + 22) /*GPIO_1_22*/
+#define EIM_RDY    (0*32 + 23) /*GPIO_1_23*/
+
+
 
 #define		DEVICE_NAME 		"ntx_io"		// "pvi_io"
 #define		DEVICE_MINJOR		190
+
+#define  CM_PLATFORM		164
+#define  CM_HWCONFIG		165
+#define  CM_SET_HWCONFIG	166
 
 #define	CM_SD_IN				117
 #define	AC_IN					118
 #define CM_PWR_ON2				112
 #define CM_AUDIO_PWR			113
-#define	CET_PWR_BUTTON			110
+#define	CM_POWER_BTN			110
 #define CM_USB_Plug_IN			108
 #define CM_AC_CK				109
+#define CM_CHARGE_STATUS		204
 #define	CM_nLED					101
 #define	CM_nLED_CPU				102
 #define	POWER_OFF_COMMAND		0xC0	// 192
@@ -103,6 +166,7 @@
 #define	CM_GET_BATTERY_STATUS 	206	
 #define	CM_SET_ALARM_WAKEUP	 	207	
 #define	CM_WIFI_CTRL	 		208	
+#define	CM_ROTARY_ENABLE 		209	
 
 #define CM_GET_UP_VERSION 		215
 
@@ -110,6 +174,33 @@
 // Audio functions ...
 #define CM_AUDIO_GET_VOLUME		230
 #define CM_AUDIO_SET_VOLUME		240
+#define CM_FRONT_LIGHT_SET		241
+#define CM_FRONT_LIGHT_AVAILABLE		242
+
+#define CM_GET_KEYS				107
+
+
+#ifdef GPIOFN_PWRKEY//[
+static void power_key_chk(unsigned long v);
+
+static int PWR_SW_func(int iGPIOVal)
+{
+	printk("[%s]\n",__FUNCTION__);
+	power_key_chk(0);
+}
+
+static GPIODATA gtNTX_PWR_GPIO_data = {
+	.pfnGPIO = PWR_SW_func,
+	.uGPIO = GPIO_PWR_SW,
+	.szName = "PWR_SW",
+	.tPADCtrl = MX50_PAD_CSPI_MISO__GPIO_4_10,
+	.uiIRQType = IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING,
+	.iWakeup = 1,
+};
+
+
+
+#endif //]GPIOFN_PWRKEY
 
 
 unsigned short  __EBRMAIN_PID__ = 0;
@@ -120,6 +211,8 @@ EXPORT_SYMBOL(__USB_ADAPTOR__);
 static int Driver_Count = -1;
 unsigned char __TOUCH_LOCK__= 0;
 int gSleep_Mode_Suspend;
+
+extern volatile NTX_HWCONFIG *gptHWCFG;
 
 typedef enum __DEV_MODULE_NAME{
     EB500=0,
@@ -188,6 +281,9 @@ extern int gIsCustomerUi;
 extern void gpio_sdhc_inactive(int module);
 extern void gpio_uart_inactive(int port, int no_irda);
 extern void mxc_mmc_force_detect(int id);
+extern void tle4913_init(void);
+
+int ntx_charge_status (void);
 
 //kay 20090925
 //check WiFi ID
@@ -213,9 +309,15 @@ int check_hardware_name(void)
 	static int pcb_id = -1;
 
 	if (0 >= pcb_id) {
+#ifdef DIGITIZER_TEST
+		pcb_id = 3;		// E60682 board
+		mxc_iomux_v3_setup_pad(MX50_PAD_UART3_TXD__UART3_TXD);
+		mxc_iomux_v3_setup_pad(MX50_PAD_UART3_RXD__UART3_RXD);
+#else
 		mxc_iomux_v3_setup_pad(MX50_PAD_UART3_TXD__GPIO_6_14);
 		mxc_iomux_v3_setup_pad(MX50_PAD_UART3_RXD__GPIO_6_15);
 		mxc_iomux_v3_setup_pad(MX50_PAD_UART4_RXD__GPIO_6_17);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_WP_HWID0__GPIO_5_16);
 
 		gpio_request(GPIO_HWID_1, "hwid_1");
 		gpio_direction_input (GPIO_HWID_1);
@@ -223,13 +325,24 @@ int check_hardware_name(void)
 		gpio_direction_input (GPIO_HWID_2);
 		gpio_request(GPIO_HWID_3, "hwid_3");
 		gpio_direction_input (GPIO_HWID_3);
+		gpio_request(GPIO_HWID_4, "hwid_4");
+		gpio_direction_input (GPIO_HWID_4);
+		
+		/*
+		 *  Note:
+		 *  Comparing to the schematic diagram
+		 *  the lower 3 bits are in reversed order
+		 *  the higher (4th) bit is inverted (1 <-> 0)
+		 * 	 ** Noted by William Chen
+		*/
 		
 		pcb_id = (gpio_get_value (GPIO_HWID_1)?1:0);
 		pcb_id |= (gpio_get_value (GPIO_HWID_2)?2:0);
 		pcb_id |= (gpio_get_value (GPIO_HWID_3)?4:0);
+		pcb_id |= (gpio_get_value (GPIO_HWID_4)?0:8);  
 		if (7 == pcb_id) 
 			pcb_id = 4;
-			
+#endif			
 		printk ("[%s-%d] PCBA ID is %d\n",__func__,__LINE__,pcb_id);
 	}
 
@@ -271,30 +384,48 @@ static void bluetooth_pwr(int i)
 {
 }
 
+
+#define SD2_CLK		(4*32 + 6)	/*GPIO_5_6 */
 static void wifi_sdio_enable (int isEnable)
 {
-	iomux_v3_cfg_t wifi_sdio_enable[] = {
-		MX50_PAD_SD3_CMD__SD3_CMD,
-		MX50_PAD_SD3_CLK__SD3_CLK,
-		MX50_PAD_SD3_D0__SD3_D0,
-		MX50_PAD_SD3_D1__SD3_D1,
-		MX50_PAD_SD3_D2__SD3_D2,
-		MX50_PAD_SD3_D3__SD3_D3,
-	};
-	iomux_v3_cfg_t wifi_sdio_disable[] = {
-		MX50_PAD_SD3_CMD__GPIO_5_18,
-		MX50_PAD_SD3_CLK__GPIO_5_19,
-		MX50_PAD_SD3_D0__GPIO_5_20,
-		MX50_PAD_SD3_D1__GPIO_5_21,
-		MX50_PAD_SD3_D2__GPIO_5_22,
-		MX50_PAD_SD3_D3__GPIO_5_23,
-	};
-	if (isEnable)
-		mxc_iomux_v3_setup_multiple_pads(wifi_sdio_enable, ARRAY_SIZE(wifi_sdio_enable));
+	extern iomux_v3_cfg_t mx50_sd3_disable_pads[];
+	extern unsigned long gdw_mx50_sd3_disable_pads;
+
+	extern iomux_v3_cfg_t mx50_sd2_disable_pads[];
+	extern unsigned long gdw_mx50_sd2_disable_pads;
+
+
+	if(9==check_hardware_name()) {
+		// E50612 .
+		//printk("E50612=> %s(%d)\n",__FUNCTION__,isEnable);
+		if (isEnable) {
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CMD__SD2_CMD_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D0__SD2_D0_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D1__SD2_D1_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D2__SD2_D2_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D3__SD2_D3_WIFI);
+		}
+		else {
+			mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, gdw_mx50_sd2_disable_pads);
+		}
+
+	}
 	else {
-		mxc_iomux_v3_setup_multiple_pads(wifi_sdio_disable, ARRAY_SIZE(wifi_sdio_disable));
+		if (isEnable) {
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD3_CLK__SD3_CLK_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD3_CMD__SD3_CMD_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D0__SD3_D0_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D1__SD3_D1_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D2__SD3_D2_WIFI);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D3__SD3_D3_WIFI);
+		}
+		else {
+			mxc_iomux_v3_setup_multiple_pads(mx50_sd3_disable_pads, gdw_mx50_sd3_disable_pads);
+		}
 	}
 }
+
 
 void ntx_wifi_power_ctrl (int isWifiEnable)
 {
@@ -304,25 +435,70 @@ void ntx_wifi_power_ctrl (int isWifiEnable)
 		gpio_direction_input(GPIO_WIFI_3V3);	// turn off Wifi_3V3_on
 		gpio_set_value(GPIO_WIFI_RST, 0);		// turn on wifi_RST
 		wifi_sdio_enable (0);
+#ifdef _WIFI_ALWAYS_ON_
+		disable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
+#endif
 	}else{
-		wifi_sdio_enable (1);
 		gpio_direction_output(GPIO_WIFI_3V3, 0);	// turn on Wifi_3V3_on
     	sleep_on_timeout(&Reset_WaitQueue,HZ/50);			
 		gpio_set_value(GPIO_WIFI_RST, 1);		// turn on wifi_RST
+		wifi_sdio_enable (1);
+#ifdef _WIFI_ALWAYS_ON_
+		enable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
+#endif
 	}
 	sleep_on_timeout(&Reset_WaitQueue,HZ/10);			
-	mxc_mmc_force_detect (2);
+	if(9==check_hardware_name()) {
+		// E50612 .
+		mxc_mmc_force_detect (1);
+	}
+	else {
+		mxc_mmc_force_detect (2);
+	}
+
 	schedule_timeout (500);
 }
 EXPORT_SYMBOL(ntx_wifi_power_ctrl);
 
+extern u16 msp430_deviceid(void);
+extern void msp430_poweroff(void);
+extern void msp430_reset(void);
+extern void msp430_powerkeep(int n);
+extern int msp430_battery(void);
+int msp430_check_wakeup(void);
+int msp430_setwatchdog(int n);
+
 extern int msp430_write(unsigned int reg, unsigned int value);
 extern unsigned int msp430_read(unsigned int reg);
+extern int mma7660_read_orient (void);
 int gTSC2004_exist;	// Joseph 20100723
 unsigned long gLastBatTick, gUSB_Change_Tick;
 int gLastBatValue;
 int g_power_key_debounce;		// Joseph 20100921 for ESD
-	
+
+
+unsigned long long hwconfig = 0x0000000011000001LL;
+EXPORT_SYMBOL(hwconfig);
+unsigned char platform_type[32];
+EXPORT_SYMBOL(platform_type);
+
+static int __init early_hw(char *p)
+{
+	hwconfig = simple_strtoull(p, NULL, 16);
+	printk("hwconfig: %16llX\n", hwconfig);
+	return 0;
+}
+early_param("hwconfig", early_hw);
+
+//to parse hardware configuration bits
+static int __init early_board(char *p)
+{
+	strncpy(platform_type, p, sizeof(platform_type));
+	printk("board: %s\n", platform_type);
+	return 0;
+}
+early_param("board", early_board);
+
 static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int command, unsigned long arg)
 {
 	unsigned long i = 0, temp;
@@ -342,10 +518,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 		       	gpio_set_value (GPIO_LED_ON,1);
 		       	while (1) {
 					printk("Kernel---Power Down ---\n");
-					if (6 == check_hardware_name())		// E60632
-						msp430_write(0x70, 0x1000);
-					else
-						msp430_write(0x50, 0x0100);
+					msp430_poweroff();
 			      	sleep_on_timeout(&Reset_WaitQueue, 14*HZ/10);
 				}
 			}
@@ -357,7 +530,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 		    while (1) {
 				printk("Kernel---System reset ---\n");
 				gKeepPowerAlive = 0;
-				msp430_write(0x90, 0xFF00);
+				msp430_reset();
 			    sleep_on_timeout(&Reset_WaitQueue, 14*HZ/10);
 			}
 			break;
@@ -366,11 +539,11 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			printk("Kernel---System Keep Alive --- %d\n",p);
 			gKeepPowerAlive=p;
 			if (gKeepPowerAlive) {
-				msp430_write(0x70, 0x0800);
+				msp430_powerkeep(1);
 		   		wake_up_interruptible(&LED_freeze_WaitQueue);
 			}
 			else
-				msp430_write(0x70, 0x0000);
+				msp430_powerkeep(0);
 			break;
 			
 		case CM_GET_BATTERY_STATUS:
@@ -381,7 +554,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 				}
 			}
 			
-			if (6 == check_hardware_name()) {		// E60632
+			if ((6 == check_hardware_name()) || (2 == check_hardware_name())) {		// E60632 || E50602
 				i = 1023;
 				copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 	
@@ -389,14 +562,15 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			}
 	
 			if (gIsMSP430IntTriggered || !gLastBatValue || ((0==gUSB_Change_Tick) && (200 < (jiffies - gLastBatTick)))) {
-	 			if (i = msp430_read(0x41)) {
+				i = msp430_battery ();
+	 			if (i) {
 					gLastBatTick = jiffies;
 					temp = msp430_read (0x60);
 					if (0x8000 & temp) {
 						printk ("[%s-%d] =================> Micro P MSP430 alarm triggered <===================\n", __func__, __LINE__);
 						g_wakeup_by_alarm = 1;
 					}
-					if (0x01 & temp) {
+					if ((0x01 & temp) || (0x8000 & i)) {
 						printk ("[%s-%d] =================> Micro P MSP430 Critical_Battery_Low <===================\n", __func__, __LINE__);
 						i |= 0x8000;
 						gIsMSP430IntTriggered = 1;
@@ -455,24 +629,28 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			break;
 			
-		case CET_PWR_BUTTON:
-			break;
 		case GET_LnBATT_CPU:
 			break;
 		case GET_VBATT_TH:
 			break;
 		case CM_AC_CK:
 			break;
+		case CM_CHARGE_STATUS:
+			i = ntx_charge_status();
+			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
+			break;
 		case CM_PWR_ON2:
 			break;
 		case CM_AUDIO_PWR:
 	        if (p) {
 	        	// Turn on audio power
-//        		gpio_direction_output(GPIO_AUDIO_PWR, 0);
+        		gpio_direction_output(GPIO_AUDIO_PWR, 0);
+				mxc_iomux_v3_setup_pad(MX50_PAD_PWM2__PWMO);
 //	        	gpio_activate_audio_ports(); // 會造成IO REQUEST ERROR !?
 	        }
 	        else {	// turn off audio power
-//        		gpio_direction_input(GPIO_AUDIO_PWR);
+				mxc_iomux_v3_setup_pad(MX50_PAD_PWM2__GPIO_6_25);
+        		gpio_direction_input(GPIO_AUDIO_PWR);
 //	        	gpio_inactivate_audio_ports(); // 會造成IO REQUEST ERROR !?
 	        }
 			break;
@@ -525,7 +703,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 		case CM_SYSTEM_RESET:
 			printk("Kernel---System reset ---\n");
 			gKeepPowerAlive = 0;
-			msp430_write(0x90, 0xFF00);
+			msp430_reset();
 			break;
 			
 		case CM_USB_HOST_PWR:
@@ -581,18 +759,45 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
       		break;	
       		
 		case CM_ROTARY_STATUS:	
-#ifdef _MMA7660_ENABLE_
-			extern int mma7660_read_orient (void);
-			i = mma7660_read_orient ();
-#else
-			i = 0;
-#endif
+			if (4 == check_hardware_name() || 2 == check_hardware_name() || 3 == check_hardware_name()) {
+				i = mma7660_read_orient ();
+				if (2 == check_hardware_name()) {
+					if (5 == (++i))
+						i = 1;
+				}
+			}
+			else
+				i = 0;
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
       		break;	
       		
+		case CM_ROTARY_ENABLE:	
+			switch (check_hardware_name()) {
+				case 4:
+				case 3:
+					if (p)
+						enable_irq_wake(gpio_to_irq(G_SENSOR_INT));
+					else
+						disable_irq_wake(gpio_to_irq(G_SENSOR_INT));
+					break;
+				case 2:
+					if (p)
+						enable_irq_wake(gpio_to_irq(E50602_G_SENSOR_INT));
+					else
+						disable_irq_wake(gpio_to_irq(E50602_G_SENSOR_INT));
+					break;
+				default:
+					break;
+			}
+      		break;	
+		case CM_GET_KEYS:
+			i = 0;
+			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
+			break;
+		case CM_POWER_BTN:
 		case CM_GET_KEY_STATUS:	
 			if (gIsMSP430IntTriggered) {
-				if (6 != check_hardware_name()) {
+				if ((6 != check_hardware_name()) && (2 != check_hardware_name())) {
 					unsigned int tmp;
 					tmp = msp430_read (0x60);
 	//				printk ("[%s-%d] Micro P MSP430 status 0x%04X ....\n", __func__, __LINE__,tmp);
@@ -613,10 +818,11 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			}
 			
 			if (g_power_key_pressed) {
+				g_power_key_pressed = 0;
 				i = 1;
 			}
 			else {
-				if (6 == check_hardware_name()) 		// E60632
+				if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 					i = (gpio_get_value (GPIO_PWR_SW))?1:0;	// POWER key
 				else
 					i = (gpio_get_value (GPIO_PWR_SW))?0:1;	// POWER key
@@ -671,24 +877,81 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 	    	break;	
 	    	
 		case CM_GET_UP_VERSION:
-			i = msp430_read(0);
+			i = msp430_deviceid();
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 	    	break;
 
 		case CM_AUDIO_GET_VOLUME:
 			{
-//			extern int alc5623_get_volume(void);
-//			i = alc5623_get_volume();
+			#ifdef CONFIG_SND_SOC_ALC5623 //[
+			extern int alc5623_get_volume(void);
+			i = alc5623_get_volume();
+			#else //][!CONFIG_SND_SOC_ALC5623
+			i=0;
+			#endif //]CONFIG_SND_SOC_ALC5623
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			}
 			break;
 			
 		case CM_AUDIO_SET_VOLUME:
 			{
-//			extern int alc5623_set_volume(int iSet);
-//			i = alc5623_set_volume(p);
+			#ifdef CONFIG_SND_SOC_ALC5623//[
+			extern int alc5623_set_volume(int iSet);
+			i = alc5623_set_volume(p);
+			#else //][!CONFIG_SND_SOC_ALC5623
+			i = 0;
+			#endif//]CONFIG_SND_SOC_ALC5623
 			//copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			}
+			break;
+
+		case CM_FRONT_LIGHT_SET:
+			if(0!=gptHWCFG->m_val.bFrontLight)
+			{
+				static int last_FL_duty;
+				if (p) {
+					printk ("set front light %d\n",p);
+					
+					if (0 == last_FL_duty){
+						gpio_direction_output(FL_EN,0);
+						msleep(200);
+					}
+					
+					msp430_write (0xA0, (p<<8));
+//					msp430_write (0xA1, 0x02);
+//					msp430_write (0xA2, 0x58);
+					if (0 == last_FL_duty)
+						msp430_write (0xA3, 0x0100);
+				}
+				else {
+					printk ("turn off front light\n");
+					msp430_write (0xA3, 0);
+
+					gpio_direction_input(FL_EN);
+				}
+				last_FL_duty = p;
+			}
+			break;
+
+		case CM_FRONT_LIGHT_AVAILABLE:
+			{
+      	i = (unsigned long) (gptHWCFG->m_val.bFrontLight?1:0) ;
+				copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
+			}
+			break;
+
+		case CM_PLATFORM:
+			copy_to_user((void __user *)arg, &platform_type, 32);
+			break;
+		case CM_HWCONFIG:
+			copy_to_user((void __user *)arg, &hwconfig, sizeof(unsigned long
+				     long));
+			break;
+		case CM_SET_HWCONFIG:
+			if (!capable(CAP_SYS_ADMIN)) 
+				return -EPERM;
+			copy_from_user(&hwconfig, (void __user *)arg, sizeof(unsigned long
+				       long));
 			break;
 
 		default:
@@ -826,6 +1089,10 @@ void led_blue (int isOn)
 	gpio_set_value (GPIO_ACT_ON,(isOn)?0:1);
 }
 
+void led_red (int isOn) {
+	gpio_set_value (GPIO_CHG_LED,(isOn)?0:1);
+}
+
 static void LED(int on)
 {
 	if (1 == check_hardware_name()) {
@@ -885,7 +1152,7 @@ static int LED_Thread(void *param)
       LED(1);
 	  while (gKeepPowerAlive) {
 	      sleep_on_timeout(&Reset_WaitQueue,HZ*2);
-		  msp430_write(0x70, 0x0800);
+		  msp430_powerkeep(1);
 	  }
       //start to blink LED;
       if (2 == LED_conitnuous) {
@@ -948,6 +1215,11 @@ static irqreturn_t rotary_int(int irq, void *dev_id)
 	return 0;
 }
 
+static irqreturn_t c_touch_int(int irq, void *dev_id)
+{
+	return 0;
+}
+
 int mxc_usb_plug_getstatus (void)
 {
 	if (gIsCustomerUi) {
@@ -988,26 +1260,31 @@ static void power_key_chk(unsigned long v)
 {
 	int pwr_key;
 	
-	if (6 == check_hardware_name()) 		// E60632
+	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?1:0;
 	else
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?0:1;
 	
 	if (pwr_key) {
 		++g_power_key_debounce;
-		if ((2 == g_power_key_debounce) && (1 == check_hardware_name()))
+		if ((2 == g_power_key_debounce) && gIsCustomerUi)
 			mxc_kpp_report_power(1);
 		mod_timer(&power_key_timer, jiffies + 1);
 	}
-	else 
+	else if (gIsCustomerUi)
 		mxc_kpp_report_power(0);
 }
 
-static irqreturn_t power_key_int(int irq, void *dev_id)
+void power_key_int_function(void)
 {
 	gMxcPowerKeyIrqTriggered = 1;
 	g_power_key_debounce = 0;
 	mod_timer(&power_key_timer, jiffies + 1);
+}
+
+static irqreturn_t power_key_int(int irq, void *dev_id)
+{
+	power_key_int_function();
 	return 0;
 }
 
@@ -1020,12 +1297,6 @@ extern void ntx_charger_online_event_callback(void);
 static void acin_pg_chk(unsigned long v)
 {
 	int i;
-
-	static unsigned long guijiffies =0;
- 	//if(	jiffies > guijiffies ) {
-		printk("[Bat=%u]\n",gLastBatValue);
-		guijiffies+=HZ;	
-	//}
 
 	if (!gpio_get_value (GPIO_ACIN_PG)) {
 		++g_acin_pg_debounce;
@@ -1069,10 +1340,9 @@ int ntx_get_battery_vol (void)
 		}
 	}
 	
-	printk ("[%s-%d] tick=%d,last tick=%d, gUSB_Change_Tick=%d\n", __func__, __LINE__, jiffies, gLastBatTick,gUSB_Change_Tick);
 	if (gIsMSP430IntTriggered || !gLastBatValue || ((0 == gUSB_Change_Tick) && (200 < (jiffies - gLastBatTick)))) {
-		if (battValue = msp430_read(0x41)) {
-			printk ("[%s-%d] bat=%d,last bat=%d\n", __func__, __LINE__, battValue,gLastBatValue);
+		battValue = msp430_battery ();
+		if (battValue) {
 			gLastBatTick = jiffies;
 			if (gpio_get_value (GPIO_ACIN_PG)) {// not charging
 				temp = msp430_read (0x60);
@@ -1163,6 +1433,35 @@ static irqreturn_t msp_int(int irq, void *dev_id)
 	return 0;
 }
 
+
+#ifdef NTX_GPIO_KEYS //[
+
+#define HALLSENSOR_KEY  (4*32 + 25) /* GPIO_5_25 */
+
+#define NTX_GPIO_KEYS_MAX		5
+static int gi_ntx_gpio_buttons_total = 0;
+static struct gpio_keys_button ntx_gpio_buttons[NTX_GPIO_KEYS_MAX] = {
+	{0,},
+};
+static struct gpio_keys_platform_data ntx_gpio_key_data = {
+  .buttons=ntx_gpio_buttons,
+  .nbuttons=0,
+  .rep=0,
+};
+static struct platform_device ntx_gpio_key_device = {
+  .name = "gpio-keys",
+  .id = -1,
+  .dev = {
+    .platform_data = &ntx_gpio_key_data,
+  },
+};
+
+#endif//] NTX_GPIO_KEYS
+
+
+
+#define IR_TOUCH_RST		(4*32 + 26)	/*GPIO_5_26 */
+
 static int gpio_initials(void)
 {
 	int irq, ret;
@@ -1215,10 +1514,16 @@ static int gpio_initials(void)
 	gpio_direction_output(GPIO_CHG_LED, 1);
 	
 	/* Audio_PWR_ON */
+	mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI2_MOSI__GPIO_4_17);
+	gpio_request(GPIO_AUDIO_PWR, "audio_pwr");
+	gpio_direction_input(GPIO_AUDIO_PWR);
 	
 	/* AMP_EN */
 	
 	/* OFF_CHK */
+	#ifdef GPIOFN_PWRKEY//[
+	gpiofn_register(&gtNTX_PWR_GPIO_data);
+	#else //][!GPIOFN_PWRKEY
 	mxc_iomux_v3_setup_pad(MX50_PAD_CSPI_MISO__GPIO_4_10);
 	gpio_request(GPIO_PWR_SW, "pwr_sw");
 	gpio_direction_input(GPIO_PWR_SW);
@@ -1226,7 +1531,7 @@ static int gpio_initials(void)
 		/* Set power key as wakeup resource */
 		irq = gpio_to_irq(GPIO_PWR_SW);
 	
-		if (6 == check_hardware_name()) 		// E60632
+		if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 			set_irq_type(irq, IRQF_TRIGGER_RISING);
 		else
 			set_irq_type(irq, IRQF_TRIGGER_FALLING);
@@ -1236,17 +1541,42 @@ static int gpio_initials(void)
 		else
 			enable_irq_wake(irq);
 	}
+	#endif //]GPIOFN_PWRKEY
 	power_key_timer.function = power_key_chk;
 	init_timer(&power_key_timer);
 	
-	// Touch interrupt
-	mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D7__GPIO_5_15);
-	gpio_request(TOUCH_INT, "touch_int");
-	gpio_direction_input(TOUCH_INT);
-	irq = gpio_to_irq(TOUCH_INT);
-	set_irq_type(irq, IRQF_TRIGGER_FALLING);
+	tle4913_init();
 	
-	if (1 != check_hardware_name()) {
+//	if ((1 == check_hardware_name()) || (10 == check_hardware_name()) || (14 == check_hardware_name())) {	// E60612 , E606A2 ,E606B2 , ir touch 
+	if(4==gptHWCFG->m_val.bTouchType) {    //IR touch
+
+		// Touch interrupt
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D7__GPIO_5_15);
+		gpio_request(TOUCH_INT, "touch_int");
+		gpio_direction_input(TOUCH_INT);
+		irq = gpio_to_irq(TOUCH_INT);
+		set_irq_type(irq, IRQF_TRIGGER_FALLING);
+		
+	    // Touch reset
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D6__GPIO_5_26);
+		gpio_request(IR_TOUCH_RST, "ir_touch_rst");	
+		gpio_direction_input(IR_TOUCH_RST);
+	}
+	else {		// C touch.
+		// Touch interrupt
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D7__GPIO_5_27);
+		gpio_request(C_TOUCH_INT, "c_touch_int");
+		gpio_direction_input(C_TOUCH_INT);
+		
+#ifdef DIGITIZER_TEST
+		set_irq_type(gpio_to_irq(C_TOUCH_INT), IRQF_TRIGGER_RISING);
+		ret = request_irq(gpio_to_irq(C_TOUCH_INT), c_touch_int, 0, "c_touch", 0);
+		if (ret)
+			pr_info("register G_SENSOR_INT interrupt failed\n");
+		else
+			enable_irq_wake(gpio_to_irq(C_TOUCH_INT));
+#endif
+		
 		// Touch reset
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_WP__GPIO_5_28);
 		gpio_request(TOUCH_RST, "touch_rst");
@@ -1260,8 +1590,75 @@ static int gpio_initials(void)
 		// Touch enable
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D6__GPIO_5_26);
 		gpio_request(TOUCH_EN, "touch_en");
+#ifdef DIGITIZER_TEST
+#ifdef HANVON_TOUCH
+		gpio_direction_output(TOUCH_EN, 0);
+#else		
+		gpio_direction_output(TOUCH_EN, 1);	// PVI touch
+#endif
+		gpio_direction_output(TOUCH_RST, 1);
+		msleep (10);
+		gpio_direction_output(TOUCH_RST, 0);
+		msleep (100);
+		gpio_direction_output(TOUCH_RST, 1);
+#else
 		gpio_direction_output(TOUCH_EN, 1);
 		gpio_direction_output(TOUCH_RST, 1);
+		msleep (50);
+#endif
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D7__GPIO_5_27_PU);
+	}
+	
+	if (4 == check_hardware_name() || 3 == check_hardware_name()) {
+		// MMA7660 INT
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D5__GPIO_5_25);
+		gpio_request(G_SENSOR_INT, "touch_rst");
+		gpio_direction_input(G_SENSOR_INT);
+
+		set_irq_type(gpio_to_irq(G_SENSOR_INT), IRQF_TRIGGER_FALLING);
+		ret = request_irq(gpio_to_irq(G_SENSOR_INT), rotary_int, 0, "rotary_a", 0);
+		if (ret)
+			pr_info("register G_SENSOR_INT interrupt failed\n");
+		else
+			enable_irq_wake(gpio_to_irq(G_SENSOR_INT));
+	}
+	else if (2 == check_hardware_name()) {	
+		// MMA7660 INT
+		mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI1_SS0__GPIO_4_15);
+		gpio_request(E50602_G_SENSOR_INT, "g_sensor_int");
+		gpio_direction_input(E50602_G_SENSOR_INT);
+
+		set_irq_type(gpio_to_irq(E50602_G_SENSOR_INT), IRQF_TRIGGER_FALLING);
+		ret = request_irq(gpio_to_irq(E50602_G_SENSOR_INT), rotary_int, 0, "rotary_a", 0);
+		if (ret)
+			pr_info("register E50602_G_SENSOR_INT interrupt failed\n");
+		else
+			enable_irq_wake(gpio_to_irq(E50602_G_SENSOR_INT));
+			
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_DSL);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CMD__SD2_CMD_DSL);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D0__SD2_D0_DSL);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D1__SD2_D1_DSL);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D2__SD2_D2_DSL);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D3__SD2_D3_DSL);
+	}
+
+	if(21==gptHWCFG->m_val.bPCB) {
+		// E60610D 
+		printk("ESD DSM for E60610D\n");
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_DSM);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CMD__SD2_CMD_DSM);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D0__SD2_D0_DSM);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D1__SD2_D1_DSM);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D2__SD2_D2_DSM);
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D3__SD2_D3_DSM);
+	}
+	
+	// FL_EN
+	if(0!=gptHWCFG->m_val.bFrontLight) {	
+		mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI1_MISO__GPIO_4_14);
+		gpio_request(FL_EN, "fl_en");
+		gpio_direction_input(FL_EN);
 	}
 	
 	// WIFI_3V3_ON 
@@ -1280,9 +1677,78 @@ static int gpio_initials(void)
 	mxc_iomux_v3_setup_pad(MX50_PAD_CSPI_SCLK__GPIO_4_8);
 	gpio_request(GPIO_WIFI_INT, "wifi_int");
 	gpio_direction_input(GPIO_WIFI_INT);
-	
+#ifdef _WIFI_ALWAYS_ON_
+	irq = gpio_to_irq(GPIO_WIFI_INT);
+	set_irq_type(irq, IRQF_TRIGGER_FALLING);
+//	enable_irq_wake(irq);
+#endif
+
+
+	// EIM pins for power comsumption .
+  gpio_request(EIM_DA0, "eim-da0");
+  gpio_direction_input(EIM_DA0);
+  gpio_request(EIM_DA1, "eim-da1");
+  gpio_direction_input(EIM_DA1);
+  gpio_request(EIM_DA2, "eim-da2");
+  gpio_direction_input(EIM_DA2);
+  gpio_request(EIM_DA3, "eim-da3");
+  gpio_direction_input(EIM_DA3);
+  gpio_request(EIM_DA4, "eim-da4");
+  gpio_direction_input(EIM_DA4);
+  gpio_request(EIM_DA5, "eim-da5");
+  gpio_direction_input(EIM_DA5);
+  gpio_request(EIM_DA6, "eim-da6");
+  gpio_direction_input(EIM_DA6);
+  gpio_request(EIM_DA7, "eim-da7");
+  gpio_direction_input(EIM_DA7);
+  gpio_request(EIM_DA8, "eim-da8");
+  gpio_direction_input(EIM_DA8);
+  gpio_request(EIM_DA9, "eim-da9");
+  gpio_direction_input(EIM_DA9);
+  gpio_request(EIM_DA10, "eim-da10");
+  gpio_direction_input(EIM_DA10);
+  gpio_request(EIM_DA11, "eim-da11");
+  gpio_direction_input(EIM_DA11);
+  gpio_request(EIM_DA12, "eim-da12");
+  gpio_direction_input(EIM_DA12);
+  gpio_request(EIM_DA13, "eim-da13");
+  gpio_direction_input(EIM_DA13);
+  gpio_request(EIM_DA14, "eim-da14");
+  gpio_direction_input(EIM_DA14);
+  gpio_request(EIM_DA15, "eim-da15");
+  gpio_direction_input(EIM_DA15);
+  gpio_request(EIM_CS2, "eim-cs2");
+  gpio_direction_input(EIM_CS2);
+  gpio_request(EIM_CS1, "eim-cs1");
+  gpio_direction_input(EIM_CS1);
+  gpio_request(EIM_CS0, "eim-cs0");
+  gpio_direction_input(EIM_CS0);
+  gpio_request(EIM_EB0, "eim-eb0");
+  gpio_direction_input(EIM_EB0);
+  gpio_request(EIM_EB1, "eim-eb1");
+  gpio_direction_input(EIM_EB1);
+  gpio_request(EIM_WAIT, "eim-wait");
+  gpio_direction_input(EIM_WAIT);
+  gpio_request(EIM_BCLK, "eim-bclk");
+  gpio_direction_input(EIM_BCLK);
+  gpio_request(EIM_RDY, "eim-rdy");
+  gpio_direction_input(EIM_RDY);
+
+
 	// ESD_WP 
-	
+
+#ifdef NTX_GPIO_KEYS //[
+
+  // Hall Sensor key .
+	if(gptHWCFG->m_val.bHallSensor) {
+		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D5__GPIO_5_25);
+  	gpio_request(HALLSENSOR_KEY, "HALLSENSOR_KEY");
+  	gpio_direction_input(HALLSENSOR_KEY);
+	}
+
+#endif //] NTX_GPIO_KEYS
+
+
 	// DCIN/MSP_INT#
 	mxc_iomux_v3_setup_pad(MX50_PAD_CSPI_SS0__GPIO_4_11);
 	gpio_request(GPIO_MSP_INT, "msp_int");
@@ -1385,12 +1851,49 @@ void ntx_gpio_suspend (void)
 	if (gUSB_Change_Tick) 
 		gUSB_Change_Tick = 0;
 
+//	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
+	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {
+
+		mdelay (20);
+		disable_irq(gpio_to_irq(C_TOUCH_INT));
+		gpio_direction_output(C_TOUCH_INT, 0);
+		
+		mdelay (20);
+		if (2 == check_hardware_name()) {
+			disable_irq(gpio_to_irq(E50602_G_SENSOR_INT));
+			gpio_direction_output(E50602_G_SENSOR_INT, 0);
+		}
+		else {
+			disable_irq(gpio_to_irq(G_SENSOR_INT));
+			gpio_direction_output(G_SENSOR_INT, 0);
+		}
+		
+		mxc_iomux_v3_setup_pad(MX50_PAD_I2C1_SDA__GPIO_6_19);
+		gpio_request((5*32+19), "GPIO_6_19");
+		gpio_direction_output((5*32+19),0);
+		
+		mxc_iomux_v3_setup_pad(MX50_PAD_I2C1_SCL__GPIO_6_18);
+		gpio_request((5*32+18), "GPIO_6_18");
+		gpio_direction_output((5*32+18),0);
+		
+#ifndef DIGITIZER_TEST
+		gpio_direction_output(TOUCH_EN, 0);
+		gpio_direction_output(TOUCH_RST, 0);
+		gpio_direction_output(TOUCH_PWR, 1);
+#endif
+	}
+
 	// turn off wifi power 
+#ifndef _WIFI_ALWAYS_ON_
 	gpio_direction_input(GPIO_WIFI_3V3);
 	gpio_direction_output(GPIO_WIFI_RST,0);
-	
+#endif
+
 	// turn off EPD power
-	gpio_direction_output(GPIO_PWRALL,0);
+	//gpio_direction_output(GPIO_PWRALL,0);
+
+	// turn off audio power
+	gpio_direction_input(GPIO_AUDIO_PWR);
 
 	// MX50_PAD_PWM2__GPIO_6_25
 	gpio_request((5*32+25), "GPIO_6_25");
@@ -1415,9 +1918,44 @@ void ntx_gpio_suspend (void)
 
 void ntx_gpio_resume (void)
 {
-	
 	__raw_writel(gUart2_ucr1, ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
 	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
+	
+//	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
+	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {
+#ifndef DIGITIZER_TEST
+		gpio_direction_output(TOUCH_PWR, 0);
+		gpio_direction_output(TOUCH_EN, 1);
+		gpio_direction_output(TOUCH_RST, 1);
+#endif
+		gpio_free(5*32+18);
+		gpio_free(5*32+19);
+		mxc_iomux_v3_setup_pad(MX50_PAD_I2C1_SCL__I2C1_SCL);
+		mxc_iomux_v3_setup_pad(MX50_PAD_I2C1_SDA__I2C1_SDA);
+		mdelay (50);
+		gpio_direction_input(C_TOUCH_INT);
+		enable_irq(gpio_to_irq(C_TOUCH_INT));
+		if (2 == check_hardware_name()) {
+			gpio_direction_input(E50602_G_SENSOR_INT);
+			enable_irq(gpio_to_irq(E50602_G_SENSOR_INT));
+		}
+		else {
+			gpio_direction_input(G_SENSOR_INT);
+			enable_irq(gpio_to_irq(G_SENSOR_INT));
+		}
+	}
+	
+#if 1	
+	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
+		g_power_key_pressed = (gpio_get_value (GPIO_PWR_SW))?1:0;	// POWER key
+	else
+		g_power_key_pressed = (gpio_get_value (GPIO_PWR_SW))?0:1;	// POWER key
+#endif
+
+	// turn on audio power
+	gpio_free(5*32+25);
+	mxc_iomux_v3_setup_pad(MX50_PAD_PWM2__PWMO);
+//	gpio_direction_output(GPIO_AUDIO_PWR, 0);
 	gpio_free(5*32+20);
 	gpio_free(5*32+21);
 
@@ -1428,6 +1966,13 @@ void ntx_gpio_resume (void)
 		ntx_led_blink (4, green_led_period);
 		ntx_led_blink (5, blue_led_period);
 	}
+}
+
+void ntx_gpio_touch_reset (void)
+{
+	gpio_direction_output(TOUCH_RST, 0);
+	msleep (10);
+	gpio_direction_output(TOUCH_RST, 1);
 }
 
 void ntx_msp430_i2c_force_release (void)
@@ -1461,7 +2006,7 @@ void ntx_machine_restart(char mode, const char *cmd)
 	while (1) {
 		printk("Kernel---System reset ---\n");
 		gKeepPowerAlive = 0;
-		msp430_write(0x90, 0xFF00);
+		msp430_reset();
 	    sleep_on_timeout(&Reset_WaitQueue, 14*HZ/10);
 	}
 }
@@ -1477,6 +2022,28 @@ static int __init initDriver(void)
 	}
 
     gpio_initials();
+
+
+	#ifdef NTX_GPIO_KEYS //[
+	
+	
+	if(gptHWCFG->m_val.bHallSensor) {
+		ntx_gpio_buttons[gi_ntx_gpio_buttons_total].code=KEY_F1;
+		ntx_gpio_buttons[gi_ntx_gpio_buttons_total].gpio=HALLSENSOR_KEY;
+		ntx_gpio_buttons[gi_ntx_gpio_buttons_total].active_low=1;
+		ntx_gpio_buttons[gi_ntx_gpio_buttons_total].type=EV_KEY;
+		ntx_gpio_buttons[gi_ntx_gpio_buttons_total].wakeup=1;
+		ntx_gpio_buttons[gi_ntx_gpio_buttons_total].debounce_interval=500;
+
+		++gi_ntx_gpio_buttons_total;
+		//ASSERT(gi_ntx_gpio_buttons_total<NTX_GPIO_KEYS_MAX);
+	}
+
+	ntx_gpio_key_data.nbuttons = gi_ntx_gpio_buttons_total;
+	if(gi_ntx_gpio_buttons_total>0) {
+		mxc_register_device(&ntx_gpio_key_device, &ntx_gpio_key_data);
+	}
+	#endif //] NTX_GPIO_KEYS
     
 	//start a kernel thread;
 	ret = kernel_thread(LED_Thread,NULL,CLONE_KERNEL);

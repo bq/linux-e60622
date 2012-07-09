@@ -51,7 +51,7 @@ struct s1d13521_ioctl_hwc
 #define S1D13521_LOAD_AREA		0x4564	// KEG 20090814
 
 // virtual hardware controll .
-#define EPDC_PWR_CTRL		0x4570	// epdc vcom controll , 0->off ,1->on .
+#define EPDC_PWR_CTRL		0x4570	// epdc power controll .
 	#define EPDC_AUTOPWR_INTERVAL_MAX		1
 	#define EPDC_AUTOPWR_INTERVAL_NORMAL	2
 	#define EPDC_PWR_ON						3
@@ -60,6 +60,10 @@ struct s1d13521_ioctl_hwc
 	#define EPDC_VCOM_OFF					6
 	#define EPDC_AUTOOFF_ENABLE				7
 	#define EPDC_AUTOOFF_DISABLE			8
+	
+#define EPDC_VCOM_SET				0x4571
+#define EPDC_VCOM_SET_TO_FLASH		0x4572
+#define EPDC_VCOM_GET				0x4573
 	
 
 
@@ -239,8 +243,18 @@ typedef struct
    unsigned int Height;
    unsigned int WaveForm;
    unsigned int LUT_NO;
-   BYTE Data[800*600];
+   BYTE Data[_PANEL_WIDTH*_PANEL_HEIGHT];
   } ST_IMAGE_PGM, *PST_IMAGE_PGM;
+  
+  typedef struct ST_IMAGE_PGM_800x600_TAG{
+   unsigned int StartX;
+   unsigned int StartY;
+   unsigned int Width;
+   unsigned int Height;
+   unsigned int WaveForm;
+   unsigned int LUT_NO;
+   BYTE Data[800*600];
+  } ST_IMAGE_PGM_800x600, *PST_IMAGE_PGM_800x600;
 
 
 /****kay*******/
@@ -261,8 +275,8 @@ typedef enum {
 #define MAX_EPSON_MEMORY_NAME_LENGTH 64
 #define COUNT_FOR_32M 60
 #define COUNT_FOR_64M 120
-#define EPSON_MEMORY_CTL_BASE_START 800*600*2
-#define EPSON_MEMORY_CTL_UNIT_SIZE 800*600
+//#define EPSON_MEMORY_CTL_BASE_START 800*600*2
+//#define EPSON_MEMORY_CTL_UNIT_SIZE 800*600
 #define MAX_EPSON_MEMORY_CTL_SIZE  COUNT_FOR_32M
   struct EPSON_MEMORY_CTL {
   	U8 cmd;
@@ -290,7 +304,7 @@ typedef enum {
    unsigned int WaveForm;
    unsigned int LUT_NO;
    unsigned int Depth;   
-   BYTE Data[800*600];
+   BYTE Data[_PANEL_WIDTH*_PANEL_HEIGHT];
   } ST_IMAGE_PGM_MEM, *PST_IMAGE_PGM_MEM;
   typedef struct ST_IMAGE_PGM_TAG_MEM_KERNEL{
    U8 cmd;

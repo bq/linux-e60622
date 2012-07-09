@@ -82,7 +82,7 @@ static void _fb_gray_8to4(unsigned char *data, unsigned long len)
 
 #define _RGB565(_r,_g,_b)	(unsigned short)((_r)<<11|(_g)<<6|(_b))
 
-static unsigned short gwGray4toRGB565_TableA[] = {
+static const unsigned short gwGray4toRGB565_TableA[] = {
 	_RGB565(0x00,0x00,0x00),
 	_RGB565(0x02,0x02,0x02),
 	_RGB565(0x04,0x04,0x04),
@@ -100,7 +100,14 @@ static unsigned short gwGray4toRGB565_TableA[] = {
 	_RGB565(0x1c,0x1c,0x1c),
 	_RGB565(0x1e,0x1e,0x1e),
 };
-static unsigned char gbGray4toGray8_TableA[] = {
+static const unsigned short gwGray2toRGB565_TableA[] = {
+	_RGB565(0x00,0x00,0x00),
+	_RGB565(0x0a,0x0a,0x0a),
+	_RGB565(0x14,0x14,0x14),
+	_RGB565(0x1e,0x1e,0x1e),
+};
+
+static const unsigned char gbGray4toGray8_TableA[] = {
 	0x00,
 	0x10,
 	0x20,
@@ -237,12 +244,22 @@ static void _fb_gray_4to8(
 	}
 }
 
-EPDFB_DC *epdfbdc_create_ex(unsigned long dwW,unsigned long dwH,\
+EPDFB_DC *epdfbdc_create_ex2(unsigned long dwFBW,unsigned long dwFBH,\
+	unsigned long dwW,unsigned long dwH,\
 	unsigned char bPixelBits,unsigned char *pbDCbuf,unsigned long dwCreateFlag)
 {
 	EPDFB_DC *pDC = 0;
-	unsigned long dwDCSize = (dwW*dwH*bPixelBits)>>3;
+	unsigned long dwFBBits = (dwFBW*dwFBH*bPixelBits);
+	unsigned long dwFBWBits = (dwFBW*bPixelBits);
+	unsigned long dwDCSize ,dwDCWidthBytes;
+
+	dwDCSize=dwFBBits>>3;
+	dwDCWidthBytes=dwFBWBits>>3;
 	
+	if(dwFBWBits&0x7) {
+		dwDCWidthBytes+=1;
+		dwDCSize+=dwFBH;
+	}
 	
 	DBG_MSG("%s(%d):w=%d,h=%d,bits=%d,bufp=%p\n",__FUNCTION__,__LINE__,\
 		dwW,dwH,bPixelBits,pbDCbuf);
@@ -271,11 +288,16 @@ EPDFB_DC *epdfbdc_create_ex(unsigned long dwW,unsigned long dwH,\
 		pDC->pbDCbuf = pbDCbuf;
 		pDC->dwBufSize = dwDCSize;
 	}
+	ASSERT(dwFBW>=dwW);
+	pDC->dwFBWExtra = dwFBW-dwW ;
+	ASSERT(dwFBH>=dwH);
+	pDC->dwFBHExtra = dwFBH-dwH ;
 	pDC->dwWidth = dwW;
 	pDC->dwHeight = dwH;
 	pDC->bPixelBits = bPixelBits;
 	pDC->dwDCSize = dwDCSize;
-	pDC->dwDCWidthBytes = (unsigned long)((dwW*bPixelBits)>>3);
+	
+	pDC->dwDCWidthBytes = dwDCWidthBytes;
 	
 	pDC->dwDirtyOffsetStart = 0;
 	pDC->dwDirtyOffsetEnd = dwDCSize;
@@ -297,6 +319,10 @@ EPDFB_DC *epdfbdc_create_ex(unsigned long dwW,unsigned long dwH,\
 	pDC->pfnSetUpdateRect = 0;
 	pDC->pfnPwrAutoOffIntervalMax = 0;
 	pDC->pfnAutoOffEnable = 0;
+	pDC->pfnPutImg = 0;
+	pDC->pfnSetVCOM = 0;
+	pDC->pfnSetVCOMToFlash = 0;
+	pDC->pfnGetVCOM = 0;
 	
 	pDC->iIsForceWaitUpdateFinished = 1;
 	
@@ -308,16 +334,24 @@ EPDFB_DC *epdfbdc_create_ex(unsigned long dwW,unsigned long dwH,\
 	return pDC;
 }
 
+EPDFB_DC *epdfbdc_create_ex(unsigned long dwW,unsigned long dwH,\
+	unsigned char bPixelBits,unsigned char *pbDCbuf,unsigned long dwCreateFlag)
+{
+	return epdfbdc_create_ex2(dwW,dwH,dwW,dwH,bPixelBits,pbDCbuf,dwCreateFlag);
+}
+
+
+
 EPDFB_DC *epdfbdc_create(unsigned long dwW,unsigned long dwH,\
 	unsigned char bPixelBits,unsigned char *pbDCbuf)
 {
 	return epdfbdc_create_ex(dwW,dwH,bPixelBits,pbDCbuf,EPDFB_DC_FLAG_DEFAUT);
-
 }
 
 	
 EPDFB_DC_RET epdfbdc_delete(EPDFB_DC *pEPD_dc)
 {
+	DBG_MSG("%s\n",__FUNCTION__);
 	if(!CHK_EPDFB_DC(pEPD_dc)) {
 		ERR_MSG("%s(%d): object handle error !\n",__FUNCTION__,__LINE__);
 		return EPDFB_DC_OBJECTERR;
@@ -431,12 +465,27 @@ static inline unsigned long _pixel_value_convert(unsigned long dwPixelVal,
 	case 1:
 		dwRetPixelVal = dwPixelVal?0x0:0xffffffff;
 		break;	
+	case 2:
+		if(4==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal<<2;
+		}
+		else if(8==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal<<6;
+		}
+		else if(16==bDestBitsPerPixel) {
+			dwRetPixelVal = (unsigned long)(gwGray2toRGB565_TableA[(dwPixelVal&0x3)]);
+			//printk("%x->%x.",dwPixelVal,dwRetPixelVal);
+		}
+		else if(1==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal>>1;
+		}
+		else if(2==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal;
+		}
+		break;
 	case 4:
 		if(4==bDestBitsPerPixel) {
 			dwRetPixelVal = dwPixelVal;
-		}
-		else if(1==bDestBitsPerPixel) {
-			dwRetPixelVal = dwPixelVal>>3;
 		}
 		else if(8==bDestBitsPerPixel) {
 			dwRetPixelVal = dwPixelVal<<4;
@@ -444,36 +493,48 @@ static inline unsigned long _pixel_value_convert(unsigned long dwPixelVal,
 		}
 		else if(16==bDestBitsPerPixel) {
 			//dwRetPixelVal = dwPixelVal<<12;
-			dwRetPixelVal = (unsigned long)gwGray4toRGB565_TableA[(dwPixelVal&0xf)];
+			dwRetPixelVal = (unsigned long)(gwGray4toRGB565_TableA[(dwPixelVal&0xf)]);
+		}
+		else if(1==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal>>3;
+		}
+		else if(2==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal>>2;
 		}
 		break;
 	case 8:
 		if(4==bDestBitsPerPixel) {
 			dwRetPixelVal = dwPixelVal>>4;
 		}
-		else if(1==bDestBitsPerPixel) {
-			dwRetPixelVal = dwPixelVal>>7;
-		}
 		else if(8==bDestBitsPerPixel) {
 			dwRetPixelVal = dwPixelVal;
 		}
 		else if(16==bDestBitsPerPixel) {
 			//dwRetPixelVal = dwPixelVal<<8;
-			dwRetPixelVal = (unsigned long)gwGray4toRGB565_TableA[(dwPixelVal>>4)];
+			dwRetPixelVal = (unsigned long)(gwGray4toRGB565_TableA[(dwPixelVal>>4)]);
+		}
+		else if(1==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal>>7;
+		}
+		else if(2==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal>>6;
 		}
 		break;
 	case 16:
 		if(4==bDestBitsPerPixel) {
 			dwRetPixelVal = (unsigned long)_RGB565_to_Gray4(dwPixelVal);
 		}
-		else if(1==bDestBitsPerPixel) {
-			dwRetPixelVal = dwPixelVal>>31;
-		}
 		else if(8==bDestBitsPerPixel) {
 			dwRetPixelVal = (unsigned long)_RGB565_to_Gray8(dwPixelVal);
 		}
 		else if(16==bDestBitsPerPixel) {
 			dwRetPixelVal = dwPixelVal;
+		}
+		else if(1==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal>>31;
+		}
+		else if(2==bDestBitsPerPixel) {
+			dwRetPixelVal = dwPixelVal>>30;
 		}
 		break;
 	default:
@@ -484,6 +545,255 @@ static inline unsigned long _pixel_value_convert(unsigned long dwPixelVal,
 	
 	return dwRetPixelVal;
 }
+
+
+
+static inline unsigned char *_epdfbdc_get_dcimg_ptr(
+	EPDFB_DC *I_pEPD_imgdc,	unsigned long I_dwImgX,unsigned long I_dwImgY)
+{
+	unsigned char *pbRet ;
+	unsigned char bBitsPerPixel = I_pEPD_imgdc->bPixelBits;
+
+	if(4==bBitsPerPixel) {
+		pbRet = I_pEPD_imgdc->pbDCbuf + 
+			(I_dwImgX>>1)+(I_dwImgY*I_pEPD_imgdc->dwDCWidthBytes);
+	}
+	else if(8==bBitsPerPixel) {
+		pbRet = (unsigned char *)(I_pEPD_imgdc->pbDCbuf+(I_dwImgX)+\
+			(I_dwImgY*I_pEPD_imgdc->dwDCWidthBytes));
+	}
+	else if(16==bBitsPerPixel) {
+		pbRet = (unsigned char *)(I_pEPD_imgdc->pbDCbuf+(I_dwImgX>>1)+\
+			(I_dwImgY*I_pEPD_imgdc->dwDCWidthBytes));
+	}
+	else if(1==bBitsPerPixel) {
+		pbRet =(unsigned char *)(I_pEPD_imgdc->pbDCbuf+(I_dwImgX>>3)+\
+			(I_dwImgY*I_pEPD_imgdc->dwDCWidthBytes));
+	}
+	else if(2==bBitsPerPixel) {
+		pbRet =(unsigned char *)(I_pEPD_imgdc->pbDCbuf+(I_dwImgX>>2)+\
+			(I_dwImgY*I_pEPD_imgdc->dwDCWidthBytes));
+	}
+	else {
+		pbRet = 0;
+	}
+	return pbRet;
+}
+
+static inline unsigned long _epdfbdc_get_img_pixelvalue_from_ptr(EPDFB_DC *I_pEPD_imgdc,
+	unsigned char **IO_ppbImg,unsigned long I_dwX)
+{
+	unsigned long dwRet;
+	unsigned char bBitsPerPixel=I_pEPD_imgdc->bPixelBits;
+	
+	ASSERT(IO_ppbImg);
+	ASSERT(*IO_ppbImg);
+	ASSERT(*IO_ppbImg>=I_pEPD_imgdc->pbDCbuf);
+	
+	if((*IO_ppbImg)>I_pEPD_imgdc->pbDCbuf+I_pEPD_imgdc->dwDCSize) {
+		printk("[Warning]*IO_ppbImg=%p>pbDCbuf=%p+dwDCSize=%u\n",(*IO_ppbImg),
+			I_pEPD_imgdc->pbDCbuf,I_pEPD_imgdc->dwDCSize);
+		return 0;
+		ASSERT(0);
+	}
+	
+	switch(bBitsPerPixel) {
+	case 4:
+	{
+		unsigned char b;
+		if(I_dwX&1) {
+			if(I_pEPD_imgdc->dwFlags&EPDFB_DC_FLAG_REVERSEINPDATA) {
+				b = (**IO_ppbImg)&0xf;
+			}
+			else {
+				b = ((**IO_ppbImg)>>4)&0xf;
+			}
+			(*IO_ppbImg) += 1;
+		}
+		else {
+			if(I_pEPD_imgdc->dwFlags&EPDFB_DC_FLAG_REVERSEINPDATA) {
+				b = ((**IO_ppbImg)>>4)&0xf;
+			}
+			else {
+				b = (**IO_ppbImg)&0xf;
+			}
+		}
+		dwRet = (unsigned long)b;
+		
+		break;
+	}
+	case 1:
+	{
+		unsigned char b=(I_dwX&0x7);
+		unsigned char bBitMask=0x80>>b;
+		
+		dwRet = (unsigned long)((**IO_ppbImg)&bBitMask);
+		if(7==b) {
+			(*IO_ppbImg) += 1;
+		}
+		break;
+	}
+	case 2:
+	{
+		unsigned char b=(I_dwX&0x3);
+		unsigned char bShift=6-(b<<1);
+		
+		/*
+		if(I_pEPD_imgdc->dwFlags&EPDFB_DC_FLAG_REVERSEINPDATA) {
+
+		}
+		else {
+			switch(bShift) {
+			case 0:
+				bShift = 6;
+				break;
+			case 2:
+				bShift = 2;
+				break;
+			case 4:
+				bShift = 4;
+				break;
+			case 6:
+				bShift = 0;
+				break;
+			default :
+				break;
+			}		
+		}
+		*/
+		
+		dwRet = (unsigned long)(((**IO_ppbImg)>>bShift)&0x03);
+		
+		if(3==b) {
+			(*IO_ppbImg) += 1;
+		}
+		break;
+	}
+	case 8:
+	{
+		dwRet = (unsigned long)(**((unsigned char **)IO_ppbImg));
+		(*IO_ppbImg) += 1;
+		break;
+	}
+	case 16:
+	{
+		dwRet = (unsigned long)(**((unsigned short **)IO_ppbImg));
+		(*IO_ppbImg) += 2;
+		break;
+	}
+	default:
+		ERR_MSG("%d Bits/Pixel not supported !!\n",bBitsPerPixel);
+		dwRet=0;
+		break;
+	}
+	return dwRet;
+}
+
+static inline void _epdfbdc_set_dcpixel_at_ptr(EPDFB_DC *I_pEPD_dc,
+	unsigned char **IO_ppbDCDest,unsigned long I_dwSrcPixelVal,unsigned char I_bSrcBitsPerPixel,
+	unsigned short I_dwDestX)
+{
+	unsigned long L_dwPixelVal;
+	unsigned char bDestBitsPerPixel;
+	
+	ASSERT(IO_ppbDCDest);
+	ASSERT(*IO_ppbDCDest);
+	
+	ASSERT(*IO_ppbDCDest>=I_pEPD_dc->pbDCbuf);
+	ASSERT(*IO_ppbDCDest<I_pEPD_dc->pbDCbuf+I_pEPD_dc->dwDCSize);
+	
+	bDestBitsPerPixel = I_pEPD_dc->bPixelBits;
+	L_dwPixelVal = _pixel_value_convert(I_dwSrcPixelVal,I_bSrcBitsPerPixel,bDestBitsPerPixel);
+	
+	switch(bDestBitsPerPixel) {
+	case 4:
+		{
+		unsigned char bTemp,bPixelVal;
+		
+		bPixelVal=(unsigned char)(L_dwPixelVal&0xf);
+		bTemp = **IO_ppbDCDest;
+		
+		if(I_pEPD_dc->dwFlags&EPDFB_DC_FLAG_REVERSEDRVDATA) {
+			if(I_dwDestX&0x1) {
+				bTemp &= 0x0f;
+				bTemp |= (bPixelVal<<4)&0xf0 ;
+				**IO_ppbDCDest = bTemp;
+				(*IO_ppbDCDest) += 1;
+			}
+			else {
+				bTemp &= 0xf0;
+				bTemp |= bPixelVal;
+				**IO_ppbDCDest = bTemp;
+			}
+		}	
+		else {
+			if(I_dwDestX&0x1) {
+				bTemp &= 0xf0;
+				bTemp |= bPixelVal;
+				**IO_ppbDCDest = bTemp;
+				(*IO_ppbDCDest) += 1;
+			}
+			else {
+				bTemp &= 0x0f;
+				bTemp |= (bPixelVal<<4)&0xf0 ;
+				**IO_ppbDCDest = bTemp;
+			}
+		}
+			
+		
+		break;
+		}
+	case 1:
+		{
+		unsigned char bTemp;
+		unsigned char b=(I_dwDestX&0x7);
+		
+		bTemp = **IO_ppbDCDest;
+		if(L_dwPixelVal) {
+			bTemp |= 0x01<<b;
+		}
+		else {
+			bTemp &= ~(0x01<<b);
+		}
+		**IO_ppbDCDest = bTemp;	
+		if(7==b) {
+			(*IO_ppbDCDest) += 1;
+		}		
+		break;
+		}
+	case 2:
+		{
+		unsigned char bTemp;
+		unsigned char b=(I_dwDestX&0x3);
+		
+		bTemp = **IO_ppbDCDest;
+		bTemp &= ~(0x3<<(b<<1));
+		bTemp |= L_dwPixelVal<<(b<<1);
+		**IO_ppbDCDest = bTemp;	
+		if(3==b) {
+			(*IO_ppbDCDest) += 1;
+		}		
+		break;
+		}		
+	case 8:
+		{
+		**((unsigned char **)IO_ppbDCDest) = (unsigned char)(L_dwPixelVal&0x000000ff);
+		(*IO_ppbDCDest) += 1;
+		break;
+		}
+	case 16:
+		{
+		**((unsigned short **)IO_ppbDCDest) = (unsigned short)(L_dwPixelVal&0x0000ffff);
+		(*IO_ppbDCDest) += 2;
+		break;
+		}
+		
+	default:
+		break;
+	
+	}
+}
+
 
 
 static inline unsigned long _epdfbdc_get_img_pixelvalue(EPDFB_DC *I_pEPD_dc,
@@ -546,6 +856,9 @@ static inline void _epdfbdc_set_pixel(EPDFB_DC *pEPD_dc,
 	
 	L_dwPixelVal = _pixel_value_convert(dwPixelVal,bSrcBitsPerPixel,pEPD_dc->bPixelBits);
 	bDestBitsPerPixel = pEPD_dc->bPixelBits;
+	
+	//DBG_MSG("(%d,%d)=0x%x",dwX,dwY,L_dwPixelVal);
+	
 	if( 4 == bDestBitsPerPixel ) {
 		volatile unsigned char *pbDCDest;
 		unsigned char bTemp,bPixelVal;
@@ -601,19 +914,50 @@ static inline void _epdfbdc_set_pixel(EPDFB_DC *pEPD_dc,
 }
 
 
-EPDFB_DC_RET epdfbdc_put_fbimg(EPDFB_DC *pEPD_dc,
-	EPDFB_IMG *pEPD_img,EPDFB_ROTATE_T tRotateDegree)
+//
+#define GETIMG_PIXEL_METHOD		2
+
+EPDFB_DC_RET epdfbdc_put_dcimg(EPDFB_DC *pEPD_dc,
+	EPDFB_DC *pEPD_dcimg,EPDFB_ROTATE_T tRotateDegree,
+	unsigned long I_dwDCimgX,unsigned long I_dwDCimgY,
+	unsigned long I_dwDCimgW,unsigned long I_dwDCimgH,
+	unsigned long I_dwDCPutX,unsigned long I_dwDCPutY)
 {
 	EPDFB_DC_RET tRet=EPDFB_DC_SUCCESS;
 	
-	unsigned long dwImgW,dwImgH,dwDCH,dwDCW;
-	unsigned long dwImgX,dwImgY;
+	unsigned long dwDCH,dwDCW;
+	
+	//unsigned long dwImgW,dwImgH;
+	//unsigned long dwImgX,dwImgY;
+	
 	unsigned char bImgPixelBits;
-	unsigned long dwImgWidthBytes;
 	unsigned long dwDCWidthBytes;
 	unsigned long dwX,dwY,dwEPD_dc_flags;
-	//int tick=jiffies;
+	unsigned long dwSrcX,dwSrcY;
 
+	unsigned long h,w;// image offset of x,y .
+	
+	unsigned long dwWHidden,dwHHidden;
+	
+	unsigned char *pbDCRow;
+	unsigned char *pbImgRow;
+	
+	//int tick=jiffies;
+	unsigned long dwImgWidthBytes;
+
+	
+	#if (GETIMG_PIXEL_METHOD==1)
+	EPDFB_IMG tEPD_img,*pEPD_img=&tEPD_img;
+	pEPD_img->dwX = I_dwDCimgX;
+	pEPD_img->dwY = I_dwDCimgY;
+	pEPD_img->dwW = pEPD_dcimg->dwWidth+pEPD_dcimg->dwFBWExtra;
+	pEPD_img->dwH = pEPD_dcimg->dwHeight+pEPD_dcimg->dwFBHExtra;
+	pEPD_img->bPixelBits = pEPD_dcimg->bPixelBits;
+	pEPD_img->pbImgBuf = pEPD_dcimg->pbDCbuf;
+	#endif //] (GETIMG_PIXEL_METHOD==1)
+	
+
+	dwImgWidthBytes = pEPD_dcimg->dwDCWidthBytes;//pEPD_dc->bPixelBits/8
 	GALLEN_DBGLOCAL_BEGIN();
 
 	if(!CHK_EPDFB_DC(pEPD_dc)) {
@@ -623,15 +967,15 @@ EPDFB_DC_RET epdfbdc_put_fbimg(EPDFB_DC *pEPD_dc,
 		return EPDFB_DC_OBJECTERR;
 	}
 	
-	dwImgW=pEPD_img->dwW,dwImgH=pEPD_img->dwH;
 	
-	dwImgX=pEPD_img->dwX,dwImgY=pEPD_img->dwY;
 	
-	dwDCH=pEPD_dc->dwHeight ;
-	dwDCW=pEPD_dc->dwWidth ;
+	dwWHidden = pEPD_dc->dwFBWExtra;
+	dwHHidden = pEPD_dc->dwFBHExtra;
+	dwDCH=pEPD_dc->dwHeight + dwHHidden;
+	dwDCW=pEPD_dc->dwWidth + dwWHidden;
 	dwEPD_dc_flags = pEPD_dc->dwFlags;
 	
-	bImgPixelBits=pEPD_img->bPixelBits;
+	bImgPixelBits=pEPD_dcimg->bPixelBits;
 	
 	//if(pEPD_dc->bPixelBits!=bImgPixelBits) {
 	//	GALLEN_DBGLOCAL_ESC();
@@ -640,19 +984,15 @@ EPDFB_DC_RET epdfbdc_put_fbimg(EPDFB_DC *pEPD_dc,
 	
 	//ASSERT(4==pEPD_dc->bPixelBits);
 	//ASSERT(4==bImgPixelBits);
-	//ASSERT(0==(dwImgW&0x1)); // image width must be even .
-	//ASSERT(0==(dwImgH&0x1)); // image heigh must be even .
+	//ASSERT(0==(I_dwDCimgW&0x1)); // image width must be even .
+	//ASSERT(0==(I_dwDCimgH&0x1)); // image heigh must be even .
 	
 	
-	dwImgWidthBytes = (dwImgW*bImgPixelBits)>>3;//pEPD_dc->bPixelBits/8
-	if((dwImgW*bImgPixelBits)&0x7) {
-		dwImgWidthBytes+=1;
-	}	
 	dwDCWidthBytes = pEPD_dc->dwDCWidthBytes;
 	
 
-	DBG_MSG("dc_flag=0x%08x,img pixbits=%d,dc pixbits=%d\n",
-		dwEPD_dc_flags,pEPD_img->bPixelBits,pEPD_dc->bPixelBits);
+	DBG_MSG("dc_flag=0x%08x,imgdc.w=%u,imgdc.h=%u,img.w=%u,img.h=%u,img pixbits=%d,dc pixbits=%d\n",
+		dwEPD_dc_flags,pEPD_dcimg->dwWidth,pEPD_dcimg->dwHeight,I_dwDCimgW,I_dwDCimgH,pEPD_dcimg->bPixelBits,pEPD_dc->bPixelBits);
 	DBG_MSG("IMG_Wbytes=%u,DC_Wbytes=%u\n",dwImgWidthBytes,dwDCWidthBytes);
 
 	switch(tRotateDegree) {
@@ -660,83 +1000,91 @@ EPDFB_DC_RET epdfbdc_put_fbimg(EPDFB_DC *pEPD_dc,
 		// left->right,up->down .
 
 		{
-			//unsigned char *pbImgSrc = pEPD_img->pbImgBuf;
-			//unsigned char *pbDCDest = pEPD_dc->pbDCbuf+(dwImgW>>1);//pEPD_dc->bPixelBits/8
-			//unsigned char *pbDCWr ;
-			
-			unsigned long w,h;//8/pEPD_dc->bPixelBits;
-			//unsigned long dwImgPixelIdx;
 			unsigned long dwPixelVal;
 			
-			pEPD_dc->dwDirtyOffsetStart = dwImgY*dwDCWidthBytes;
-			pEPD_dc->dwDirtyOffsetEnd = (dwImgY+dwImgH)*dwDCWidthBytes;
+			pEPD_dc->dwDirtyOffsetStart = I_dwDCimgY*dwDCWidthBytes;
+			pEPD_dc->dwDirtyOffsetEnd = (I_dwDCimgY+I_dwDCimgH)*dwDCWidthBytes;
 			
 			//dwImgPixelIdx = 0;
-			
-			for(h=0;h<dwImgH;h+=1) {
-				dwY = dwImgY+h;
+			for(h=0;h<I_dwDCimgH;h+=1) {
+				
+				dwSrcY = I_dwDCimgY+h;
+				dwY = I_dwDCPutY+h;
 				if(dwY>=dwDCH) {
 					continue ;
 				}
-				for(w=0;w<dwImgW;w+=1) {
+				//GALLEN_DBGLOCAL_PRINTMSG("y=%d,x=",h);
+				
+				pbImgRow = _epdfbdc_get_dcimg_ptr(pEPD_dcimg,I_dwDCimgX,dwSrcY);
+				
+				for(w=0;w<I_dwDCimgW;w+=1) {
 					
-					dwX = dwImgX+w;
+					dwSrcX = I_dwDCimgX+w;
+					dwX = I_dwDCPutX+w;
 					if(dwX>=dwDCW) {
 						continue ;
 					}
 					
+					//GALLEN_DBGLOCAL_PRINTMSG("%d,",w,h);
+					#if (GETIMG_PIXEL_METHOD==1)//[
 					dwPixelVal = _epdfbdc_get_img_pixelvalue(pEPD_dc,pEPD_img,w,h,dwImgWidthBytes);
-						
+					#else //][!(GETIMG_PIXEL_METHOD==1)
+					dwPixelVal = _epdfbdc_get_img_pixelvalue_from_ptr(pEPD_dcimg,&pbImgRow,dwSrcX);
+					#endif //]
 					
 					if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPLEFTPIXEL && 0==w) {
 						// skip left pixel output.
 					}
-					else if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPRIGHTPIXEL && dwImgW==w+1) {
+					else if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPRIGHTPIXEL && I_dwDCimgW==w+1) {
 						// skip right pixel output.
 					}
 					else {
 						_epdfbdc_set_pixel(pEPD_dc,dwX,dwY,dwPixelVal,bImgPixelBits);
 					}
 				}
+				//GALLEN_DBGLOCAL_PRINTMSG("\n,",w,h);
 			}
 		}		
 		break;
 	case EPDFB_R_90:GALLEN_DBGLOCAL_RUNLOG(3);
 		// up->down,right->left .
 		{
-			unsigned char *pbImgSrc = pEPD_img->pbImgBuf;
-			//unsigned char *pbDCDest = pEPD_dc->pbDCbuf + (dwImgW>>1);//pEPD_dc->bPixelBits/8
-			//unsigned char *pbDCWr ;
-			
-			unsigned long w,h;//8/pEPD_dc->bPixelBits;
-			//unsigned long dwImgPixelIdx;
 			unsigned long dwPixelVal;
 
-			pEPD_dc->dwDirtyOffsetStart = dwImgX*dwDCWidthBytes;
-			pEPD_dc->dwDirtyOffsetEnd = (dwImgX+dwImgW)*dwDCWidthBytes;
+			pEPD_dc->dwDirtyOffsetStart = I_dwDCimgX*dwDCWidthBytes;
+			pEPD_dc->dwDirtyOffsetEnd = (I_dwDCimgX+I_dwDCimgW)*dwDCWidthBytes;
 
 			
 			//dwImgPixelIdx = 0;
 
-			for(h=0;h<dwImgH;h+=1) {
-				dwX = dwDCW-h-1-dwImgY;
+			for(h=0;h<I_dwDCimgH;h+=1) {
+				dwSrcY = I_dwDCimgY+h;
+				dwX = dwDCW-h-1-I_dwDCPutY-dwWHidden;
 				if(dwX>=dwDCW) {
 					continue ;
 				}
 				
-				for(w=0;w<dwImgW;w+=1) {
-					dwY = dwImgX+w;
+				pbImgRow = _epdfbdc_get_dcimg_ptr(pEPD_dcimg,I_dwDCimgX,dwSrcY);
+
+				for(w=0;w<I_dwDCimgW;w+=1) {
+
+					dwSrcX = I_dwDCimgX+w;
+					dwY = I_dwDCPutX+w;
 					if(dwY>=dwDCH) {
 						continue ;
 					}
 					
+					#if (GETIMG_PIXEL_METHOD==1) //[
 					dwPixelVal = _epdfbdc_get_img_pixelvalue(pEPD_dc,pEPD_img,w,h,dwImgWidthBytes);
+					#else //][
+					dwPixelVal = _epdfbdc_get_img_pixelvalue_from_ptr(pEPD_dcimg,&pbImgRow,dwSrcX);
+					#endif //]
 				
 					if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPLEFTPIXEL && 0==w) {
 						// skip left pixel output.
 						//DBG_MSG("[[%d]]",w);
 					}
-					else if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPRIGHTPIXEL && dwImgW==w+1) {
+					else if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPRIGHTPIXEL && I_dwDCimgW==w+1) {
 						// skip right pixel output.
 						//DBG_MSG("{{%d}}",w);
 					}
@@ -750,35 +1098,40 @@ EPDFB_DC_RET epdfbdc_put_fbimg(EPDFB_DC *pEPD_dc,
 	case EPDFB_R_180:GALLEN_DBGLOCAL_RUNLOG(4);
 		// right->left,down->up .
 		{
-			volatile unsigned char *pbImgSrc = pEPD_img->pbImgBuf;
-			//unsigned char *pbDCDest = pEPD_dc->pbDCbuf+(dwImgW>>1);//pEPD_dc->bPixelBits/8
-			//unsigned char *pbDCWr ;
-			
-			volatile unsigned long w,h;//8/pEPD_dc->bPixelBits;
-			//volatile unsigned long dwImgPixelIdx;
 			volatile unsigned long dwPixelVal;
 			
-			pEPD_dc->dwDirtyOffsetStart = (dwDCH-dwImgY-dwImgH)*dwDCWidthBytes;
-			pEPD_dc->dwDirtyOffsetEnd = (dwDCH-dwImgY)*dwDCWidthBytes;
+			pEPD_dc->dwDirtyOffsetStart = (dwDCH-I_dwDCimgY-I_dwDCimgH)*dwDCWidthBytes;
+			pEPD_dc->dwDirtyOffsetEnd = (dwDCH-I_dwDCimgY)*dwDCWidthBytes;
 			
 			//dwImgPixelIdx = 0;
-			for(h=0;h<dwImgH;h+=1) {
-				dwY = dwDCH-h-1-dwImgY;
+			for(h=0;h<I_dwDCimgH;h+=1) {
+
+				dwSrcY = I_dwDCimgY+h;
+				dwY = dwDCH-h-1-I_dwDCPutY-dwHHidden;
 				if(dwY>=dwDCH) {
 					continue ;
 				}					
+
+				pbImgRow = _epdfbdc_get_dcimg_ptr(pEPD_dcimg,I_dwDCimgX,dwSrcY);
+
+				//DBG_MSG("y=%d->",I_dwDCimgH-h-1);
+				for(w=0;w<I_dwDCimgW;w+=1) {
+					dwSrcX = I_dwDCimgX+w;
+					dwX = dwDCW-w-1-I_dwDCPutX-dwWHidden;
 				//DBG_MSG("y=%d->",dwImgH-h-1);
-				for(w=0;w<dwImgW;w+=1) {
-					dwX = dwDCW-w-1-dwImgX;
 					if(dwX>=dwDCW) {
 						continue ;
 					}
 					
+					#if (GETIMG_PIXEL_METHOD==1)//[
 					dwPixelVal = _epdfbdc_get_img_pixelvalue(pEPD_dc,pEPD_img,w,h,dwImgWidthBytes);
+					#else //][
+					dwPixelVal = _epdfbdc_get_img_pixelvalue_from_ptr(pEPD_dcimg,&pbImgRow,dwSrcX);
+					#endif //]
 					if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPLEFTPIXEL && 0==w) {
 						// skip left pixel output.
 					}
-					else if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPRIGHTPIXEL && dwImgW==w+1) {
+					else if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPRIGHTPIXEL && I_dwDCimgW==w+1) {
 						// skip right pixel output.
 					}
 					else {
@@ -791,34 +1144,40 @@ EPDFB_DC_RET epdfbdc_put_fbimg(EPDFB_DC *pEPD_dc,
 	case EPDFB_R_270:GALLEN_DBGLOCAL_RUNLOG(5);
 		// down->up,left->right .
 		{
-			unsigned char *pbImgSrc = pEPD_img->pbImgBuf;
-			//unsigned char *pbDCDest = pEPD_dc->pbDCbuf + (dwImgW>>1);//pEPD_dc->bPixelBits/8
-			//unsigned char *pbDCWr ;
-			
-			unsigned long w,h;//8/pEPD_dc->bPixelBits;
-			//unsigned long dwImgPixelIdx;
 			unsigned long dwPixelVal;
 			
-			pEPD_dc->dwDirtyOffsetStart = (dwDCH-dwImgX-dwImgW)*dwDCWidthBytes;
-			pEPD_dc->dwDirtyOffsetEnd = (dwDCH-dwImgX)*dwDCWidthBytes;
+			pEPD_dc->dwDirtyOffsetStart = (dwDCH-I_dwDCimgX-I_dwDCimgW)*dwDCWidthBytes;
+			pEPD_dc->dwDirtyOffsetEnd = (dwDCH-I_dwDCimgX)*dwDCWidthBytes;
 			
 			//dwImgPixelIdx = 0;
-			for(h=0;h<dwImgH;h+=1) {
-				dwX = h+dwImgY;
+			for(h=0;h<I_dwDCimgH;h+=1) {
+
+				dwSrcY = I_dwDCimgY+h;
+				dwX = h+I_dwDCPutY;
 				if(dwX>=dwDCW) {
 					continue ;
 				}
-				for(w=0;w<dwImgW;w+=1) {
-					dwY = dwDCH-w-1-dwImgX;
+
+				pbImgRow = _epdfbdc_get_dcimg_ptr(pEPD_dcimg,I_dwDCimgX,dwSrcY);
+
+				for(w=0;w<I_dwDCimgW;w+=1) {
+
+					dwSrcX = I_dwDCimgX+w;
+					dwY = dwDCH-w-1-I_dwDCPutX-dwHHidden;
 					if(dwY>=dwDCH) {
 						continue ;
 					}					
 					
+					#if (GETIMG_PIXEL_METHOD==1) //[
 					dwPixelVal = _epdfbdc_get_img_pixelvalue(pEPD_dc,pEPD_img,w,h,dwImgWidthBytes);
+					#else //][
+					dwPixelVal = _epdfbdc_get_img_pixelvalue_from_ptr(pEPD_dcimg,&pbImgRow,dwSrcX);
+					#endif //]
+
 					if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPLEFTPIXEL && 0==w) {
 						// skip left pixel output.
 					}
-					else if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPRIGHTPIXEL && dwImgW==w+1) {
+					else if(dwEPD_dc_flags&EPDFB_DC_FLAG_SKIPRIGHTPIXEL && I_dwDCimgW==w+1) {
 						// skip right pixel output.
 					}
 					else {
@@ -836,6 +1195,24 @@ EPDFB_DC_RET epdfbdc_put_fbimg(EPDFB_DC *pEPD_dc,
 	return tRet;
 }
 
+EPDFB_DC_RET epdfbdc_put_fbimg(EPDFB_DC *pEPD_dc,
+	EPDFB_IMG *pEPD_img,EPDFB_ROTATE_T tRotateDegree)
+{
+	EPDFB_DC *ptEPD_dcimg ;
+	EPDFB_DC_RET tRet;
+	
+	ptEPD_dcimg = epdfbdc_create_ex(pEPD_img->dwW,pEPD_img->dwH,\
+		pEPD_img->bPixelBits,pEPD_img->pbImgBuf,pEPD_dc->dwFlags);
+		
+	tRet = epdfbdc_put_dcimg(pEPD_dc,ptEPD_dcimg,tRotateDegree,
+		0,0,pEPD_img->dwW,pEPD_img->dwH,pEPD_img->dwX,pEPD_img->dwY);
+
+	epdfbdc_delete(ptEPD_dcimg);
+	
+	return tRet;
+}
+
+
 EPDFB_DC_RET epdfbdc_get_rotate_active(EPDFB_DC *I_pEPD_dc,
 	unsigned long *IO_pdwX,unsigned long *IO_pdwY,
 	unsigned long *IO_pdwW,unsigned long *IO_pdwH,
@@ -844,6 +1221,7 @@ EPDFB_DC_RET epdfbdc_get_rotate_active(EPDFB_DC *I_pEPD_dc,
 	EPDFB_DC_RET tRet=EPDFB_DC_SUCCESS;
 	unsigned long dwX,dwY,dwH,dwW;
 	unsigned long dwDCW,dwDCH;
+	unsigned dwWHidden,dwHHidden;
 	
 	if(!CHK_EPDFB_DC(I_pEPD_dc)) {
 		ERR_MSG("%s(%d): object handle error !\n",__FUNCTION__,__LINE__);
@@ -854,28 +1232,35 @@ EPDFB_DC_RET epdfbdc_get_rotate_active(EPDFB_DC *I_pEPD_dc,
 		return EPDFB_DC_PARAMERR;
 	}
 	
-	dwDCH=I_pEPD_dc->dwHeight ;
-	dwDCW=I_pEPD_dc->dwWidth ;
+	dwWHidden = I_pEPD_dc->dwFBWExtra;
+	dwHHidden = I_pEPD_dc->dwFBHExtra;
+	dwDCH=I_pEPD_dc->dwHeight + dwHHidden;
+	dwDCW=I_pEPD_dc->dwWidth + dwWHidden;
 	
 	switch(I_tRotate)
 	{
+	default :
 	case EPDFB_R_0:
+		dwX = (*IO_pdwX);
+		dwY = (*IO_pdwY);
+		dwW = (*IO_pdwW);
+		dwH = (*IO_pdwH);
 		return tRet;
 	case EPDFB_R_90:
-		dwX = dwDCW-(*IO_pdwY)-(*IO_pdwH);
+		dwX = dwDCW-(*IO_pdwY)-(*IO_pdwH)-dwWHidden;
 		dwY = (*IO_pdwX);
 		dwW = (*IO_pdwH);
 		dwH = (*IO_pdwW);
 		break;
 	case EPDFB_R_180:
-		dwX = dwDCW-(*IO_pdwX)-(*IO_pdwW);
-		dwY = dwDCH-(*IO_pdwY)-(*IO_pdwH);
-		dwW = (*IO_pdwH);
-		dwH = (*IO_pdwW);
+		dwX = dwDCW-(*IO_pdwX)-(*IO_pdwW)-dwWHidden;
+		dwY = dwDCH-(*IO_pdwY)-(*IO_pdwH)-dwHHidden;
+		dwW = (*IO_pdwW);
+		dwH = (*IO_pdwH);
 		break;
 	case EPDFB_R_270:
 		dwX = (*IO_pdwY);
-		dwY = dwDCH-(*IO_pdwW)-(*IO_pdwX);
+		dwY = dwDCH-(*IO_pdwW)-(*IO_pdwX)-dwHHidden;
 		dwW = (*IO_pdwH);
 		dwH = (*IO_pdwW);
 		break;

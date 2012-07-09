@@ -27,6 +27,8 @@
 #include <sound/initval.h>
 #include <mach/hardware.h>
 
+#include <linux/gallen_dbg.h>
+
 #include "alc5623.h"
 
 struct alc5623_priv {
@@ -52,11 +54,24 @@ struct alc5623_priv {
 	struct snd_pcm_substream *slave_substream;
 };
 
+//Gallen 20100715 :  follow ALC5623 dac volume 5 bits table .
+static const unsigned char gbRegVolTableA[32] = {
+	0x1f,0x1e,0x1d,0x1c,0x1b,0x1a,0x19,0x18,0x17,0x16,
+	0x15,0x14,0x13,0x12,0x11,0x10,0x0f,0x0e,0x0d,0x0c,
+	0x0b,0x0a,0x09,0x08,0x07,0x06,0x05,0x04,0x03,0x02,
+	0x01,0x00	 
+};
+
+static volatile unsigned char gbVolR=0xB8,gbVolL=0xB8; // default is 0 db .
+
 static int alc5623_set_bias_level(struct snd_soc_codec *codec,
 				   enum snd_soc_bias_level level);
+static int alc5623_mute (struct snd_soc_codec *codec , int mute);
 
 #define ALC5623_MAX_CACHED_REG ALC5623_CHIP_SHORT_CTRL
 static u16 alc5623_regs[(ALC5623_MAX_CACHED_REG >> 1) + 1];
+
+static struct snd_soc_codec *alc5623_codec;
 
 /*
  * Schedule clock to be turned off or turn clock on.
@@ -132,7 +147,7 @@ static int alc5623_write(struct snd_soc_codec *codec, unsigned int reg,
 	alc5623->need_clk_for_access = 1;
 	alc5623_clock_gating(codec, 1);
 	pr_debug("w r:%02x,v:%04x\n", reg, value);
-printk ("[%s-%d] REG0x%02X 0x%04X\n",__FUNCTION__,__LINE__,reg,value);
+//printk ("[%s-%d] REG0x%02X 0x%04X\n",__FUNCTION__,__LINE__,reg,value);
 	buf[0] = reg & 0xff;
 	buf[1] = (value & 0xff00) >> 8;
 	buf[2] = value & 0xff;
@@ -158,6 +173,52 @@ printk ("[%s-%d] REG0x%02X 0x%04X\n",__FUNCTION__,__LINE__,reg,value);
 	return i2c_ret;
 
 
+}
+
+int alc5623_get_volume(void)
+{
+	int iCurVolume=(int)(gbVolL);
+	DBG_MSG("%s:iCurVolume=%d\n",__FUNCTION__,iCurVolume);
+	return iCurVolume;
+}
+
+int alc5623_set_volume(int iSetVol)
+{
+	int iOldVolume=(int)(gbVolL);
+
+	struct snd_soc_codec *codec ;
+	unsigned short wTemp;
+	unsigned char bTemp = (unsigned char)iSetVol;
+	int iChk;
+	
+	if(alc5623_codec) {
+		//unsigned char bTempL = (gbVolL>>3)&0x1f,bTempR = (gbVolR>>3)&0x1f;
+		
+		codec = alc5623_codec ;
+	
+		//wTemp=(unsigned short)((gbRegVolTableA[bTempL]<<8&0xff00)|gbRegVolTableA[bTempR])&0x1f1f;
+		//iChk = alc5623_write(codec, (unsigned int)0x0C,(unsigned int)(0xe000|wTemp));// set DAC vol mute
+		if (bTemp && (0 == gbVolL))
+			alc5623_mute (codec, 0);
+		
+		gbVolL = gbVolR = bTemp;
+		if (0 == bTemp) {
+			alc5623_mute (codec, 1);
+		}
+		else {
+			bTemp = (bTemp>>3)&0x1f;
+			wTemp=(unsigned short)((gbRegVolTableA[bTemp]<<8&0xff00)|gbRegVolTableA[bTemp]);
+			DBG_MSG("%s: write alc5623 (0x%x,0x%x),0x%x,0x%x\n",__FUNCTION__,gbVolL,gbVolR,bTemp,wTemp);
+			//iChk = alc5623_write(codec, (unsigned int)0x0C,(unsigned int)(0xe000|wTemp));// set DAC vol 
+			iChk = alc5623_write(codec, (unsigned int)0x0C,(unsigned int)(wTemp));// set DAC vol unmute .
+		}
+	}
+	else {
+		gbVolL = gbVolR = bTemp;
+		WARNING_MSG("sgtl5000 : %s fail -> codec not probe ready !\n ",__FUNCTION__);
+	}
+	return iOldVolume;
+	
 }
 
 static int all_reg[] = {
@@ -222,19 +283,19 @@ static const struct snd_kcontrol_new dac_mux =
 SOC_DAPM_ENUM("DAC Mux", dac_enum);
 
 static const struct snd_soc_dapm_widget alc5623_dapm_widgets[] = {
-	SND_SOC_DAPM_INPUT("LINE_IN"),
-	SND_SOC_DAPM_INPUT("MIC_IN"),
+//	SND_SOC_DAPM_INPUT("LINE_IN"),
+//	SND_SOC_DAPM_INPUT("MIC_IN"),
 
 	SND_SOC_DAPM_OUTPUT("HP_OUT"),
 	SND_SOC_DAPM_OUTPUT("LINE_OUT"),
 
-	SND_SOC_DAPM_PGA("HP", ALC5623_CHIP_ANA_CTRL, 4, 1, NULL, 0),
-	SND_SOC_DAPM_PGA("LO", ALC5623_CHIP_ANA_CTRL, 8, 1, NULL, 0),
+//	SND_SOC_DAPM_PGA("HP", ALC5623_CHIP_ANA_CTRL, 4, 1, NULL, 0),
+//	SND_SOC_DAPM_PGA("LO", ALC5623_CHIP_ANA_CTRL, 8, 1, NULL, 0),
 
-	SND_SOC_DAPM_MUX("ADC Mux", SND_SOC_NOPM, 0, 0, &adc_mux),
-	SND_SOC_DAPM_MUX("DAC Mux", SND_SOC_NOPM, 0, 0, &dac_mux),
+//	SND_SOC_DAPM_MUX("ADC Mux", SND_SOC_NOPM, 0, 0, &adc_mux),
+//	SND_SOC_DAPM_MUX("DAC Mux", SND_SOC_NOPM, 0, 0, &dac_mux),
 
-	SND_SOC_DAPM_ADC("ADC", "Capture", ALC5623_CHIP_DIG_POWER, 6, 0),
+//	SND_SOC_DAPM_ADC("ADC", "Capture", ALC5623_CHIP_DIG_POWER, 6, 0),
 	SND_SOC_DAPM_DAC("DAC", "Playback", SND_SOC_NOPM, 0, 0),
 };
 
@@ -274,6 +335,7 @@ static int dac_info_volsw(struct snd_kcontrol *kcontrol,
 static int dac_get_volsw(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_value *ucontrol)
 {
+#if 0
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	int reg, l, r;
 
@@ -289,7 +351,7 @@ static int dac_get_volsw(struct snd_kcontrol *kcontrol,
 
 	ucontrol->value.integer.value[0] = l;
 	ucontrol->value.integer.value[1] = r;
-
+#endif
 	return 0;
 }
 
@@ -347,13 +409,8 @@ static const struct snd_kcontrol_new alc5623_snd_controls[] = {
 		   1),
 };
 
-static int alc5623_digital_mute(struct snd_soc_dai *codec_dai, int mute)
+static int alc5623_mute (struct snd_soc_codec *codec , int mute)
 {
-	struct snd_soc_codec *codec = codec_dai->codec;
-
-	/* the digital mute covers the HiFi and Voice DAC's on the alc5623.
-	 * make sure we check if they are not both active when we mute */
-printk ("[%s-%d] %d\n",__FUNCTION__,__LINE__, mute);
 	if (mute) {
 		alc5623_write(codec, 0x5E, 0x0200);// Enable HP depop2
 		msleep (20);	// delay 1ms
@@ -372,7 +429,37 @@ printk ("[%s-%d] %d\n",__FUNCTION__,__LINE__, mute);
 		alc5623_write(codec, 0x3A, 0x8130);// Enable HP Amp
 		alc5623_write(codec, 0x5E, 0x0000);// Disable HP depop2
 	}
+}
 
+static int alc5623_digital_mute(struct snd_soc_dai *codec_dai, int mute)
+{
+#if 1
+	alc5623_mute (codec_dai->codec, mute);
+#else
+	struct snd_soc_codec *codec = codec_dai->codec;
+
+	/* the digital mute covers the HiFi and Voice DAC's on the alc5623.
+	 * make sure we check if they are not both active when we mute */
+//printk ("[%s-%d] %d\n",__FUNCTION__,__LINE__, mute);
+	if (mute) {
+		alc5623_write(codec, 0x5E, 0x0200);// Enable HP depop2
+		msleep (20);	// delay 1ms
+		alc5623_write(codec, 0x3A, 0x8110);// Disable HP out
+		alc5623_write(codec, 0x3A, 0x8100);// Disable HP Amp
+		alc5623_write(codec, 0x04, 0x8080);// HP out mute
+		alc5623_write(codec, 0x5E, 0x0000);// Disable HP depop2
+	}
+	else {
+		alc5623_write(codec, 0x5E, 0x0200);// Enable HP depop2
+		alc5623_write(codec, 0x3A, 0x8110);// Disable HP out
+		alc5623_write(codec, 0x3A, 0x8100);// Disable HP Amp
+		alc5623_write(codec, 0x04, 0x0000);// set volume
+		msleep (20);	// delay 1ms
+		alc5623_write(codec, 0x3A, 0x8120);// Enable HP out
+		alc5623_write(codec, 0x3A, 0x8130);// Enable HP Amp
+		alc5623_write(codec, 0x5E, 0x0000);// Disable HP depop2
+	}
+#endif
 	return 0;
 }
 
@@ -381,7 +468,6 @@ static int alc5623_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	struct alc5623_priv *alc5623 = snd_soc_codec_get_drvdata(codec);
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	pr_debug("%s:fmt=%08x\n", __func__, fmt);
 	
 printk ("[%s-%d] fmt=%08x\n",__FUNCTION__,__LINE__,fmt);
@@ -395,7 +481,8 @@ printk ("[%s-%d] fmt=%08x\n",__FUNCTION__,__LINE__,fmt);
 	alc5623_write(codec, 0x5E, 0x0200);// Enable HP depop2
 	// delay > 300 ms
 	msleep (400);
-	alc5623_write(codec, 0x0C, 0x0808);// set DAC vol 0db
+//	alc5623_write(codec, 0x0C, 0x0808);// set DAC vol 0db
+	alc5623_write(codec, 0x0C, (unsigned short)((gbRegVolTableA[(gbVolL>>3)]<<8&0xff00)|gbRegVolTableA[(gbVolR>>3)]));
 	alc5623_write(codec, 0x1C, 0xD300);// set hp vol io select
 	alc5623_write(codec, 0x34, 0x0000);// 
 	alc5623_write(codec, 0x36, 0x1A69);// 
@@ -483,7 +570,6 @@ static int alc5623_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 	struct snd_soc_codec *codec = codec_dai->codec;
 	struct alc5623_priv *alc5623 = snd_soc_codec_get_drvdata(codec);
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	switch (clk_id) {
 	case ALC5623_SYSCLK:
 		alc5623->sysclk = freq;
@@ -500,13 +586,13 @@ static int alc5623_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 static int alc5623_pcm_prepare(struct snd_pcm_substream *substream,
 				struct snd_soc_dai *dai)
 {
+#if 0
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_device *socdev = rtd->socdev;
 	struct snd_soc_codec *codec = socdev->card->codec;
 	struct alc5623_priv *alc5623 = snd_soc_codec_get_drvdata(codec);
 	int reg;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	reg = alc5623_read(codec, ALC5623_CHIP_DIG_POWER);
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		reg |= ALC5623_I2S_IN_POWERUP;
@@ -523,7 +609,7 @@ static int alc5623_pcm_prepare(struct snd_pcm_substream *substream,
 			reg |= ALC5623_ADC_STEREO;
 		alc5623_write(codec, ALC5623_CHIP_ANA_POWER, reg);
 	}
-
+#endif
 	return 0;
 }
 
@@ -536,7 +622,6 @@ static int alc5623_pcm_startup(struct snd_pcm_substream *substream,
 	struct alc5623_priv *alc5623 = snd_soc_codec_get_drvdata(codec);
 	struct snd_pcm_runtime *master_runtime;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		alc5623->playback_active++;
 	else
@@ -582,7 +667,6 @@ static void alc5623_pcm_shutdown(struct snd_pcm_substream *substream,
 	struct alc5623_priv *alc5623 = snd_soc_codec_get_drvdata(codec);
 	int reg, dig_pwr, ana_pwr;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		alc5623->playback_active--;
 	else
@@ -593,6 +677,7 @@ static void alc5623_pcm_shutdown(struct snd_pcm_substream *substream,
 
 	alc5623->slave_substream = NULL;
 
+#if 0
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
 		ana_pwr = alc5623_read(codec, ALC5623_CHIP_ANA_POWER);
 		ana_pwr &= ~(ALC5623_ADC_POWERUP | ALC5623_ADC_STEREO);
@@ -611,6 +696,7 @@ static void alc5623_pcm_shutdown(struct snd_pcm_substream *substream,
 		reg &= ~ALC5623_I2S_MASTER;
 		alc5623_write(codec, ALC5623_CHIP_I2S_CTRL, reg);
 	}
+#endif
 }
 
 /*
@@ -633,7 +719,6 @@ static int alc5623_pcm_hw_params(struct snd_pcm_substream *substream,
 	int reg;
 	int sys_fs;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	pr_debug("%s channels=%d\n", __func__, channels);
 
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
@@ -666,6 +751,7 @@ printk ("[%s-%d] SNDRV_PCM_FORMAT_S32_LE\n",__FUNCTION__,__LINE__);
 	alc5623_write(codec, 0x34, i2sctl);
 
 	printk ("[%s-%d] set sampling rate %d\n",__FUNCTION__,__LINE__, params_rate(params));
+#if 1
 	// 26M MCLK
 	if (48000 == params_rate(params)) {
 		alc5623_write(codec, 0x44, 0x4227);// PLL control	Fout = 24.6M for 48K & 32K
@@ -679,6 +765,21 @@ printk ("[%s-%d] SNDRV_PCM_FORMAT_S32_LE\n",__FUNCTION__,__LINE__);
 		alc5623_write(codec, 0x44, 0x4428);// MCLK = 13M PLL control	Fout = 22.667M for 44.1K
 		alc5623_write(codec, 0x36, 0x1A69);// 
 	}
+#else
+	// 4M MCLK
+	if (48000 == params_rate(params)) {
+		alc5623_write(codec, 0x44, 0x9221);// PLL control	Fout = 24.6M for 48K
+		alc5623_write(codec, 0x36, 0x1A69);// 
+	}
+	else if (32000 == params_rate(params)) {
+		alc5623_write(codec, 0x44, 0x9221);// PLL control	Fout = 24.6M for 32K
+		alc5623_write(codec, 0x36, 0x1C6B);// 
+	}
+	else {
+		alc5623_write(codec, 0x44, 0xB322);// PLL control	Fout = 22.667M for 44.1K
+		alc5623_write(codec, 0x36, 0x1A69);// 
+	}
+#endif
 
 	if (alc5623->master)
 		alc5623_write(codec, 0x42, 0x8001);// clock source MCLK, PLL from MCLK
@@ -699,14 +800,9 @@ static int alc5623_set_bias_level(struct snd_soc_codec *codec,
 	return 0;
 }
 
-#define ALC5623_RATES (SNDRV_PCM_RATE_8000 |\
-		      SNDRV_PCM_RATE_11025 |\
-		      SNDRV_PCM_RATE_16000 |\
-		      SNDRV_PCM_RATE_22050 |\
-		      SNDRV_PCM_RATE_32000 |\
+#define ALC5623_RATES (SNDRV_PCM_RATE_32000 |\
 		      SNDRV_PCM_RATE_44100 |\
-		      SNDRV_PCM_RATE_48000 |\
-		      SNDRV_PCM_RATE_96000)
+		      SNDRV_PCM_RATE_48000)
 
 #define ALC5623_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |\
 			SNDRV_PCM_FMTBIT_S20_3LE |\
@@ -751,7 +847,6 @@ static void alc5623_work(struct work_struct *work)
 		container_of(work, struct snd_soc_codec, delayed_work.work);
 	struct alc5623_priv *alc5623 = snd_soc_codec_get_drvdata(codec);
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (!alc5623->need_clk_for_access &&
 	    !alc5623->need_clk_for_bias &&
 	    alc5623->clock_on) {
@@ -770,7 +865,6 @@ static int alc5623_resume(struct platform_device *pdev)
 	return 0;
 }
 
-static struct snd_soc_codec *alc5623_codec;
 
 /*
  * initialise the ALC5623 driver
@@ -787,7 +881,6 @@ static int alc5623_probe(struct platform_device *pdev)
 	int ret = 0;
 	u32 val;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	socdev->card->codec = alc5623_codec;
 
 	if ((setup != NULL) && (setup->clock_enable != NULL)) {
@@ -836,7 +929,6 @@ static int run_delayed_work(struct delayed_work *dwork)
 {
 	int ret;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	/* cancel any work waiting to be queued. */
 	ret = cancel_delayed_work(dwork);
 
@@ -855,7 +947,6 @@ static int alc5623_remove(struct platform_device *pdev)
 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
 	struct snd_soc_codec *codec = socdev->card->codec;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (codec->control_data)
 		alc5623_set_bias_level(codec, SND_SOC_BIAS_OFF);
 	run_delayed_work(&codec->delayed_work);

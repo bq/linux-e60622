@@ -85,28 +85,38 @@
 
 
 const char gszNtxHwCfgMagic[]="HW CONFIG ";// hw config tool magic .
-const char gszNtxHwCfgVersion[]="v0.7"; // hw config tool version .
+const char gszNtxHwCfgVersion[]="v1.3"; // hw config tool version .
 
 
 // field values table ...
-const char * gszPCBA[]={"E60800","E60810","E60820","E90800","E90810","E60830","E60850","E50800","E50810","E60860","E60MT2","E60M10","E60610","E60M00","E60M30","E60622"};
-const char * gszKeyPadA[]={"MX357","MX357+Wheel","MX357+Joystick","MX35-5inch","1Key","E60M10","E60M10+Touch","E60622"};
+const char * gszPCBA[]={"E60800","E60810","E60820","E90800","E90810","E60830","E60850",
+"E50800","E50810","E60860","E60MT2","E60M10","E60610","E60M00","E60M30","E60620","E60630","E60640","E50600",
+"E60680","E60610C","E60610D","E606A0","E60670","E606B0","E50620","Q70Q00","E50610"};
+const char * gszKeyPadA[]={"MX357","MX357+Wheel","MX357+Joystick","MX35-5inch","1Key","E60M10",
+"E60M10+Touch","E60620","E60630","E60640","E606A0","FL_Key","NO_Key"};
+/*
+ *
+ * 1Key : keypad layout only home key .
+ * FL_Key : keypad layout only FrontLight Key .
+ * NO_Key : no any key .
+ *  
+ */
 const char * gszAudioCodecA[]={"No","ALC5623"};//
 const char * gszAudioAmpA[]={"No","TPA2016"};//
-const char * gszWifiA[]={"No","AW-GH381","AW-GH321","GB9619","PW621","WC160","WC121"};//
+const char * gszWifiA[]={"No","AW-GH381","AW-GH321","GB9619","PW621","WC160","WC121","WC121A2"};//
 const char * gszBTA[]={"No","AW-GH381","AW-GH105"};//
 const char * gszMobileA[]={"No","Moto 3G"};//
-const char * gszTouchCtrlA[]={"No","TSC2004","Wacom Digitizer","Watop Digitizer","AUO-TP2","neonode"};//touch controller .
+const char * gszTouchCtrlA[]={"No","TSC2004","Wacom Digitizer","Watop Digitizer","AUO-TP2","neonode","PVI","ITE","neonode_v2"};//touch controller .
 const char * gszTouchTypeA[]={"No","R-Type","Digitizer","C-Type","IR-Type"};//
-const char * gszDisplayCtrlA[]={"S1D13521","S1D13522","K1900","M166E","MX508"};
-const char * gszDisplayPanelA[]={"6\" Left EPD","6\" Right EPD","9\" Right EPD","5\" Left EPD","5\" Right EPD","6\" Top EPD","6\" Bottom EPD"};
+const char * gszDisplayCtrlA[]={"S1D13521","S1D13522","K1900","M166E","MX508","K1901","MX508+TPS65185"};
+const char * gszDisplayPanelA[]={"6\" Left EPD","6\" Right EPD","9\" Right EPD","5\" Left EPD","5\" Right EPD","6\" Top EPD","6\" Bottom EPD","5\" Top EPD","5\" Bottom EPD"};
 const char * gszRSensorA[]={"No","Rotary Encoder","G Sensor"};//
 const char * gszMicroPA[]={"MSP430"};//
-const char * gszCustomerA[]={"No Brand","PBG","Greenbook","Inves","Carrefour","Startic","Elonex","Trio","Medion",\
-	"Kobo","Upg","Blade","Wolder","Chienhua","MVM","Catosabido","Gatosabido","Infibeam","Optical Storage","Icarus","ElBook"};//
+const char * gszCustomerA[]={"0","1","2","3","4","5","6","7","8",\
+	"9","10","11","12","13","14","15","16","17","18","19","20","21","22","23"};//
 const char * gszBatteryA[]={"1000mA","1500mA"};//
 const char * gszLedA[]={"TYPE1"};//
-const char * gszRamSizeA[]={"128MB","64MB","256MB","512MB"};// ram size 
+const char * gszRamSizeA[]={"128MB","64MB","256MB","512MB","1GB","2GB","4GB"};// ram size 
 const char * gszIFlashA[]={"Micro SD","NAND Flash"}; // internal flash type .
 const char * gszExternalMemA[]={"No","SD","Micro SD"};// external sd type .
 const char * gszRootFsTypeA[]={"Ext2","Ext3","Ext4","Vfat"};// root fs type .
@@ -115,30 +125,48 @@ const char * gszRootFsTypeA[]={"Ext2","Ext3","Ext4","Vfat"};// root fs type .
 		1->rootfs
 		2->user vfat 
 	TYPE2 : 
-		1->rootfs(for upgrade)
+		1->rootfs (recovery mode)
 		2->rootfs
 		3->user vfat
 	TYPE3 :
 		1->rootfs
-		2->rootfs(for upgrade)
+		2->rootfs (recovery mode)
 		3->user vfat
 	TYPE4 :
 		1->user vfat
 		2->rootfs
 	TYPE5 :
 		1->rootfs
+	TYPE6 :
+		1->rootfs
+		2->user vfat
+		3->rootfs (recovery mode)
+	TYPE7 :
+		1->user vfat
+		2->rootfs
+		3->rootfs (recovery mode)
+	TYPE8 :
+		1->user vfat
+		2->system
+		4->rootfs (recovery mode)
+		5/3->data
+		6/3->cache
 	*/
-const char * gszSysPartTypeA[]={"TYPE1","TYPE2","TYPE3","TYPE4","TYPE5"};// system partition type .
-const char * gszCPUA[]={"mx35","m166e","mx50","x86"}; // platform CPU .
+const char * gszSysPartTypeA[]={"TYPE1","TYPE2","TYPE3","TYPE4","TYPE5","TYPE6","TYPE7","TYPE8"};// system partition type .
+const char * gszCPUA[]={"mx35","m166e","mx50","x86","mx6"}; // platform CPU .
 const char * gszUIStyleA[]={"Ebrmain","Customer UI"};// UI Style .
-
-
+const char * gszRAMTypeA[]={"MDDR","DDR2"};// Ram Type .
+const char * gszUIConfigA[]={"Normal","Normal2","AD"};// UI Config .
+const char * gszDisplayResolutionA[]={"800x600","1024x758","1024x768"};// Display resolution .
+const char * gszFrontLightA[]={"No","TABLE0"};// Front Light .
+const char * gszCPUFreqA[]={"NC","800M","1G","1.2G"};// CPU Freqency  .
+const char * gszHallSensorA[]={"No","TLE4913"};// Hall Sensor .
 
 
 
 #define _TOTOAL_HWCONFIG_FIELDS 	(sizeof(gtHwConfigFields)/sizeof(gtHwConfigFields[0]))
 
-static const HwConfigField gtHwConfigFields[] = {
+static HwConfigField gtHwConfigFields[] = {
 	{"v0.1","PCB",sizeof(gszPCBA)/sizeof(gszPCBA[0]),(char **)gszPCBA,FIELD_TYPE_IDXSTR},
 	{"v0.1","KeyPad",sizeof(gszKeyPadA)/sizeof(gszKeyPadA[0]),(char **)gszKeyPadA,FIELD_TYPE_IDXSTR},
 	{"v0.1","AudioCodec",sizeof(gszAudioCodecA)/sizeof(gszAudioCodecA[0]),(char **)gszAudioCodecA,FIELD_TYPE_IDXSTR},
@@ -168,6 +196,12 @@ static const HwConfigField gtHwConfigFields[] = {
 	{"v0.5","ContentType",0,0,FIELD_TYPE_BYTE},
 	{"v0.6","CPU",sizeof(gszCPUA)/sizeof(gszCPUA[0]),(char **)gszCPUA,FIELD_TYPE_IDXSTR},
 	{"v0.7","UIStyle",sizeof(gszUIStyleA)/sizeof(gszUIStyleA[0]),(char **)gszUIStyleA,FIELD_TYPE_IDXSTR},
+	{"v0.8","RAMType",sizeof(gszRAMTypeA)/sizeof(gszRAMTypeA[0]),(char **)gszRAMTypeA,FIELD_TYPE_IDXSTR},
+	{"v0.9","UIConfig",sizeof(gszUIConfigA)/sizeof(gszUIConfigA[0]),(char **)gszUIConfigA,FIELD_TYPE_IDXSTR},
+	{"v1.0","DisplayResolution",sizeof(gszDisplayResolutionA)/sizeof(gszDisplayResolutionA[0]),(char **)gszDisplayResolutionA,FIELD_TYPE_IDXSTR},
+	{"v1.1","FrontLight",sizeof(gszFrontLightA)/sizeof(gszFrontLightA[0]),(char **)gszFrontLightA,FIELD_TYPE_IDXSTR},
+	{"v1.2","CPUFreq",sizeof(gszCPUFreqA)/sizeof(gszCPUFreqA[0]),(char **)gszCPUFreqA,FIELD_TYPE_IDXSTR},
+	{"v1.3","HallSensor",sizeof(gszHallSensorA)/sizeof(gszHallSensorA[0]),(char **)gszHallSensorA,FIELD_TYPE_IDXSTR},
 };
 
 static NTX_HWCONFIG _gtNtxHwCfg,*_gptNtxHwCfg=&_gtNtxHwCfg;
@@ -788,4 +822,32 @@ int NtxHwCfg_CompareHdrFldVersion(NTX_HWCONFIG *pHdr,int iFieldIdx)
 	return iRet;
 }
 
+int NtxHwCfg_SetCfgFldValDefs(NTX_HWCONFIG *I_pHdr,int I_iFieldIdx,
+		const char **I_pszFieldValDefs,int I_iTotalVals)
+{
+	int iRet ;
+	
+	iRet = NtxHwCfg_ChkCfgHeaderEx(I_pHdr,1);
+
+	if(iRet>=0) {
+		
+		if(I_iFieldIdx>=_TOTOAL_HWCONFIG_FIELDS) {
+			iRet = HWCFG_RET_NOTHISFIELDIDX;
+			goto exit;
+		}
+		
+		if(gtHwConfigFields[I_iFieldIdx].wFieldType != FIELD_TYPE_IDXSTR) {
+			iRet = HWCFG_RET_FIELDTYPEERROR;
+			goto exit;
+		}
+		
+		gtHwConfigFields[I_iFieldIdx].szFieldValueA = (char **)I_pszFieldValDefs;
+		gtHwConfigFields[I_iFieldIdx].iFieldValueCnt = I_iTotalVals;
+	}
+
+
+exit:	
+	
+	return iRet;
+}
 

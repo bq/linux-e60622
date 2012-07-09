@@ -36,12 +36,16 @@
 #define ISR1_1HZM_WID	1
 #define ISR1_TODAM_WID	1
 
-//#define pr_debug printk
+extern void msp430_gettime( struct rtc_time *tm);
+extern void msp430_settime( struct rtc_time *tm);
+extern void msp430_getalarm( struct rtc_wkalrm *alrm);
+extern void msp430_setalarm( struct rtc_wkalrm *alrm);
+extern void msp430_clearalarm(void);
+
+static struct rtc_wkalrm calrm;
 
 static unsigned long rtc_status;
 static unsigned long rtc_flag = 0;
-static unsigned long g_alarm_enabled;
-static unsigned long gAlarmTime;
 
 extern int msp430_write(unsigned int reg, unsigned int value);
 extern unsigned int msp430_read(unsigned int reg);
@@ -73,6 +77,7 @@ static int mxc_rtc_ioctl(struct device *dev, unsigned int cmd,
 #if 0
 		pmic_event_mask(EVENT_TODAI);
 #else
+		calrm.enabled = 0;
 		mxc_rtc_alarm_enable (0);
 #endif
 		return 0;
@@ -81,26 +86,27 @@ static int mxc_rtc_ioctl(struct device *dev, unsigned int cmd,
 #if 0
 		pmic_event_unmask(EVENT_TODAI);
 #else
+		calrm.enabled = 1;
 		mxc_rtc_alarm_enable (1);
 #endif
 		return 0;
    case RTC_UIE_OFF:
 		pr_debug("RTC update masked\n");
 //		pmic_event_mask(EVENT_1HZI);
-		return 0;
+		return -ENOIOCTLCMD;
 	case RTC_UIE_ON:
 		pr_debug("RTC update unmasked\n");
 //		pmic_event_unmask(EVENT_1HZI);
-		return 0;
+		return -ENOIOCTLCMD;
 	/* RTC_PIE_x repurposed for RTC enable */
 	case RTC_PIE_ON:
 		pr_debug("RTC enabled\n");
 //		CHECK_ERROR(pmic_write_reg(REG_RTC_ALARM, BITFVAL(RTC_DISABLE, 0), BITFMASK(RTC_DISABLE)));
-		return 0;
+		return -ENOIOCTLCMD;
 	case RTC_PIE_OFF:
 		pr_debug("RTC disabled\n");
 //		CHECK_ERROR(pmic_write_reg(REG_RTC_ALARM, BITFVAL(RTC_DISABLE, 1), BITFMASK(RTC_DISABLE)));
-		return 0;
+		return -ENOIOCTLCMD;
 	case RTC_WAKEUP_FLAG:
 		tmp = msp430_read (0x60);
 		printk ("[%s-%d] Micro P MSP430 status 0x%04X ....\n", __func__, __LINE__,tmp);
@@ -141,6 +147,10 @@ static int mxc_rtc_read_time(struct device *dev, struct rtc_time *tm)
 
 	rtc_time_to_tm(time, tm);
 #else
+	#if 1
+	msp430_gettime(tm);
+//	printk ("read_time: %d/%d/%d %d:%d:%d\n",tm->tm_year,tm->tm_mon,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
+	#else
 	unsigned int tmp;
 //	printk ("[%s-%d]\n",__func__,__LINE__);
 	tmp = msp430_read (0x20);
@@ -152,6 +162,7 @@ static int mxc_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	tmp = msp430_read (0x23);
 	tm->tm_min = (tmp >> 8) & 0x0FF;
 	tm->tm_sec = tmp & 0x0FF;
+	#endif
 #endif
 
 	return 0;
@@ -187,13 +198,17 @@ static int mxc_rtc_set_time(struct device *dev, struct rtc_time *tm)
 		day_reg_val2 = BITFEXT(value, RTC_DAY);
 	} while (day_reg_val != day_reg_val2);
 #else
-	printk ("[%s-%d] set %d/%d/%d %d:%d:%d\n",__func__,__LINE__,tm->tm_year,tm->tm_mon,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
+//	printk ("[%s-%d] set %d/%d/%d %d:%d:%d\n",__func__,__LINE__,tm->tm_year,tm->tm_mon,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
+	#if 1
+	msp430_settime(tm);
+	#else
 	msp430_write (0x10, ((tm->tm_year-100)<<8));
 	msp430_write (0x11, ((tm->tm_mon+1)<<8));
 	msp430_write (0x12, (tm->tm_mday<<8));
 	msp430_write (0x13, (tm->tm_hour<<8));
 	msp430_write (0x14, (tm->tm_min<<8));
 	msp430_write (0x15, (tm->tm_sec<<8));
+	#endif
 #endif
 	return 0;
 }
@@ -224,36 +239,22 @@ static int mxc_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	rtc_time_to_tm(time, &(alrm->time));
 #else
 //	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
-	alrm->enabled = g_alarm_enabled;
-	rtc_time_to_tm(gAlarmTime, &(alrm->time));
+	msp430_getalarm(alrm);
+	struct rtc_time *tm = &(alrm->time);
+	printk ("read_alarm: %d %d/%d/%d %d:%d:%d\n",
+		alrm->enabled,tm->tm_year,tm->tm_mon,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
 #endif
 	return 0;
 }
 
 static void mxc_rtc_alarm_enable (int isEnable)
 {
-	struct rtc_time now_tm;
-	unsigned long now;
-	int tmp;
-	
 	if (isEnable) {
-		mxc_rtc_read_time (0, &now_tm);
-		rtc_tm_to_time(&now_tm, &now);
-		if (gAlarmTime > now) {
-			int interval = gAlarmTime-now;
-			printk ("[%s-%d] alarm %d\n",__func__,__LINE__,interval);
-			msp430_write (0x1B, (interval&0xFF00));
-			msp430_write (0x1C, ((interval<<8)& 0xFF00));
-			return;
-		}
+		printk ("[%s-%d] \n", __func__, __LINE__);
+		return msp430_setalarm(&calrm);
 	}
-	tmp = msp430_read (0x60);
-	if (tmp & 0x8000) {
-		printk ("[%s-%d] =================> Micro P MSP430 alarm triggered <===================\n", __func__, __LINE__);
-		g_wakeup_by_alarm = 1;
-	}
-	msp430_write (0x1B, 0);
-	msp430_write (0x1C, 0);
+	else
+		msp430_clearalarm();
 }
 
 static int mxc_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
@@ -289,36 +290,16 @@ static int mxc_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	CHECK_ERROR(pmic_write_reg(REG_RTC_DAY_ALARM, value, mask));
 #else
 	struct rtc_drv_data *pdata = dev_get_drvdata(dev);
-	struct rtc_time now_tm;
-	unsigned long now, time;
 	int ret;
 	unsigned int tmp;
 	
 //	printk ("[%s-%d] set %d/%d/%d %d:%d:%d\n",__func__,__LINE__,alrm->time.tm_year,alrm->time.tm_mon,alrm->time.tm_mday,alrm->time.tm_hour,alrm->time.tm_min,alrm->time.tm_sec);
 	if (rtc_valid_tm(&alrm->time))
 		return -1;
-		
-	mxc_rtc_read_time (dev, &now_tm);		
-	
-	rtc_tm_to_time(&now_tm, &now);
-	rtc_tm_to_time(&alrm->time, &time);
-	gAlarmTime=time;
-	g_alarm_enabled = alrm->enabled;
 
-//	if (!gIsCustomerUi) 	// Alarm always enabled with netronix UI.
-//		alrm->enabled = 1;
-		
-	if(alrm->enabled && (time > now)) {
-		int interval = time-now;
-		printk ("[%s-%d] alarm %d\n",__func__,__LINE__,interval);
-		msp430_write (0x1B, (interval&0xFF00));
-		msp430_write (0x1C, ((interval<<8)& 0xFF00));
-	}
-	else {
-//		printk ("[%s-%d] alarm disabled (alrm->enabled %d).\n",__func__,__LINE__,alrm->enabled);
-		msp430_write (0x1B, 0);
-		msp430_write (0x1C, 0);
-	}
+	memcpy(&calrm, alrm, sizeof(struct rtc_wkalrm));
+	if (calrm.enabled) 
+		msp430_setalarm(&calrm);
 #endif
 	return 0;
 }

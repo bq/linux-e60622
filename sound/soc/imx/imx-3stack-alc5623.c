@@ -87,7 +87,6 @@ static int imx_3stack_audio_hw_params(struct snd_pcm_substream *substream,
 	unsigned int channels = params_channels(params);
 	u32 dai_format;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	/* only need to do this once as capture and playback are sync */
 	if (priv->hw)
 		return 0;
@@ -173,7 +172,6 @@ static int imx_3stack_audio_hw_params(struct snd_pcm_substream *substream,
 
 static int imx_3stack_startup(struct snd_pcm_substream *substream)
 {
-	printk ("[%s-%d]\n",__func__,__LINE__);
 #if defined(CONFIG_MXC_ASRC) || defined(CONFIG_MXC_ASRC_MODULE)
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		if (asrc_ssi_data.output_sample_rate != 0) {
@@ -199,7 +197,6 @@ static void imx_3stack_shutdown(struct snd_pcm_substream *substream)
 {
 	struct imx_3stack_priv *priv = &card_priv;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 #if defined(CONFIG_MXC_ASRC) || defined(CONFIG_MXC_ASRC_MODULE)
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		if (asrc_ssi_data.output_sample_rate != 0) {
@@ -236,7 +233,6 @@ static void imx_3stack_init_dam(int ssi_port, int dai_port)
 	unsigned int dai_pdcr = 0;
 	/* ALC5623 uses SSI1 or SSI2 via AUDMUX port dai_port for audio */
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	/* reset port ssi_port & dai_port */
 	__raw_writel(0, DAM_PTCR(ssi_port));
 	__raw_writel(0, DAM_PTCR(dai_port));
@@ -307,7 +303,6 @@ static void headphone_detect_handler(struct work_struct *work)
 	char *envp[3];
 	char *buf;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	sysfs_notify(&pdev->dev.kobj, NULL, "headphone");
 
 	/* setup a message for userspace headphone in */
@@ -326,7 +321,6 @@ static DECLARE_DELAYED_WORK(hp_event, headphone_detect_handler);
 
 static irqreturn_t imx_headphone_detect_handler(int irq, void *data)
 {
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	disable_irq_nosync(irq);
 	schedule_delayed_work(&hp_event, msecs_to_jiffies(200));
 	return IRQ_HANDLED;
@@ -338,7 +332,6 @@ static ssize_t show_headphone(struct device_driver *dev, char *buf)
 	struct platform_device *pdev = priv->pdev;
 	struct mxc_audio_platform_data *plat = pdev->dev.platform_data;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	strcpy(buf, "headphone\n");
 
 	return strlen(buf);
@@ -361,7 +354,6 @@ static const struct soc_enum alc5623_enum[] = {
 static int alc5623_get_jack(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	ucontrol->value.enumerated.item[0] = alc5623_jack_func;
 	return 0;
 }
@@ -371,7 +363,6 @@ static int alc5623_set_jack(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (alc5623_jack_func == ucontrol->value.enumerated.item[0])
 		return 0;
 
@@ -388,7 +379,6 @@ static int alc5623_set_jack(struct snd_kcontrol *kcontrol,
 static int alc5623_get_spk(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *ucontrol)
 {
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	ucontrol->value.enumerated.item[0] = alc5623_spk_func;
 	return 0;
 }
@@ -398,7 +388,6 @@ static int alc5623_set_spk(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (alc5623_spk_func == ucontrol->value.enumerated.item[0])
 		return 0;
 
@@ -415,7 +404,6 @@ static int alc5623_set_spk(struct snd_kcontrol *kcontrol,
 static int alc5623_get_line_in(struct snd_kcontrol *kcontrol,
 			     struct snd_ctl_elem_value *ucontrol)
 {
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	ucontrol->value.enumerated.item[0] = alc5623_line_in_func;
 	return 0;
 }
@@ -425,7 +413,6 @@ static int alc5623_set_line_in(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (alc5623_line_in_func == ucontrol->value.enumerated.item[0])
 		return 0;
 
@@ -446,7 +433,6 @@ static int spk_amp_event(struct snd_soc_dapm_widget *w,
 	struct platform_device *pdev = priv->pdev;
 	struct mxc_audio_platform_data *plat = pdev->dev.platform_data;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (plat->amp_enable == NULL)
 		return 0;
 
@@ -488,7 +474,6 @@ static const struct soc_enum asrc_enum[] = {
 static int asrc_get_rate(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_value *ucontrol)
 {
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	ucontrol->value.enumerated.item[0] = asrc_func;
 	return 0;
 }
@@ -496,7 +481,6 @@ static int asrc_get_rate(struct snd_kcontrol *kcontrol,
 static int asrc_set_rate(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_value *ucontrol)
 {
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (asrc_func == ucontrol->value.enumerated.item[0])
 		return 0;
 
@@ -516,7 +500,6 @@ static int imx_3stack_alc5623_init(struct snd_soc_codec *codec)
 {
 	int i, ret;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 #if defined(CONFIG_MXC_ASRC) || defined(CONFIG_MXC_ASRC_MODULE)
 	for (i = 0; i < ARRAY_SIZE(asrc_controls); i++) {
 		ret = snd_ctl_add(codec->card,
@@ -563,7 +546,6 @@ static int imx_3stack_card_remove(struct platform_device *pdev)
 {
 	struct imx_3stack_priv *priv = &card_priv;
 	struct mxc_audio_platform_data *plat;
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (priv->pdev) {
 		plat = priv->pdev->dev.platform_data;
 		if (plat->finit)
@@ -595,7 +577,6 @@ static int __devinit imx_3stack_alc5623_probe(struct platform_device *pdev)
 
 	int ret = 0;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	priv->pdev = pdev;
 
 	gpio_activate_audio_ports();
@@ -655,7 +636,6 @@ static int imx_3stack_alc5623_remove(struct platform_device *pdev)
 	struct mxc_audio_platform_data *plat = pdev->dev.platform_data;
 	struct imx_3stack_priv *priv = &card_priv;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	if (plat->finit)
 		plat->finit();
 
@@ -678,7 +658,6 @@ static int __init imx_3stack_init(void)
 {
 	int ret;
 
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	ret = platform_driver_register(&imx_3stack_alc5623_audio_driver);
 	if (ret)
 		return -ENOMEM;
@@ -699,7 +678,6 @@ static int __init imx_3stack_init(void)
 
 static void __exit imx_3stack_exit(void)
 {
-	printk ("[%s-%d]\n",__func__,__LINE__);
 	platform_driver_unregister(&imx_3stack_alc5623_audio_driver);
 	platform_device_unregister(imx_3stack_snd_device);
 }
