@@ -1,0 +1,7 @@
+From: Heiko Stuebner <heiko@sntech.de>
+Subject: [PATCH] Backports of patches to the Netronix source
+
+Backports of existing patches from newer releases of either mainline
+or stable kernels, that fix issues in different subsystems.
+
+Signed-off-by: Heiko Stuebner <heiko@sntech.de>
