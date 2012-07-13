@@ -1132,6 +1132,7 @@ fsl_ep_queue(struct usb_ep *_ep, struct usb_request *_req, gfp_t gfp_flags)
 	/* irq handler advances the queue */
 	if (req != NULL)
 		list_add_tail(&req->queue, &ep->queue);
+
 	spin_unlock_irqrestore(&udc->lock, flags);
 
 	return 0;
@@ -2039,7 +2040,7 @@ static void suspend_irq(struct fsl_udc *udc)
 {
 	u32 otgsc = 0;
 
-	pr_debug("%s\n", __func__);
+	pr_debug("%s begins\n", __func__);
 
 	udc->resume_state = udc->usb_state;
 	udc->usb_state = USB_STATE_SUSPENDED;
@@ -2057,6 +2058,8 @@ static void suspend_irq(struct fsl_udc *udc)
 	/* report suspend to the driver, serial.c does not support this */
 	if (udc->driver->suspend)
 		udc->driver->suspend(&udc->gadget);
+
+	pr_debug("%s ends\n", __func__);
 }
 
 static void bus_resume(struct fsl_udc *udc)
@@ -2125,14 +2128,30 @@ static void fsl_gadget_event(struct work_struct *work)
 {
 	struct fsl_udc *udc = udc_controller;
 	unsigned long flags;
+	u32 tmp;
 
+	if (udc->driver)
+		udc->driver->disconnect(&udc->gadget);
 	spin_lock_irqsave(&udc->lock, flags);
 	/* update port status */
 	fsl_udc_speed_update(udc);
+	udc->stopped = 1;
 	spin_unlock_irqrestore(&udc->lock, flags);
 
+	/* enable wake up */
+	dr_wake_up_enable(udc, true);
+	/* here we need to enable the B_SESSION_IRQ
+	 * to enable the following device attach
+	 */
+	tmp = fsl_readl(&dr_regs->otgsc);
+	if (!(tmp & (OTGSC_B_SESSION_VALID_IRQ_EN)))
+		fsl_writel(tmp | (OTGSC_B_SESSION_VALID_IRQ_EN),
+				&dr_regs->otgsc);
+	/* close USB PHY clock */
+	dr_phy_low_power_mode(udc, true);
 	/* close dr controller clock */
 	dr_clk_gate(false);
+	printk(KERN_DEBUG "%s: udc enter low power mode\n", __func__);
 }
 
 static void fsl_gadget_delay_event(struct work_struct *work)
@@ -2175,16 +2194,19 @@ bool try_wake_up_udc(struct fsl_udc *udc)
 			fsl_writel(tmp | USB_CMD_RUN_STOP, &dr_regs->usbcmd);
 			printk(KERN_DEBUG "%s: udc out low power mode\n", __func__);
 		} else {
-			if (udc->driver)
-				udc->driver->disconnect(&udc->gadget);
 			fsl_writel(tmp & ~USB_CMD_RUN_STOP, &dr_regs->usbcmd);
-			udc->stopped = 1;
-			/* enable wake up */
-			dr_wake_up_enable(udc, true);
-			/* close USB PHY clock */
-			dr_phy_low_power_mode(udc, true);
+			/* here we need disable B_SESSION_IRQ, after
+			 * schedule_work finished, it need to be enabled again.
+			 * Doing like this can avoid conflicting between rapid
+			 * plug in/out.
+			 */
+			tmp = fsl_readl(&dr_regs->otgsc);
+			if (tmp & (OTGSC_B_SESSION_VALID_IRQ_EN))
+				fsl_writel(tmp &
+					   (~OTGSC_B_SESSION_VALID_IRQ_EN),
+					   &dr_regs->otgsc);
+
 			schedule_work(&udc->gadget_work);
-			printk(KERN_DEBUG "%s: udc enter low power mode\n", __func__);
 			return false;
 		}
 	}
@@ -2223,6 +2245,10 @@ static irqreturn_t fsl_udc_irq(int irq, void *_udc)
 	irq_src = fsl_readl(&dr_regs->usbsts) & fsl_readl(&dr_regs->usbintr);
 	/* Clear notification bits */
 	fsl_writel(irq_src, &dr_regs->usbsts);
+
+	/* only handle enabled interrupt */
+	if (irq_src == 0x0)
+		goto irq_end;
 
 	VDBG("0x%x\n", irq_src);
 
@@ -2332,8 +2358,10 @@ int usb_gadget_register_driver(struct usb_gadget_driver *driver)
 	}
 
 	if (udc_controller->transceiver) {
-		/* Suspend the controller until OTG enable it */
-		udc_controller->suspended = 1;/* let the otg resume it */
+		if (fsl_readl(&dr_regs->otgsc) & OTGSC_STS_USB_ID)
+			udc_controller->suspended = 1;/* let the otg resume it */
+		else
+			udc_controller->suspended = 0;/* let the otg suspend it */
 		printk(KERN_DEBUG "Suspend udc for OTG auto detect\n");
 		dr_wake_up_enable(udc_controller, true);
 		dr_clk_gate(false);
@@ -3221,6 +3249,20 @@ static int fsl_udc_resume(struct platform_device *pdev)
 		 udc_controller->stopped, udc_controller->suspended);
 	/* Do noop if the udc is already at resume state */
 	if (udc_controller->suspended == 0) {
+		u32 temp;
+		if (udc_controller->stopped)
+			dr_clk_gate(true);
+		usb_debounce_id_vbus();
+		if (fsl_readl(&dr_regs->otgsc) & OTGSC_STS_USB_ID) {
+			temp = fsl_readl(&dr_regs->otgsc);
+			/* if b_session_irq_en is cleared by otg */
+			if (!(temp & OTGSC_B_SESSION_VALID_IRQ_EN)) {
+				temp |= OTGSC_B_SESSION_VALID_IRQ_EN;
+				fsl_writel(temp, &dr_regs->otgsc);
+			}
+		}
+		if (udc_controller->stopped)
+			dr_clk_gate(false);
 		mutex_unlock(&udc_resume_mutex);
 		return 0;
 	}
