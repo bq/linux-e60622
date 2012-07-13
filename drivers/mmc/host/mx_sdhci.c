@@ -64,6 +64,7 @@
 
 static unsigned int debug_quirks;
 static int last_op_dir;
+static unsigned long last_event;
 
 /*
  * Different quirks to handle when the hardware deviates from a strict
@@ -1564,6 +1565,8 @@ static void esdhc_cd_callback(struct work_struct *work)
 
 	GALLEN_DBGLOCAL_BEGIN();
 
+	last_event = jiffies;
+
 	do {
 		if (host->detect_irq == 0) {
 			GALLEN_DBGLOCAL_RUNLOG(0);
@@ -1796,6 +1799,11 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 	chip = dev_get_drvdata(&pdev->dev);
 	if (!chip)
 		return 0;
+
+	if (time_before(jiffies, last_event + 5 * HZ)) {
+		dev_warn(&pdev->dev, "processing a sd event, not suspending\n");
+		return -EBUSY;
+	}
 
 	DBG("Suspending...\n");
 	iHWID = check_hardware_name();
