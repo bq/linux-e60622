@@ -1817,7 +1817,8 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 		return 0;	// Joseph 100323 test
 	}
 	
-	if(gptHWCFG->m_val.bCustomer != 5) {
+	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
+		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])
 				continue;
@@ -1860,7 +1861,8 @@ static int sdhci_resume(struct platform_device *pdev)
 			disable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
 		return 0;	// Joseph 100323 test
 	}
-	if(gptHWCFG->m_val.bCustomer != 5) {
+	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
+		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])
 				continue;
