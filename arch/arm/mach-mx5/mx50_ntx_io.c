@@ -435,17 +435,17 @@ void ntx_wifi_power_ctrl (int isWifiEnable)
 		gpio_direction_input(GPIO_WIFI_3V3);	// turn off Wifi_3V3_on
 		gpio_set_value(GPIO_WIFI_RST, 0);		// turn on wifi_RST
 		wifi_sdio_enable (0);
-#ifdef _WIFI_ALWAYS_ON_
+/*#ifdef _WIFI_ALWAYS_ON_
 		disable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
-#endif
+#endif*/
 	}else{
 		gpio_direction_output(GPIO_WIFI_3V3, 0);	// turn on Wifi_3V3_on
     	sleep_on_timeout(&Reset_WaitQueue,HZ/50);			
 		gpio_set_value(GPIO_WIFI_RST, 1);		// turn on wifi_RST
 		wifi_sdio_enable (1);
-#ifdef _WIFI_ALWAYS_ON_
+/*#ifdef _WIFI_ALWAYS_ON_
 		enable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
-#endif
+#endif*/
 	}
 	sleep_on_timeout(&Reset_WaitQueue,HZ/10);			
 	if(9==check_hardware_name()) {
@@ -1883,6 +1883,11 @@ void ntx_gpio_suspend (void)
 #endif
 	}
 
+#ifdef _WIFI_ALWAYS_ON_
+	if (!gSleep_Mode_Suspend && gWifiEnabled)
+		enable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
+#endif
+
 	// turn off wifi power 
 #ifndef _WIFI_ALWAYS_ON_
 	gpio_direction_input(GPIO_WIFI_3V3);
@@ -1944,7 +1949,12 @@ void ntx_gpio_resume (void)
 			enable_irq(gpio_to_irq(G_SENSOR_INT));
 		}
 	}
-	
+
+#ifdef _WIFI_ALWAYS_ON_
+	if (!gSleep_Mode_Suspend && gWifiEnabled)
+		disable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
+#endif
+
 #if 1	
 	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 		g_power_key_pressed = (gpio_get_value (GPIO_PWR_SW))?1:0;	// POWER key
