@@ -362,7 +362,10 @@ extern int gSleep_Mode_Suspend;
 static int zForce_ir_touch_suspend(struct platform_device *pdev, pm_message_t state)
 {
 //	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
-	if (g_touch_pressed || g_touch_triggered || !zForce_ir_touch_detect_int_level ()) 
+	/* Do not check the int level manually here
+	 * If a real touch event happened it would set g_touch_pressed or g_touch_triggered already
+	 */
+	if (g_touch_pressed || g_touch_triggered) 
 	{
 		zForce_ir_touch_ts_triggered ();
 		printk ("[%s-%d] zForce touch event not processed.\n",__func__,__LINE__);
@@ -376,6 +379,7 @@ static int zForce_ir_touch_suspend(struct platform_device *pdev, pm_message_t st
 		}	
 		msleep(200);
 		disable_irq_wake(zForce_ir_touch_data.client->irq);
+		disable_irq(zForce_ir_touch_data.client->irq);
 	}
 	return 0;
 }
@@ -383,14 +387,19 @@ static int zForce_ir_touch_suspend(struct platform_device *pdev, pm_message_t st
 static int zForce_ir_touch_resume(struct platform_device *pdev)
 {
 	if (gSleep_Mode_Suspend) {
+		enable_irq(zForce_ir_touch_data.client->irq);
+		enable_irq_wake(zForce_ir_touch_data.client->irq);
 		if(8==gptHWCFG->m_val.bTouchCtrl) {
 			i2c_master_send(zForce_ir_touch_data.client, cmd_Active_v2, sizeof(cmd_Active_v2));
 		}else{
 			i2c_master_send(zForce_ir_touch_data.client, cmd_Active, sizeof(cmd_Active));
 		}	
-		enable_irq_wake(zForce_ir_touch_data.client->irq);
 	}
-	if (!zForce_ir_touch_detect_int_level ()) {
+
+	/* Only check int level when we return from a light sleep
+	 * Otherwise wait for the next falling edge triggering the real interrupt
+	 */
+	if (!zForce_ir_touch_detect_int_level () && !gSleep_Mode_Suspend) {
 		zForce_ir_touch_ts_triggered ();
 	}
 	

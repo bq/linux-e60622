@@ -373,7 +373,10 @@ extern int gSleep_Mode_Suspend;
 static int gTouchDisabled;
 static int elan_touch_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	if (g_touch_pressed || g_touch_triggered || !elan_touch_detect_int_level ()) 
+	/* Do not check the int level manually here
+	 * If a real touch event happened it would set g_touch_pressed or g_touch_triggered already
+	 */
+	if (g_touch_pressed || g_touch_triggered) 
 	{
 		elan_touch_ts_triggered ();
 		printk ("[%s-%d] elan touch event not processed.\n",__func__,__LINE__);
@@ -381,6 +384,7 @@ static int elan_touch_suspend(struct platform_device *pdev, pm_message_t state)
 	}
 	if (gSleep_Mode_Suspend) {
 		disable_irq_wake (elan_touch_data.client->irq);
+		disable_irq(elan_touch_data.client->irq);
 		gTouchDisabled = 1;
 	}
 	return 0;
@@ -388,13 +392,19 @@ static int elan_touch_suspend(struct platform_device *pdev, pm_message_t state)
 
 static int elan_touch_resume(struct platform_device *pdev)
 {
-	if (!elan_touch_detect_int_level ()) {
+	if (gSleep_Mode_Suspend && gTouchDisabled) {
+		enable_irq (elan_touch_data.client->irq);
+		enable_irq_wake (elan_touch_data.client->irq);
+	}
+	gTouchDisabled = 0;
+
+	/* Only check int level when we return from a light sleep
+	 * Otherwise wait for the next falling edge triggering the real interrupt
+	 */
+	if (!elan_touch_detect_int_level () && !gSleep_Mode_Suspend) {
 		elan_touch_ts_triggered ();
 	}
-	if (gSleep_Mode_Suspend && gTouchDisabled)
-		enable_irq_wake (elan_touch_data.client->irq);
-	gTouchDisabled = 0;
-	
+
 	return 0;
 }
 
