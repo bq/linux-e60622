@@ -1820,11 +1820,18 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 		return 0;	// Joseph 100323 test
 	}
 	
-	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
+//	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
 		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])
 				continue;
+
+			/* don't power down the wifi
+			 * This should be solved more intelligently but will do for now
+			 */
+			if (pdev->id == 2)
+				chip->hosts[i]->mmc->pm_flags |= MMC_PM_KEEP_POWER;
+
 			ret = mmc_suspend_host(chip->hosts[i]->mmc);
 			if (ret) {
 				for (i--; i >= 0; i--)
@@ -1838,7 +1845,7 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 				continue;
 			free_irq(chip->hosts[i]->irq, chip->hosts[i]);
 		}
-	}
+//	}
 	return 0;
 }
 
@@ -1864,7 +1871,7 @@ static int sdhci_resume(struct platform_device *pdev)
 			disable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
 		return 0;	// Joseph 100323 test
 	}
-	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
+//	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
 		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])
@@ -1882,7 +1889,7 @@ static int sdhci_resume(struct platform_device *pdev)
 			if (ret)
 				return ret;
 		}
-	}
+//	}
 	return 0;
 }
 
