@@ -371,7 +371,7 @@ static int elan_touch_register_interrupt(struct i2c_client *client)
 
 extern int gSleep_Mode_Suspend;
 static int gTouchDisabled;
-static int elan_touch_suspend(struct platform_device *pdev, pm_message_t state)
+static int elan_touch_suspend(struct device *dev)
 {
 	/* Do not check the int level manually here
 	 * If a real touch event happened it would set g_touch_pressed or g_touch_triggered already
@@ -390,7 +390,7 @@ static int elan_touch_suspend(struct platform_device *pdev, pm_message_t state)
 	return 0;
 }
 
-static int elan_touch_resume(struct platform_device *pdev)
+static int elan_touch_resume(struct device *dev)
 {
 	if (gSleep_Mode_Suspend && gTouchDisabled) {
 		enable_irq (elan_touch_data.client->irq);
@@ -407,6 +407,10 @@ static int elan_touch_resume(struct platform_device *pdev)
 
 	return 0;
 }
+
+static struct dev_pm_ops elan_touch_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(elan_touch_suspend, elan_touch_resume)
+};
 
 static int elan_touch_probe(
 	struct i2c_client *client, const struct i2c_device_id *id)
@@ -503,12 +507,11 @@ static const struct i2c_device_id elan_touch_id[] = {
 static struct i2c_driver elan_touch_driver = {
 	.probe		= elan_touch_probe,
 	.remove		= elan_touch_remove,
-	.suspend	= elan_touch_suspend,
-	.resume		= elan_touch_resume,
 	.id_table	= elan_touch_id,
 	.driver		= {
 		.name = "elan-touch",
 		.owner = THIS_MODULE,
+		.pm = &elan_touch_pm,
 	},
 };
 

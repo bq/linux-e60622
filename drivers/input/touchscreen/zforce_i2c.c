@@ -359,7 +359,7 @@ static ssize_t neo_ctl(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR(neocmd, 0644, neo_info, neo_ctl);
 extern int gSleep_Mode_Suspend;
 
-static int zForce_ir_touch_suspend(struct platform_device *pdev, pm_message_t state)
+static int zForce_ir_touch_suspend(struct device *dev)
 {
 //	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
 	/* Do not check the int level manually here
@@ -384,7 +384,7 @@ static int zForce_ir_touch_suspend(struct platform_device *pdev, pm_message_t st
 	return 0;
 }
 
-static int zForce_ir_touch_resume(struct platform_device *pdev)
+static int zForce_ir_touch_resume(struct device *dev)
 {
 	if (gSleep_Mode_Suspend) {
 		enable_irq(zForce_ir_touch_data.client->irq);
@@ -405,6 +405,10 @@ static int zForce_ir_touch_resume(struct platform_device *pdev)
 	
 	return 0;
 }
+
+static struct dev_pm_ops zForce_ir_touch_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(zForce_ir_touch_suspend, zForce_ir_touch_resume)
+};
 
 static int zforce_i2c_open(struct input_dev *dev)
 {
@@ -563,12 +567,11 @@ static const struct i2c_device_id zForce_ir_touch_id[] = {
 static struct i2c_driver zForce_ir_touch_driver = {
 	.probe		= zForce_ir_touch_probe,
 	.remove		= zForce_ir_touch_remove,
-	.suspend	= zForce_ir_touch_suspend,
-	.resume		= zForce_ir_touch_resume,
 	.id_table	= zForce_ir_touch_id,
 	.driver		= {
 		.name = "zforce-ir-touch",
 		.owner = THIS_MODULE,
+		.pm = &zForce_ir_touch_pm,
 	},
 };
 
