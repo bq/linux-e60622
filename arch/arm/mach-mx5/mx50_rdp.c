@@ -756,7 +756,7 @@ static u16 E60682_keymapping[] = {
 };
 
 static u16 E606A2_keymapping[] = {
-	61, 62, 29, -1, 	// Home, Menu, Back,    // Use 29 as BACK , 28 remains as ENTER 
+	61, 62, 28, -1, 	// Home, Menu, Back,    // Use 29 as BACK , 28 remains as ENTER !!! no we keep using 28!
 	-1, -1, -1, -1, 	// , , ,
 	-1, -1, -1, -1, 	// , , , 
 	-1, -1, -1, 116,     // , , ,KEY_POWER 
