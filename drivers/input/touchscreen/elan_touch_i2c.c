@@ -391,6 +391,16 @@ static int elan_touch_suspend(struct device *dev)
 	return 0;
 }
 
+static int elan_touch_suspend_noirq(struct device *dev)
+{
+	if (!gSleep_Mode_Suspend && !elan_touch_detect_int_level()) {
+		dev_warn(dev, "touch during late suspend detected\n");
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
 static int elan_touch_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -418,6 +428,8 @@ static int elan_touch_resume(struct device *dev)
 
 static struct dev_pm_ops elan_touch_pm = {
 	SET_SYSTEM_SLEEP_PM_OPS(elan_touch_suspend, elan_touch_resume)
+	.suspend_noirq = elan_touch_suspend_noirq,
+	.freeze_noirq = elan_touch_suspend_noirq,
 };
 
 static int elan_touch_probe(
