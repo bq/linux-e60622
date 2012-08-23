@@ -393,7 +393,14 @@ static int elan_touch_suspend(struct device *dev)
 
 static int elan_touch_resume(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
+	int err;
+
 	if (gSleep_Mode_Suspend && gTouchDisabled) {
+		err = __hello_packet_handler(client);
+		if (err < 0)
+			dev_err(dev, "Read Hello Packet Fail\n");
+
 		enable_irq (elan_touch_data.client->irq);
 		enable_irq_wake (elan_touch_data.client->irq);
 	}
