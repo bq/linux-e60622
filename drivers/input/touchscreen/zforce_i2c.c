@@ -363,7 +363,8 @@ static int zForce_ir_touch_suspend(struct device *dev)
 {
 //	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
 	/* Do not check the int level manually here
-	 * If a real touch event happened it would set g_touch_pressed or g_touch_triggered already
+	 * If a real touch event happened it would set g_touch_pressed
+	 * or g_touch_triggered already, as irqs are still enabled here
 	 */
 	if (g_touch_pressed || g_touch_triggered) 
 	{

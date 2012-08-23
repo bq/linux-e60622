@@ -374,7 +374,8 @@ static int gTouchDisabled;
 static int elan_touch_suspend(struct device *dev)
 {
 	/* Do not check the int level manually here
-	 * If a real touch event happened it would set g_touch_pressed or g_touch_triggered already
+	 * If a real touch event happened it would set g_touch_pressed
+	 * or g_touch_triggered already, as irqs are still enabled here
 	 */
 	if (g_touch_pressed || g_touch_triggered) 
 	{
