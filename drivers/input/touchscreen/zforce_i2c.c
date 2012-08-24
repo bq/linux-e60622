@@ -394,7 +394,7 @@ static int zForce_ir_touch_suspend(struct device *dev)
 	 * If a real touch event happened it would set g_touch_pressed
 	 * or g_touch_triggered already, as irqs are still enabled here
 	 */
-	if (g_touch_pressed || g_touch_triggered) 
+	if (g_touch_pressed || g_touch_triggered || (!gSleep_Mode_Suspend && !zForce_ir_touch_detect_int_level())) 
 	{
 		zForce_ir_touch_ts_triggered ();
 		printk ("[%s-%d] zForce touch event not processed.\n",__func__,__LINE__);
@@ -408,6 +408,16 @@ static int zForce_ir_touch_suspend(struct device *dev)
 		disable_irq_wake(zForce_ir_touch_data.client->irq);
 		disable_irq(zForce_ir_touch_data.client->irq);
 	}
+	return 0;
+}
+
+static int zForce_ir_touch_suspend_noirq(struct device *dev)
+{
+	if (!gSleep_Mode_Suspend && !zForce_ir_touch_detect_int_level()) {
+		dev_warn(dev, "touch during late suspend detected\n");
+		return -EBUSY;
+	}
+
 	return 0;
 }
 
@@ -434,6 +444,8 @@ static int zForce_ir_touch_resume(struct device *dev)
 
 static struct dev_pm_ops zForce_ir_touch_pm = {
 	SET_SYSTEM_SLEEP_PM_OPS(zForce_ir_touch_suspend, zForce_ir_touch_resume)
+	.suspend_noirq = zForce_ir_touch_suspend_noirq,
+	.freeze_noirq = zForce_ir_touch_suspend_noirq,
 };
 
 static int zforce_i2c_open(struct input_dev *dev)
