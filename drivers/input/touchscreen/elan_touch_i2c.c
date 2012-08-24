@@ -377,11 +377,11 @@ static int elan_touch_suspend(struct device *dev)
 	 * If a real touch event happened it would set g_touch_pressed
 	 * or g_touch_triggered already, as irqs are still enabled here
 	 */
-	if (g_touch_pressed || g_touch_triggered) 
+	if (g_touch_pressed || g_touch_triggered || (!gSleep_Mode_Suspend && !elan_touch_detect_int_level())) 
 	{
 		elan_touch_ts_triggered ();
 		printk ("[%s-%d] elan touch event not processed.\n",__func__,__LINE__);
-		return -1;
+		return -EBUSY;
 	}
 	if (gSleep_Mode_Suspend) {
 		disable_irq_wake (elan_touch_data.client->irq);
