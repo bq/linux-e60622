@@ -357,10 +357,38 @@ static ssize_t neo_ctl(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 static DEVICE_ATTR(neocmd, 0644, neo_info, neo_ctl);
+
+static int zforce_i2c_start(struct i2c_client *client)
+{
+	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		i2c_master_send(client, cmd_Active_v2, sizeof(cmd_Active_v2));
+	}else{
+		i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
+	}	
+//	i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
+	
+	return 0;
+}
+
+static int zforce_i2c_stop(struct i2c_client *client)
+{
+	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
+	}else{
+		i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
+	}	
+
+	return 0;
+}
+
 extern int gSleep_Mode_Suspend;
 
 static int zForce_ir_touch_suspend(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
+
 //	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
 	/* Do not check the int level manually here
 	 * If a real touch event happened it would set g_touch_pressed
@@ -372,12 +400,10 @@ static int zForce_ir_touch_suspend(struct device *dev)
 		printk ("[%s-%d] zForce touch event not processed.\n",__func__,__LINE__);
 		return -1;
 	}
+
 	if (gSleep_Mode_Suspend) {
-		if(8==gptHWCFG->m_val.bTouchCtrl) {
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
-		}else{
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive, sizeof(cmd_Deactive));
-		}	
+		if (zForce_ir_touch_data.input->users)
+			zforce_i2c_stop(client);
 		msleep(200);
 		disable_irq_wake(zForce_ir_touch_data.client->irq);
 		disable_irq(zForce_ir_touch_data.client->irq);
@@ -387,14 +413,13 @@ static int zForce_ir_touch_suspend(struct device *dev)
 
 static int zForce_ir_touch_resume(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
+
 	if (gSleep_Mode_Suspend) {
 		enable_irq(zForce_ir_touch_data.client->irq);
 		enable_irq_wake(zForce_ir_touch_data.client->irq);
-		if(8==gptHWCFG->m_val.bTouchCtrl) {
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Active_v2, sizeof(cmd_Active_v2));
-		}else{
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Active, sizeof(cmd_Active));
-		}	
+		if (zForce_ir_touch_data.input->users)
+			zforce_i2c_start(client);
 	}
 
 	/* Only check int level when we return from a light sleep
@@ -415,27 +440,14 @@ static int zforce_i2c_open(struct input_dev *dev)
 {
 	struct i2c_client *client = input_get_drvdata(dev);
 
-	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
-	if(8==gptHWCFG->m_val.bTouchCtrl) {
-		i2c_master_send(client, cmd_Active_v2, sizeof(cmd_Active_v2));
-	}else{
-		i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
-	}	
-//	i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
-	
-	return 0;
+	return zforce_i2c_start(client);
 }
 
 static void zforce_i2c_close(struct input_dev *dev)
 {
 	struct i2c_client *client = input_get_drvdata(dev);
-	
-	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
-	if(8==gptHWCFG->m_val.bTouchCtrl) {
-		i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
-	}else{
-		i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
-	}	
+
+	zforce_i2c_stop(client);
 }
 
 static int zForce_ir_touch_probe(
