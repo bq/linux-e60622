@@ -479,7 +479,7 @@ unsigned int msp430_read(unsigned int reg)
 	struct i2c_client *client = msp430_client;
 	int i2c_ret;
 	int retry_count = 5;
-	u16 value = -1;
+	int value = -1;
 	u8 buf0[2], buf1[2]={0,0};
 	u16 addr;
 	u16 flags;
@@ -510,6 +510,7 @@ unsigned int msp430_read(unsigned int reg)
 		}
 		pr_err("%s: read reg error : Reg 0x%02x\n", __func__, reg);
 		ntx_msp430_i2c_force_release ();
+		schedule_timeout (50);
 	}
 //	printk("[%s-%d] reg:0x%02x, value:0x%04x\n",__FUNCTION__,__LINE__, reg, value);
 	return value;
@@ -542,6 +543,7 @@ int msp430_write(unsigned int reg, unsigned int value)
 		pr_err("%s: write reg error : Reg 0x%02x = 0x%04x\n",
 		       __func__, reg, value);
 		ntx_msp430_i2c_force_release ();
+		schedule_timeout (50);
 		return -EIO;
 	}
 
@@ -609,6 +611,24 @@ void msp430_poweroff(void) {
 }
 EXPORT_SYMBOL_GPL(msp430_poweroff);
 
+void msp430_auto_power(int minutes) 
+{
+	unsigned int hour = msp430_read(0x21)&0xFF;
+	unsigned int min = msp430_read(0x23)>>8;
+	
+	hour += minutes/60;
+	min += minutes%60;
+	if (60 <= min) {
+		min %= 60;
+		hour++;
+	}
+	hour %= 24;
+	msp430_write(0x16, hour<<8);
+	msp430_write(0x17, min<<8);
+	msp430_write(0x18, 0x0100);
+}
+EXPORT_SYMBOL_GPL(msp430_auto_power);
+
 void msp430_reset(void) {
 
 	if (NEWMSP) {
@@ -638,6 +658,9 @@ int msp430_battery(void) {
 	u8 buf[4];
 	u8 sysflags[1];
 	int r;
+	static int last_battery;
+	static int msp430_error_cnt;
+	
 	if (NEWMSP) {
 		if (msp430_cmd(8, -1, NULL, 0, buf, 2, 0) != 0) return 0;
 		r = (buf[0] + (buf[1] << 8)) / 4;
@@ -649,8 +672,21 @@ int msp430_battery(void) {
 	} else {
 		int tmp;
 		r = msp430_read(0x41);
-		if (! r) return 0;
+		if (0 > r) {
+			printk ("[%s-%d] =====> MSP430 communication failed.\n", __func__, __LINE__);
+			if (5 < msp430_error_cnt++)
+				return 0;
+			else
+				return last_battery;
+		}
 		tmp = msp430_read(0x60);
+		if (-1 == tmp ) {
+			printk ("[%s-%d] =====> MSP430 communication failed.\n", __func__, __LINE__);
+			if (5 < msp430_error_cnt++)
+				return 0;
+			else
+				return last_battery;
+		}
 		if (tmp & 0x01) {
 			printk ("[%s-%d] =====> Micro P MSP430 Critical_Battery_Low <======\n", __func__, __LINE__);
 			r |= 0x8000;
@@ -660,6 +696,8 @@ int msp430_battery(void) {
 			g_wakeup_by_alarm = 1;
 		}
 	}
+	msp430_error_cnt = 0;
+	last_battery = r;
 	return r;
 
 }

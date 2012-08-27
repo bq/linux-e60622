@@ -22,12 +22,17 @@
 
 #ifdef __KERNEL__ //[ 
 	#define GALLEN_PRINT(fmt,args...)		printk(fmt,##args)
+	#define GALLEN_ERR_PRINT(fmt,args...)		printk(KERN_ERR fmt,##args)
+	#define GALLEN_WARNING_PRINT(fmt,args...)		printk(KERN_WARNING fmt,##args)
 	#define GET_CURRENT_TICK()									(unsigned int)(jiffies)
 #else //][!__KERNEL__
 
 	#include <sys/times.h>
+	#include <stdio.h>
 	
 	#define GALLEN_PRINT(fmt,args...)		printf(fmt,##args)
+	#define GALLEN_ERR_PRINT(fmt,args...)		fprintf(stderr,fmt,##args)
+	#define GALLEN_WARNING_PRINT(fmt,args...)		fprintf(stderr,fmt,##args)
 	#define GET_CURRENT_TICK()									(unsigned int)(times(0))
 #endif //] __KERNEL__
 
@@ -221,9 +226,9 @@
 	#define dbgLEAVE()		GALLEN_PRINT("%s(%d) : Leave %s\n",__FILE__,__LINE__,__FUNCTION__)
 	#define DBG_MSG(fmt,args...)					GALLEN_PRINT(fmt,##args)
 	#define DBG_MSG_FLUSH(fmt,args...)		GALLEN_PRINT(fmt,##args)
-	#define ERR_MSG(fmt,args...)					GALLEN_PRINT(fmt,##args)
-	#define WARNNING_MSG(fmt,args...)			GALLEN_PRINT(fmt,##args)
-	#define WARNING_MSG(fmt,args...)			GALLEN_PRINT(fmt,##args)
+	#define ERR_MSG(fmt,args...)					GALLEN_ERR_PRINT(fmt,##args)
+	#define WARNNING_MSG(fmt,args...)			GALLEN_WARNING_PRINT(fmt,##args)
+	#define WARNING_MSG(fmt,args...)			GALLEN_WARNING_PRINT(fmt,##args)
 #elif (GDEBUG >= 1)
 	#define GALLEN_DECLARE_INT(name)	
 	#define GALLEN_DECLARE_EXTINT(name)	
@@ -263,9 +268,9 @@
 	#define dbgLEAVE()			GALLEN_PRINT("%s(%d) : Leave %s\n",__FILE__,__LINE__,__FUNCTION__)
 	#define DBG_MSG(fmt,args...)					GALLEN_PRINT(fmt,##args)
 	#define DBG_MSG_FLUSH(fmt,args...)		GALLEN_PRINT(fmt,##args)
-	#define ERR_MSG(fmt,args...)					GALLEN_PRINT(fmt,##args)
-	#define WARNNING_MSG(fmt,args...)			GALLEN_PRINT(fmt,##args)
-	#define WARNING_MSG(fmt,args...)			GALLEN_PRINT(fmt,##args)
+	#define ERR_MSG(fmt,args...)					GALLEN_ERR_PRINT(fmt,##args)
+	#define WARNNING_MSG(fmt,args...)			GALLEN_WARNING_PRINT(fmt,##args)
+	#define WARNING_MSG(fmt,args...)			GALLEN_WARNING_PRINT(fmt,##args)
 #else
 	#define GALLEN_DECLARE_INT(name)	
 	#define GALLEN_DECLARE_EXTINT(name)	
@@ -305,9 +310,9 @@
 	#define dbgLEAVE()		
 	#define DBG_MSG(fmt,args...)					
 	#define DBG_MSG_FLUSH(fmt,args...)		
-	#define ERR_MSG(fmt,args...)					GALLEN_PRINT(fmt,##args)
-	#define WARNNING_MSG(fmt,args...)			GALLEN_PRINT(fmt,##args)
-	#define WARNING_MSG(fmt,args...)			GALLEN_PRINT(fmt,##args)
+	#define ERR_MSG(fmt,args...)					GALLEN_ERR_PRINT(fmt,##args)
+	#define WARNNING_MSG(fmt,args...)			GALLEN_WARNING_PRINT(fmt,##args)
+	#define WARNING_MSG(fmt,args...)			GALLEN_WARNING_PRINT(fmt,##args)
 #endif
 
 #define DBG0_MSG(fmt,args...)					GALLEN_PRINT(fmt,##args)
