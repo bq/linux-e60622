@@ -84,7 +84,7 @@ static int __zForce_read_data (struct i2c_client *client, char* buffer)
 		schedule_timeout(2);
 	rc = i2c_master_recv(client, buf_recv, 2);
 	if (0xEE != buf_recv[0]) {
-		printk ("[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
+		printk (KERN_ERR "[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
 		return 0;
 	}
 	
@@ -102,10 +102,16 @@ static int __zForce_ir_touch_init(struct i2c_client *client)
 	uint8_t buf_recv[10] = { 0 };
 	uint8_t buf[10];
 
-	if(8==gptHWCFG->m_val.bTouchCtrl) {
-		return i2c_master_send(client, cmd_Active_v2, sizeof(cmd_Active_v2));
+	if(!zForce_ir_touch_detect_int_level()){
+		schedule_delayed_work(&zForce_ir_touch_data.work, 0);
 	}else{
-		return i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
+		printk (KERN_ERR "[%s-%d] zforce boot not completed !!\n",__func__,__LINE__);
+	}
+
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		return i2c_master_send(client, cmd_getFirmwareVer_v2, sizeof(cmd_getFirmwareVer_v2));
+	}else{
+		return i2c_master_send(client, cmd_getFirmwareVer, sizeof(cmd_getFirmwareVer));
 	}	
 }
 
@@ -121,7 +127,7 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 	i2c_master_recv(client, buf_recv, 2);
 	if (0xEE != buf_recv[0]) {
 		if (0xEE != buf_recv[1]) {
-			printk ("[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
+			printk (KERN_ERR "[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
 			return 0;
 		}
 		else
@@ -165,7 +171,7 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 			result = 1;
 			break;
 		case 7:
-			printk ("[%s-%d] command BootComplete (%d)...\n",__func__,__LINE__,buf[1]);
+			printk (KERN_ERR "[%s-%d] command BootComplete (%d)...\n",__func__,__LINE__,buf[1]);
 			break;
 		case 8:
 			printk ("[%s-%d] command Frequency (%d) ...\n",__func__,__LINE__,buf[1]);
@@ -187,7 +193,7 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 			}
 			break;
 		case 0x25:
-			printk ("[%s-%d] command overrun (%d) ...\n",__func__,__LINE__,g_zforce_initial_step);
+			printk (KERN_ERR "[%s-%d] command overrun (%d) ...\n",__func__,__LINE__,g_zforce_initial_step);
 			switch (g_zforce_initial_step) {
 				case 1:
 					if(8==gptHWCFG->m_val.bTouchCtrl) {   //neonode v2
@@ -213,7 +219,7 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 			}
 			break;
 		default:
-			printk ("[%s-%d] undefined command %d (%d bytes)...\n",__func__,__LINE__, *buf, buf_recv[1]);
+			printk (KERN_ERR "[%s-%d] undefined command %d (%d bytes)...\n",__func__,__LINE__, *buf, buf_recv[1]);
 			break;
 	}
 	return result;
@@ -444,14 +450,14 @@ static int zForce_ir_touch_probe(
 
 	err = request_irq(zForce_ir_touch_data.client->irq, zForce_ir_touch_ts_interrupt, 0, ZFORCE_TS_NAME, ZFORCE_TS_NAME);
 	if (err < 0) {
-		printk("%s(%s): Can't allocate irq %d\n", __FILE__, __func__, zForce_ir_touch_data.client->irq);
+		printk(KERN_ERR "%s(%s): Can't allocate irq %d\n", __FILE__, __func__, zForce_ir_touch_data.client->irq);
 	    goto fail;
 	}
 	enable_irq_wake(zForce_ir_touch_data.client->irq);
 
 	err = __zForce_ir_touch_init(client);
 	if (err < 0) {
-	    printk("%s(%s): initial failed.\n", __FILE__, __func__);
+	    printk(KERN_ERR "%s(%s): initial failed.\n", __FILE__, __func__);
 	    goto fail;
 	}
 

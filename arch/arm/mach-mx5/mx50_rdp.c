@@ -155,13 +155,7 @@ static iomux_v3_cfg_t mx50_rdp[] = {
 	/* SD1 */
 //	MX50_PAD_ECSPI2_SS0__GPIO_4_19,
 //	MX50_PAD_EIM_CRE__GPIO_1_27,
-	MX50_PAD_SD1_CMD__SD1_CMD,
 
-	MX50_PAD_SD1_CLK__SD1_CLK,
-	MX50_PAD_SD1_D0__SD1_D0,
-	MX50_PAD_SD1_D1__SD1_D1,
-	MX50_PAD_SD1_D2__SD1_D2,
-	MX50_PAD_SD1_D3__SD1_D3,
 
 	/* SD2 */
 	MX50_PAD_SD2_CD__GPIO_5_17,
@@ -426,6 +420,15 @@ iomux_v3_cfg_t mx50_sd3_disable_pads[] = {
 	MX50_PAD_SD3_D2__GPIO_5_22,
 	MX50_PAD_SD3_D3__GPIO_5_23,
 };
+unsigned mx50_sd3_gpioA[] = {
+	4*32+18, /* GPIO_5_18 */
+	4*32+19, /* GPIO_5_19 */
+	4*32+20, /* GPIO_5_20 */
+	4*32+21, /* GPIO_5_21 */
+	4*32+22, /* GPIO_5_22 */
+	4*32+23, /* GPIO_5_23 */
+};
+
 unsigned long gdw_mx50_sd3_enable_pads=ARRAY_SIZE(mx50_sd3_enable_pads);
 unsigned long gdw_mx50_sd3_disable_pads=ARRAY_SIZE(mx50_sd3_disable_pads);
 
@@ -449,10 +452,50 @@ iomux_v3_cfg_t mx50_sd2_disable_pads[] = {
 	MX50_PAD_SD2_D2__GPIO_5_10,
 	MX50_PAD_SD2_D3__GPIO_5_11,
 };
+unsigned mx50_sd2_gpioA[] = {
+	4*32+6, /* GPIO_5_6 */
+	4*32+7, /* GPIO_5_7 */
+	4*32+8, /* GPIO_5_8 */
+	4*32+9, /* GPIO_5_9 */
+	4*32+10, /* GPIO_5_10 */
+	4*32+11, /* GPIO_5_11 */
+};
+
+
+
 unsigned long gdw_mx50_sd2_enable_pads=ARRAY_SIZE(mx50_sd2_enable_pads);
 unsigned long gdw_mx50_sd2_disable_pads=ARRAY_SIZE(mx50_sd2_disable_pads);
 
 
+iomux_v3_cfg_t mx50_sd1_enable_pads[] = {
+	MX50_PAD_SD1_CLK__SD1_CLK,
+	MX50_PAD_SD1_CMD__SD1_CMD,
+	MX50_PAD_SD1_D0__SD1_D0,
+	MX50_PAD_SD1_D1__SD1_D1,
+	MX50_PAD_SD1_D2__SD1_D2,
+	MX50_PAD_SD1_D3__SD1_D3,
+};
+iomux_v3_cfg_t mx50_sd1_disable_pads[] = {
+	MX50_PAD_SD1_CLK__GPIO_5_0,
+	MX50_PAD_SD1_CMD__GPIO_5_1,
+	MX50_PAD_SD1_D0__GPIO_5_2,
+	MX50_PAD_SD1_D1__GPIO_5_3,
+	MX50_PAD_SD1_D2__GPIO_5_4,
+	MX50_PAD_SD1_D3__GPIO_5_5,
+};
+
+unsigned mx50_sd1_gpioA[] = {
+	4*32+0, /* GPIO_5_0 */
+	4*32+1, /* GPIO_5_1 */
+	4*32+2, /* GPIO_5_2 */
+	4*32+3, /* GPIO_5_3 */
+	4*32+4, /* GPIO_5_4 */
+	4*32+5, /* GPIO_5_5 */
+};
+
+
+unsigned long gdw_mx50_sd1_enable_pads=ARRAY_SIZE(mx50_sd1_enable_pads);
+unsigned long gdw_mx50_sd1_disable_pads=ARRAY_SIZE(mx50_sd1_disable_pads);
 
 static iomux_v3_cfg_t mx50_gpmi_nand[] = {
 	MX50_PIN_EIM_DA8__NANDF_CLE,
@@ -530,19 +573,7 @@ static iomux_v3_cfg_t suspend_enter_pads[] = {
 	MX50_PAD_SD3_WP__GPIO_5_28,
 	
 #endif
-	MX50_PAD_SD1_CLK__GPIO_5_0,
-	MX50_PAD_SD1_CMD__GPIO_5_1,
-	MX50_PAD_SD1_D0__GPIO_5_2,
-	MX50_PAD_SD1_D1__GPIO_5_3,
-	MX50_PAD_SD1_D2__GPIO_5_4,
-	MX50_PAD_SD1_D3__GPIO_5_5,
 	
-	MX50_PAD_SD3_CMD__GPIO_5_18,
-	MX50_PAD_SD3_CLK__GPIO_5_19,
-	MX50_PAD_SD3_D0__GPIO_5_20,
-	MX50_PAD_SD3_D1__GPIO_5_21,
-	MX50_PAD_SD3_D2__GPIO_5_22,
-	MX50_PAD_SD3_D3__GPIO_5_23,
 	/* NVCC_LCD pads */
 	MX50_PAD_DISP_D0__GPIO_2_0,
 	MX50_PAD_DISP_D1__GPIO_2_1,
@@ -748,6 +779,13 @@ static u16 E50602_keymapping[] = {
 	-1, -1, -1, -1,
 };
 
+static u16 E60672_keymapping[] = {
+	61, 62, 29, -1, 	// FrontLight, , ,     
+	-1, -1, -1, -1, 	// , , ,
+	-1, -1, -1, -1, 	// , , , 
+	-1, -1, -1, 116,     // , , ,KEY_POWER 
+};
+
 static u16 E60682_keymapping[] = {
 	28, 106, 105, 61, 		// Return, Right, Left, Home
 	62, 103, 108, -1, 		// Menu, Up, Down
@@ -766,7 +804,7 @@ static u16 E606B2_keymapping[] = {
 	90, -1, -1, -1, 	// FrontLight, , ,     
 	-1, -1, -1, -1, 	// , , ,
 	-1, -1, -1, -1, 	// , , , 
-	-1, -1, -1, 116,     // , , ,KEY_POWER 
+	-1, -1, KEY_H, 116,     // , , ,KEY_POWER 
 };
 
 static u16 NoKey_keymapping[] = {
@@ -1047,7 +1085,7 @@ static iomux_v3_cfg_t mx50_epdc_pads_enabled[] = {
 	MX50_PAD_EPDC_SDCLK__EPDC_SDCLK,
 	MX50_PAD_EPDC_SDOE__EPDC_SDOE,
 	MX50_PAD_EPDC_SDLE__EPDC_SDLE,
-//	MX50_PAD_EPDC_SDSHR__EPDC_SDSHR,
+	MX50_PAD_EPDC_SDSHR__EPDC_SDSHR,
 	MX50_PAD_EPDC_BDR0__EPDC_BDR0,
 	MX50_PAD_EPDC_BDR1__EPDC_BDR1,
 	MX50_PAD_EPDC_VCOM0__GPIO_4_21,
@@ -1106,7 +1144,7 @@ static void epdc_enable_pins(void)
 	gpio_direction_input(EPDC_SDSHR);
 	gpio_direction_input(EPDC_BDR0);
 	gpio_direction_input(EPDC_BDR1);
-	gpio_direction_input(EPDC_VCOM);
+	//gpio_direction_input(EPDC_VCOM);
 	gpio_direction_input(EPDC_SDCE0);
 	gpio_direction_input(EPDC_SDCE1);
 	gpio_direction_input(EPDC_SDCE2);
@@ -1129,13 +1167,13 @@ static void epdc_disable_pins(void)
 	gpio_direction_output(EPDC_D6, 0);
 	gpio_direction_output(EPDC_D7, 0);
 	gpio_direction_output(EPDC_GDCLK, 0);
-//	gpio_direction_output(EPDC_GDSP, 0);
+	gpio_direction_output(EPDC_GDSP, 0);
 	gpio_direction_output(EPDC_GDOE, 0);
 	gpio_direction_output(EPDC_GDRL, 0);
 	gpio_direction_output(EPDC_SDCLK, 0);
 	gpio_direction_output(EPDC_SDOE, 0);
 	gpio_direction_output(EPDC_SDLE, 0);
-//	gpio_direction_output(EPDC_SDSHR, 0);
+	gpio_direction_output(EPDC_SDSHR, 0);
 	gpio_direction_output(EPDC_BDR0, 0);
 	gpio_direction_output(EPDC_BDR1, 0);
 //	gpio_direction_output(EPDC_VCOM, 0);
@@ -1162,7 +1200,25 @@ static struct fb_videomode ed060sc8_mode = {
 .flag = 0,
 };
 
-// gallen add for ED060XC5 test .
+// for ED060XC5 release by Freescale Grace 20120726 .
+
+static struct fb_videomode ed060xc1_mode = {
+.name = "E60XC1",
+.refresh = 85,
+.xres = 1024,
+.yres = 768,
+.pixclock = 40000000,
+.left_margin = 12,
+.right_margin = 72,
+.upper_margin = 4,
+.lower_margin = 5,
+.hsync_len = 8,
+.vsync_len = 2,
+.sync = 0,
+.vmode = FB_VMODE_NONINTERLACED,
+.flag = 0,
+};
+
 static struct fb_videomode ed060xc5_mode = {
 .name = "E60XC5",
 .refresh = 85,
@@ -1170,10 +1226,10 @@ static struct fb_videomode ed060xc5_mode = {
 .yres = 758,
 .pixclock = 40000000,
 .left_margin = 12,
-.right_margin = 72,
+.right_margin = 76,
 .upper_margin = 4,
 .lower_margin = 5,
-.hsync_len = 8,
+.hsync_len = 12,
 .vsync_len = 2,
 .sync = 0,
 .vmode = FB_VMODE_NONINTERLACED,
@@ -1225,6 +1281,19 @@ static struct mxc_epdc_fb_mode panel_modes[] = {
 },
 {
 & ed060xc5_mode,
+4,            /* vscan_holdoff */
+10,          /* sdoed_width */
+20,          /* sdoed_delay */
+10,          /* sdoez_width */
+20,          /* sdoez_delay */
+524,        /* gdclk_hp_offs */
+25,        /* gdsp_offs changed delay to 8.3 uS */
+0,            /* gdoe_offs */
+19,            /* gdclk_offs changed delay to 4.5 SDCLK */
+1,            /* num_ce */
+},
+{
+& ed060xc1_mode,
 4,            /* vscan_holdoff */
 10,          /* sdoed_width */
 20,          /* sdoed_delay */
@@ -2040,8 +2109,15 @@ static void mx50_suspend_enter()
 	mxc_iomux_v3_setup_multiple_pads(suspend_enter_pads,
 			ARRAY_SIZE(suspend_enter_pads));
 
-	mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, \
-		ARRAY_SIZE(mx50_sd2_disable_pads));
+	if(9==check_hardware_name()) {
+		// E5061X ...
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, \
+			ARRAY_SIZE(mx50_sd2_disable_pads));
+	}
+	else {
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, \
+			ARRAY_SIZE(mx50_sd2_disable_pads));
+	}
 			
 	ntx_gpio_suspend ();
 
@@ -2067,8 +2143,14 @@ static void mx50_suspend_exit()
 
 	ntx_gpio_resume ();
 
-	mxc_iomux_v3_setup_multiple_pads(mx50_sd2_enable_pads, \
-		ARRAY_SIZE(mx50_sd2_enable_pads));
+	
+	if(9==check_hardware_name()) {
+		// E5061X ...
+	}
+	else {
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_enable_pads, \
+			ARRAY_SIZE(mx50_sd2_enable_pads));
+	}
 
 	mxc_iomux_v3_setup_multiple_pads(suspend_exit_pads,
 			ARRAY_SIZE(suspend_exit_pads));
@@ -2153,6 +2235,25 @@ static void __init mx50_rdp_io_init(void)
 		// SD2 should be disabled in E50612 (WIFI interface)
 		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, \
 			ARRAY_SIZE(mx50_sd2_disable_pads));
+		// SD1 should be disabled in E50612 (N/A) 
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd1_disable_pads, \
+				ARRAY_SIZE(mx50_sd1_disable_pads));
+
+		for(i=0;i<ARRAY_SIZE(mx50_sd1_gpioA);i++) {
+			char cNameA[6]="sd1-0";
+			cNameA[4] += i;
+			gpio_request(mx50_sd1_gpioA[i], cNameA);
+			gpio_direction_input(mx50_sd1_gpioA[i]);
+			//gpio_direction_output(mx50_sd1_gpioA[i],0);
+		}
+		for(i=0;i<ARRAY_SIZE(mx50_sd2_gpioA);i++) {
+			char cNameA[6]="sd2-0";
+			cNameA[4] += i;
+			gpio_request(mx50_sd2_gpioA[i], cNameA);
+			gpio_direction_input(mx50_sd2_gpioA[i]);
+			//gpio_direction_output(mx50_sd2_gpioA[i],0);
+		}
+
 	}
 	else {
 		// SD3 should be disabled in others MODEL (WIFI interface)
@@ -2161,6 +2262,17 @@ static void __init mx50_rdp_io_init(void)
 		// SD2 should be enabled in others MODEL (External SD)
 		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_enable_pads, \
 			ARRAY_SIZE(mx50_sd2_enable_pads));
+		// SD1 should be enabled in others MODEL 
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd1_enable_pads, \
+				ARRAY_SIZE(mx50_sd1_enable_pads));
+
+		for(i=0;i<ARRAY_SIZE(mx50_sd3_gpioA);i++) {
+			char cNameA[6]="sd3-0";
+			cNameA[4] += i;
+			gpio_request(mx50_sd3_gpioA[i], cNameA);
+			gpio_direction_input(mx50_sd3_gpioA[i]);
+			//gpio_direction_output(mx50_sd3_gpioA[i],0);
+		}
 	}
 
 
@@ -2362,17 +2474,7 @@ static void __init mxc_board_init(void)
 
 	_parse_cmdline();
 
-	iHWID = check_hardware_name();
 	
-	/* SD card detect irqs */
-	if(9!=iHWID) {
-		// not E5061X ...
-		 
-//	mxcsdhc1_device.resource[2].start = gpio_to_irq(SD1_CD);
-//	mxcsdhc1_device.resource[2].end = gpio_to_irq(SD1_CD);
-		mxcsdhc2_device.resource[2].start = gpio_to_irq(SD2_CD);
-		mxcsdhc2_device.resource[2].end = gpio_to_irq(SD2_CD);
-	}
 
 	mxc_cpu_common_init();
 	mx50_rdp_io_init();
@@ -2406,6 +2508,8 @@ static void __init mxc_board_init(void)
 //	if (enable_keypad)
 	
 
+	iHWID = check_hardware_name();
+
 	switch (iHWID) {
 	case 1:	//E60612
 		i2c_register_board_info(0, mxc_i2c0_E60612_board_info,	ARRAY_SIZE(mxc_i2c0_E60612_board_info));
@@ -2428,6 +2532,11 @@ static void __init mxc_board_init(void)
 		printk("%s() Set E60622 key mapping !!\n",__FUNCTION__);
 		keypad_plat_data.matrix = E60622_keymapping;
 		mxc_register_device(&mxc_alc5623_device, &alc5623_data);
+		break;
+	case 5:	//E60672
+		i2c_register_board_info(0, mxc_i2c0_E60612_board_info,	ARRAY_SIZE(mxc_i2c0_E60612_board_info));
+		printk("%s() Set E60672 key mapping !!\n",__FUNCTION__);
+		keypad_plat_data.matrix = E60672_keymapping;
 		break;
 	case 6:	// E60632
 		printk("%s() Set E60632 key mapping !!\n",__FUNCTION__);
@@ -2458,12 +2567,19 @@ static void __init mxc_board_init(void)
 	if(9==iHWID) {
 		// E5061X .
 		mxc_register_device(&mxcsdhc3_device, &mmc1_data);
-		mxc_register_device(&mxcsdhc1_device, &mmc2_data);
+		//mxc_register_device(&mxcsdhc1_device, &mmc2_data);
 		mxc_register_device(&mxcsdhc2_device, &mmc_wifi_data);
 	}
 	else 
 #endif
 	{
+		/* SD card detect irqs */
+//	mxcsdhc1_device.resource[2].start = gpio_to_irq(SD1_CD);
+//	mxcsdhc1_device.resource[2].end = gpio_to_irq(SD1_CD);
+		mxcsdhc2_device.resource[2].start = gpio_to_irq(SD2_CD);
+		mxcsdhc2_device.resource[2].end = gpio_to_irq(SD2_CD);
+
+
 		mxc_register_device(&mxcsdhc1_device, &mmc1_data);
 		mxc_register_device(&mxcsdhc2_device, &mmc2_data);
 		mxc_register_device(&mxcsdhc3_device, &mmc_wifi_data);

@@ -69,10 +69,10 @@
  */
 /*#define DEFAULT_PANEL_HW_INIT*/
 
-#define NUM_SCREENS_MIN	1
+#define NUM_SCREENS_MIN	2
 #define EPDC_NUM_LUTS 16
 //#define EPDC_MAX_NUM_UPDATES 20
-#define EPDC_MAX_NUM_UPDATES 1
+#define EPDC_MAX_NUM_UPDATES giEPDC_MAX_NUM_UPDATES
 #define INVALID_LUT -1
 
 #define DEFAULT_TEMP_INDEX	0
@@ -93,6 +93,7 @@
 #define EPDC_VCOM	(3*32 + 21)	/*GPIO_4_21 */
 
 static unsigned long default_bpp = 16;
+static int giEPDC_MAX_NUM_UPDATES=2;
 
 struct update_marker_data {
 	struct list_head full_list;
@@ -249,6 +250,8 @@ struct mxcfb_waveform_data_file {
 #include "ntx_hwconfig.h"
 extern volatile NTX_HWCONFIG *gptHWCFG;
 
+extern volatile int giRootDevNum;
+extern volatile int giRootPartNum;
 
 void __iomem *epdc_base;
 
@@ -895,33 +898,40 @@ static void epdc_powerup(struct mxc_epdc_fb_data *fb_data)
 
     fb_data->updates_active = true;
     
-	/* Enable pins used by EPDC */
-	if(6==gptHWCFG->m_val.bDisplayCtrl) {
-		// imx508 + tps16585 .
-		unsigned long dwTPS65185_mode = TPS65185_MODE_ACTIVE;
-		iChk = tps65185_chg_mode(&dwTPS65185_mode);
-		if(iChk<0) {
-			printk("%s(%d):[warning] change to power active fail,errno=%d !\n",
-				__FILE__,__LINE__,iChk);
-		}		
-		iChk = tps65185_wait_panel_poweron();
-		if(iChk<0) {
-			printk("%s(%d):[warning] wait power on fail,errno=%d !\n",
-				__FILE__,__LINE__,iChk);
-		}
-	}
-	else {
-		gpio_direction_output(GPIO_PWRALL, 1);msleep(50);
-	}
-	if (fb_data->pdata->enable_pins)
-		fb_data->pdata->enable_pins();
+
 
 	if(6==gptHWCFG->m_val.bDisplayCtrl) {
+#if 1
 		// imx508 + tps16585 .
+		unsigned long dwTPS65185_mode = TPS65185_MODE_ACTIVE;
+
+		iChk = tps65185_chg_mode(&dwTPS65185_mode);
+		if(iChk<0) {
+			printk(KERN_ERR "%s(%d):[warning] change to power active fail,errno=%d !\n",
+				__FILE__,__LINE__,iChk);
+		}
+		/*	
+		iChk = tps65185_wait_panel_poweron();
+		if(iChk<0) {
+			printk(KERN_ERR "%s(%d):[warning] wait power on fail,errno=%d !\n",
+				__FILE__,__LINE__,iChk);
+		}
+		*/
+
+		//gpio_direction_output(EPDC_VCOM, 1);
+		//msleep(10);
+		
+#endif
 	}
-	else {
+	else 
+	{
+		gpio_direction_output(GPIO_PWRALL, 1);msleep(50);
 		gpio_direction_output(EPDC_VCOM, 1);msleep(15);
 	}
+
+	/* Enable pins used by EPDC */
+	if (fb_data->pdata->enable_pins)
+		fb_data->pdata->enable_pins();
 
 	
 	/* Enable clocks to EPDC */
@@ -984,15 +994,6 @@ static void epdc_powerdown(struct mxc_epdc_fb_data *fb_data)
 	__raw_writel(EPDC_CTRL_CLKGATE, EPDC_CTRL_SET);
 	clk_disable(fb_data->epdc_clk_pix);
 	clk_disable(fb_data->epdc_clk_axi);
-	if(6==gptHWCFG->m_val.bDisplayCtrl) {
-		// imx508 + tps16585 .
-	}
-	else {
-		msleep(5);
-		gpio_direction_output(EPDC_VCOM, 0);
-	
-		msleep(5);// gallen add 2011/06/17 .
-	}
 
 	/* Disable pins used by EPDC (to prevent leakage current) */
 	if (fb_data->pdata->disable_pins)
@@ -1000,27 +1001,49 @@ static void epdc_powerdown(struct mxc_epdc_fb_data *fb_data)
 		GALLEN_DBGLOCAL_RUNLOG(0);
 		fb_data->pdata->disable_pins();
 	}
-	
-	if(6==gptHWCFG->m_val.bDisplayCtrl) {
+
 #if 1
+	if(6==gptHWCFG->m_val.bDisplayCtrl) 
+	{
 		// imx508 + tps16585 .
-		//unsigned long dwTPS65185_mode = TPS65185_MODE_SLEEP;
-		unsigned long dwTPS65185_mode = TPS65185_MODE_STANDBY;
-		iChk = tps65185_chg_mode(&dwTPS65185_mode);
-		if(iChk<0) {
-			printk("%s(%d):[warning] change to power sleep fail ,errno=%d !\n",
-				__FILE__,__LINE__,iChk);
-		}		
-		iChk = tps65185_wait_panel_poweroff();
-		if(iChk<0) {
-			printk("%s(%d):[warning] wait power off fail ,errno=%d !\n",
-				__FILE__,__LINE__,iChk);
-		}	
-#endif
+		//msleep(10);
+		//gpio_direction_output(EPDC_VCOM, 0);
+		
+		//if(!(0==giRootDevNum&&2==giRootPartNum)) 
+		{
+			// imx508 + tps16585 .
+			//unsigned long dwTPS65185_mode = TPS65185_MODE_SLEEP;
+			unsigned long dwTPS65185_mode = TPS65185_MODE_STANDBY;
+			iChk = tps65185_chg_mode(&dwTPS65185_mode);
+			if(iChk<0) {
+				printk(KERN_ERR "%s(%d):[warning] change to power sleep fail ,errno=%d !\n",
+					__FILE__,__LINE__,iChk);
+			}	
+			/*	
+			iChk = tps65185_wait_panel_poweroff();
+			if(iChk<0) {
+				printk(KERN_ERR "%s(%d):[warning] wait power off fail ,errno=%d !\n",
+					__FILE__,__LINE__,iChk);
+			}	
+			*/
+		}
+		//else {
+			//printk(KERN_ERR "root=/dev/mmcblk0p2 skip PMIC power down !\n");
+		//}
+
 	}
-	else {
+	else 
+#endif
+	{
+		msleep(5);
+		gpio_direction_output(EPDC_VCOM, 0);
+	
+		msleep(5);// gallen add 2011/06/17 .
 		gpio_direction_output(GPIO_PWRALL, 0);
 	}
+
+
+	
 
 	fb_data->power_state = POWER_STATE_OFF;
 	fb_data->powering_down = false;
@@ -2938,6 +2961,7 @@ static int mxc_epdc_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	int ret = -EINVAL;
 	GALLEN_DBGLOCAL_BEGIN();
 	
+	fake_s1d13522_progress_stop();
 	
 
 	switch (cmd) {
@@ -4066,6 +4090,14 @@ int __devinit mxc_epdc_fb_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	if(0==gptHWCFG->m_val.bRamSize||1==gptHWCFG->m_val.bRamSize) {
+		// RAM SIZE < 256MB
+		giEPDC_MAX_NUM_UPDATES = 1;
+	}
+	else {
+		giEPDC_MAX_NUM_UPDATES = 10;
+	}
+
 	fb_data = (struct mxc_epdc_fb_data *)framebuffer_alloc(
 			sizeof(struct mxc_epdc_fb_data), &pdev->dev);
 	if (fb_data == NULL) {
@@ -5082,8 +5114,12 @@ static int __init mxc_epdc_fb_init(void)
 {
 	return platform_driver_register(&mxc_epdc_fb_driver);
 }
-late_initcall(mxc_epdc_fb_init);
 
+#ifndef FW_IN_RAM
+late_initcall(mxc_epdc_fb_init);
+#else
+module_init(mxc_epdc_fb_init);
+#endif
 
 static void __exit mxc_epdc_fb_exit(void)
 {
