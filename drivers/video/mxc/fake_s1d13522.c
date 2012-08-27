@@ -121,7 +121,7 @@ static ST_PVI_CONFIG	ConfigPVI={
 
 #ifdef SHOW_PROGRESS_BAR
 static DECLARE_WAIT_QUEUE_HEAD(progress_WaitQueue);
-static int gIsProgessRunning;
+volatile static int gIsProgessRunning=1;
 static VOID PROGRESS_BAR(EPDFB_DC *pDC);
 #endif
 
@@ -149,8 +149,10 @@ volatile unsigned long gdwLOGO_size;
 
 volatile unsigned char *gpbWF_paddr;
 volatile unsigned char *gpbWF_vaddr;
-volatile unsigned long gdwWF_size; ;
+volatile unsigned long gdwWF_size; 
 
+volatile int giRootDevNum=0;
+volatile int giRootPartNum=1;
 
 
 
@@ -276,6 +278,26 @@ static int _MYINIT_TEXT logo_size_setup(char *str)
 	return 1;
 }
 
+
+
+static int _MYINIT_TEXT root_path_setup(char *str)
+{
+	#if (_TEST_CMDLINE == 0)
+	if(str[5]=='m'&&str[6]=='m'&&str[7]=='c'&&\
+			str[8]=='b'&&str[9]=='l'&&str[10]=='k') 
+	{
+		giRootDevNum=(int)(str[11]-'0');
+		giRootPartNum=(int)simple_strtoul(&str[13],NULL,0);
+	}
+	else {
+	}
+	printk("%s() rootdev=%d,rootpart=%d\n",__FUNCTION__,giRootDevNum,giRootPartNum);
+	#else
+	printk("%s() str=%s\n",__FUNCTION__,str);
+	#endif
+	return 1;
+}
+
 #if (_MYCMDLINE_PARSE==0) //[
 __setup("waveform_p=",waveform_p_setup);
 __setup("waveform_sz=",waveform_size_setup);
@@ -288,10 +310,10 @@ void fake_s1d13522_parse_epd_cmdline(void)
 	char *pcPatternStart,*pcPatternVal,*pcPatternValEnd,cTempStore='\0';
 	unsigned long ulPatternLen;
 
-	char *szParsePatternA[]={"waveform_sz=","waveform_p=","logo_sz=","logo_p="};
+	char *szParsePatternA[]={"waveform_sz=","waveform_p=","logo_sz=","logo_p=","root="};
 	int ((*pfnDispatchA[])(char *str))={ \
 		waveform_size_setup,waveform_p_setup,\
-		logo_size_setup,logo_p_setup };
+		logo_size_setup,logo_p_setup,root_path_setup };
 		
 	int i;
 	char *pszCmdLineBuf;
@@ -533,6 +555,7 @@ void fake_s1d13522_progress_start(EPDFB_DC *pDC)
 
 void fake_s1d13522_progress_stop(void)
 {
+	DBG_MSG("====%s()====!\n",__FUNCTION__);
 	gIsProgessRunning = 0;
 }
 
@@ -2823,8 +2846,8 @@ static VOID PROGRESS_BAR(EPDFB_DC *pDC)
 	}
 	
 	ASSERT(pDC);
-	
-	gIsProgessRunning = 1;
+	//gIsProgessRunning = 1;
+	DBG_MSG("%s() ,progresscnt=%d\n",__FUNCTION__,gIsProgessRunning);
 
 	icons = gptHWCFG->m_val.bProgressCnts;
 	startX = (int)(gptHWCFG->m_val.bProgressXHiByte<<8|gptHWCFG->m_val.bProgressXLoByte);
