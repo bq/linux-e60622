@@ -1821,6 +1821,7 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 	}
 	
 //	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
+	if (gSleep_Mode_Suspend) {
 		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])
@@ -1845,7 +1846,7 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 				continue;
 			free_irq(chip->hosts[i]->irq, chip->hosts[i]);
 		}
-//	}
+	}
 	return 0;
 }
 
@@ -1872,6 +1873,7 @@ static int sdhci_resume(struct platform_device *pdev)
 		return 0;	// Joseph 100323 test
 	}
 //	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
+	if (gSleep_Mode_Suspend) {
 		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])
@@ -1889,7 +1891,7 @@ static int sdhci_resume(struct platform_device *pdev)
 			if (ret)
 				return ret;
 		}
-//	}
+	}
 	return 0;
 }
 
