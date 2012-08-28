@@ -293,6 +293,8 @@ static void elan_touch_report_data(struct i2c_client *client, uint8_t *buf)
 
 static void elan_touch_work_func(struct work_struct *work)
 {
+	pm_stay_awake(&elan_touch_data.client->dev);
+
 	elan_touch_enqueue ();	
 	while (gQueueRear != gQueueFront){
 		elan_touch_report_data(elan_touch_data.client, gElanBuffer[gQueueFront]);
@@ -306,10 +308,14 @@ static void elan_touch_work_func(struct work_struct *work)
 #else
 	g_touch_triggered = 0;
 #endif			
+
+	pm_relax();
 }
 
 static irqreturn_t elan_touch_ts_interrupt(int irq, void *dev_id)
 {
+	pm_wakeup_event(&elan_touch_data.client->dev, 100);
+
 	g_touch_triggered = 1;
 #ifdef	_WITH_DELAY_WORK_
 	schedule_delayed_work(&elan_touch_data.work, 0);
@@ -325,6 +331,8 @@ static irqreturn_t elan_touch_ts_interrupt(int irq, void *dev_id)
 
 void elan_touch_ts_triggered(void)
 {
+	pm_stay_awake(&elan_touch_data.client->dev);
+
 	g_touch_triggered = 1;
 	elan_touch_enqueue ();	
 #ifdef	_WITH_DELAY_WORK_
@@ -332,6 +340,8 @@ void elan_touch_ts_triggered(void)
 #else
 	queue_work(elan_wq, &elan_touch_data.work);
 #endif			
+
+	pm_relax();
 }
 
 static enum hrtimer_restart elan_touch_timer_func(struct hrtimer *timer)

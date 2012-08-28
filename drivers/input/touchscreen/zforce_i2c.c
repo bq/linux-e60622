@@ -291,6 +291,8 @@ void zForce_ir_touch_enqueue (void)
 
 static void zForce_ir_touch_work_func(struct work_struct *work)
 {
+	pm_stay_awake(&zForce_ir_touch_data.client->dev);
+
 	zForce_ir_touch_enqueue ();	
 	while (gQueueRear != gQueueFront){
 		zForce_ir_touch_report_data(zForce_ir_touch_data.client, gzForceBuffer[gQueueFront]);
@@ -300,10 +302,14 @@ static void zForce_ir_touch_work_func(struct work_struct *work)
 		schedule_delayed_work(&zForce_ir_touch_data.work, 1);
 	else
 		g_touch_triggered = 0;
+
+	pm_relax();
 }
 
 static irqreturn_t zForce_ir_touch_ts_interrupt(int irq, void *dev_id)
 {
+	pm_wakeup_event(&zForce_ir_touch_data.client->dev, 100);
+
 	g_touch_triggered = 1;
 	schedule_delayed_work(&zForce_ir_touch_data.work, 0);
 	return IRQ_HANDLED;
@@ -311,8 +317,12 @@ static irqreturn_t zForce_ir_touch_ts_interrupt(int irq, void *dev_id)
 
 void zForce_ir_touch_ts_triggered(void)
 {
+	pm_stay_awake(&zForce_ir_touch_data.client->dev);
+
 	g_touch_triggered = 1;
 	schedule_delayed_work(&zForce_ir_touch_data.work, 0);
+
+	pm_relax();
 }
 
 //tatic const struct i2c_device_id neonode_ts_id[] = {
