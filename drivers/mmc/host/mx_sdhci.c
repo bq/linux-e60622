@@ -1563,6 +1563,8 @@ static void esdhc_cd_callback(struct work_struct *work)
 	unsigned int cd_status = 0;
 	struct sdhci_host *host = container_of(work, struct sdhci_host, cd_wq);
 
+	pm_stay_awake(&host->chip->pdev->dev);
+
 	GALLEN_DBGLOCAL_BEGIN();
 
 	if (host->id == 1) {
@@ -1598,6 +1600,9 @@ static void esdhc_cd_callback(struct work_struct *work)
 		else {
 			mod_timer(&host->cd_timer, jiffies + HZ / 4);
 			GALLEN_DBGLOCAL_ESC();
+
+			pm_relax();
+
 			return;
 		}
 	}
@@ -1675,6 +1680,8 @@ static void esdhc_cd_callback(struct work_struct *work)
 
 
 	GALLEN_DBGLOCAL_END();
+
+	pm_relax();
 }
 
 /*!
@@ -1690,6 +1697,8 @@ static void esdhc_cd_callback(struct work_struct *work)
 static irqreturn_t sdhci_cd_irq(int irq, void *dev_id)
 {
 	struct sdhci_host *host = dev_id;
+
+	pm_wakeup_event(&host->chip->pdev->dev, 100);
 
 	schedule_work(&host->cd_wq);
 
