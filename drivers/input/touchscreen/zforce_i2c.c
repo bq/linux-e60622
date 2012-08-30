@@ -68,6 +68,31 @@ static const uint8_t cmd_Deactive[] = {0x00};
 
 extern unsigned int msp430_read(unsigned int reg);
 /*--------------------------------------------------------------*/
+static int zforce_i2c_start(struct i2c_client *client)
+{
+	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		i2c_master_send(client, cmd_Active_v2, sizeof(cmd_Active_v2));
+	}else{
+		i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
+	}	
+//	i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
+	
+	return 0;
+}
+
+static int zforce_i2c_stop(struct i2c_client *client)
+{
+	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
+	}else{
+		i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
+	}	
+
+	return 0;
+}
+
 static int zForce_ir_touch_detect_int_level(void)
 {
 	unsigned v;
@@ -85,6 +110,12 @@ static int __zForce_read_data (struct i2c_client *client, char* buffer)
 	rc = i2c_master_recv(client, buf_recv, 2);
 	if (0xEE != buf_recv[0]) {
 		printk (KERN_ERR "[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
+
+		/* powercycle the device */
+		zforce_i2c_stop(client);
+		msleep(100);
+		zforce_i2c_start(client);
+
 		return 0;
 	}
 	
@@ -128,6 +159,12 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 	if (0xEE != buf_recv[0]) {
 		if (0xEE != buf_recv[1]) {
 			printk (KERN_ERR "[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
+
+			/* powercycle the device */
+			zforce_i2c_stop(client);
+			msleep(100);
+			zforce_i2c_start(client);
+
 			return 0;
 		}
 		else
@@ -310,6 +347,12 @@ static irqreturn_t zForce_ir_touch_ts_interrupt(int irq, void *dev_id)
 {
 	pm_wakeup_event(&zForce_ir_touch_data.client->dev, 100);
 
+	/* don't queue stuff when we're already processing things */
+	if (g_touch_triggered) {
+		printk(KERN_ERR "ts_interrupt: zforce already processing an event\n");
+		return IRQ_HANDLED;
+	}
+
 	g_touch_triggered = 1;
 	schedule_delayed_work(&zForce_ir_touch_data.work, 0);
 	return IRQ_HANDLED;
@@ -317,12 +360,16 @@ static irqreturn_t zForce_ir_touch_ts_interrupt(int irq, void *dev_id)
 
 void zForce_ir_touch_ts_triggered(void)
 {
-	pm_stay_awake(&zForce_ir_touch_data.client->dev);
+	pm_wakeup_event(&zForce_ir_touch_data.client->dev, 100);
+
+	/* don't queue stuff when we're already processing things */
+	if (g_touch_triggered) {
+		printk(KERN_ERR "ts_triggered: zforce already processing an event\n");
+		return;
+	}
 
 	g_touch_triggered = 1;
 	schedule_delayed_work(&zForce_ir_touch_data.work, 0);
-
-	pm_relax();
 }
 
 //tatic const struct i2c_device_id neonode_ts_id[] = {
@@ -373,31 +420,6 @@ static ssize_t neo_ctl(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 static DEVICE_ATTR(neocmd, 0644, neo_info, neo_ctl);
-
-static int zforce_i2c_start(struct i2c_client *client)
-{
-	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
-	if(8==gptHWCFG->m_val.bTouchCtrl) {
-		i2c_master_send(client, cmd_Active_v2, sizeof(cmd_Active_v2));
-	}else{
-		i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
-	}	
-//	i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
-	
-	return 0;
-}
-
-static int zforce_i2c_stop(struct i2c_client *client)
-{
-	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
-	if(8==gptHWCFG->m_val.bTouchCtrl) {
-		i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
-	}else{
-		i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
-	}	
-
-	return 0;
-}
 
 extern int gSleep_Mode_Suspend;
 
