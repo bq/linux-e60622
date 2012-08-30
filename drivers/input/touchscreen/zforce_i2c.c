@@ -134,9 +134,11 @@ static int __zForce_ir_touch_init(struct i2c_client *client)
 	uint8_t buf[10];
 
 	if(!zForce_ir_touch_detect_int_level()){
+		g_touch_triggered = 1;
 		schedule_delayed_work(&zForce_ir_touch_data.work, 0);
 	}else{
 		printk (KERN_ERR "[%s-%d] zforce boot not completed !!\n",__func__,__LINE__);
+		return 0;
 	}
 
 	if(8==gptHWCFG->m_val.bTouchCtrl) {
@@ -293,6 +295,8 @@ static void zForce_ir_touch_report_data(struct i2c_client *client, uint8_t *buf)
 			input_report_abs(zForce_ir_touch_data.input, ABS_Y, x1);
 			input_report_abs(zForce_ir_touch_data.input, ABS_X, y1);
 			input_report_abs(zForce_ir_touch_data.input, ABS_PRESSURE, pressure);
+			last_y = x1;
+			last_x = y1;
 //			printk ("[%s-%d] touch down (%d, %d, %d)\n",__func__,__LINE__,x1,y1, pressure);
 		}
 		else {
@@ -303,10 +307,10 @@ static void zForce_ir_touch_report_data(struct i2c_client *client, uint8_t *buf)
 			input_report_abs(zForce_ir_touch_data.input, ABS_Y, y1);
 			input_report_abs(zForce_ir_touch_data.input, ABS_PRESSURE, 1024);
 			input_report_key(zForce_ir_touch_data.input, BTN_TOUCH, 1);
+			last_x = x1;
+			last_y = y1;
 		}
 		input_report_key(zForce_ir_touch_data.input, BTN_TOUCH, 1);
-		last_x = x1;
-		last_y = y1;
 		g_touch_pressed++;
 	}
 	input_sync(zForce_ir_touch_data.input);
