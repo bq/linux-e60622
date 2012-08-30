@@ -93,6 +93,17 @@ static int zforce_i2c_stop(struct i2c_client *client)
 	return 0;
 }
 
+static int zforce_i2c_reset(struct i2c_client *client)
+{
+	printk (KERN_ERR, "restarting zforce sensinig\n");
+	zforce_i2c_stop(client);
+	msleep(200);
+	zforce_i2c_start(client);
+	msleep(100);
+
+	return 0;
+}
+
 static int zForce_ir_touch_detect_int_level(void)
 {
 	unsigned v;
@@ -112,9 +123,7 @@ static int __zForce_read_data (struct i2c_client *client, char* buffer)
 		printk (KERN_ERR "[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
 
 		/* powercycle the device */
-		zforce_i2c_stop(client);
-		msleep(100);
-		zforce_i2c_start(client);
+		zforce_i2c_reset(client);
 
 		return 0;
 	}
@@ -163,9 +172,7 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 			printk (KERN_ERR "[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
 
 			/* powercycle the device */
-			zforce_i2c_stop(client);
-			msleep(100);
-			zforce_i2c_start(client);
+			zforce_i2c_reset(client);
 
 			return 0;
 		}
@@ -351,12 +358,6 @@ static irqreturn_t zForce_ir_touch_ts_interrupt(int irq, void *dev_id)
 {
 	pm_wakeup_event(&zForce_ir_touch_data.client->dev, 100);
 
-	/* don't queue stuff when we're already processing things */
-	if (g_touch_triggered) {
-		printk(KERN_ERR "ts_interrupt: zforce already processing an event\n");
-		return IRQ_HANDLED;
-	}
-
 	g_touch_triggered = 1;
 	schedule_delayed_work(&zForce_ir_touch_data.work, 0);
 	return IRQ_HANDLED;
@@ -432,11 +433,13 @@ static int zForce_ir_touch_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 
 //	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
-	/* Do not check the int level manually here
-	 * If a real touch event happened it would set g_touch_pressed
-	 * or g_touch_triggered already, as irqs are still enabled here
-	 */
-	if (g_touch_pressed || g_touch_triggered || (!gSleep_Mode_Suspend && !zForce_ir_touch_detect_int_level())) 
+	/* return immediatly if the driver is still handling touch data */
+	if (g_touch_pressed || g_touch_triggered) {
+		printk("[%s-%d] zForce still handling touch data\n");
+		return -EBUSY;
+	}
+
+	if (!gSleep_Mode_Suspend && !zForce_ir_touch_detect_int_level())
 	{
 		zForce_ir_touch_ts_triggered ();
 		printk ("[%s-%d] zForce touch event not processed.\n",__func__,__LINE__);
