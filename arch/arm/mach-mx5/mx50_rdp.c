@@ -2250,21 +2250,11 @@ static void mx50_suspend_enter()
 	int i;
 	int iHWID;
 
-	/* Clear the SELF_BIAS bit and power down
-	*  the band-gap.
-	*/
-
 	__raw_writel(MXC_ANADIG_PFD_DIS_MASK<<MXC_ANADIG_PFD_DIS_OFFSET,
 		apll_base + MXC_ANADIG_PLLCTRL_SET);
 
 	__raw_writel(MXC_ANADIG_PLL_POWERUP,
 		apll_base + MXC_ANADIG_MISC_CLR);
-
-	__raw_writel(MXC_ANADIG_REF_SELFBIAS_OFF,
-		apll_base + MXC_ANADIG_MISC_CLR);
-	__raw_writel(MXC_ANADIG_REF_PWD,       
-		apll_base + MXC_ANADIG_MISC_SET);
-
 
 	/* Set PADCTRL to 0 for all IOMUX. */
 	for (i = 0; i < ARRAY_SIZE(suspend_enter_pads); i++) {
@@ -2297,13 +2287,6 @@ static void mx50_suspend_exit()
 {
 	int iHWID;
 
-  /* Power Up the band-gap and set the SELFBIAS bit. */
-  __raw_writel(MXC_ANADIG_REF_PWD,
-      apll_base + MXC_ANADIG_MISC_CLR);
-  udelay(100);
-  __raw_writel(MXC_ANADIG_REF_SELFBIAS_OFF,
-      apll_base + MXC_ANADIG_MISC_SET);
-	
 	__raw_writel(MXC_ANADIG_PFD_DIS_MASK<<MXC_ANADIG_PFD_DIS_OFFSET,
 		apll_base + MXC_ANADIG_PLLCTRL_CLR);
 
