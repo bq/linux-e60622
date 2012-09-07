@@ -456,6 +456,8 @@ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_data *data)
 	BUG_ON(data->blksz * data->blocks > 524288);
 	BUG_ON(data->blksz > host->mmc->max_blk_size);
 	BUG_ON(data->blocks > 65535);
+	BUG_ON(host->clock == 0);
+	BUG_ON(host->timeout_clk == 0);
 
 	host->data = data;
 	host->data_early = 0;
@@ -1664,6 +1666,9 @@ static void esdhc_cd_callback(struct work_struct *work)
 		else {
 			GALLEN_DBGLOCAL_RUNLOG(9);
 			sdhci_init(host);
+
+			/* reset the clock, as sdhci_init will set it to 0 */
+			sdhci_set_clock(host, host->mmc->ios.clock);
 		}
 	}
 
