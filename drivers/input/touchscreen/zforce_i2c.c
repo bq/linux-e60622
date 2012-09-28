@@ -236,6 +236,15 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 			if(8==gptHWCFG->m_val.bTouchCtrl) {  //neonode v2
 				printk ("[%s-%d] firmware version %02X%02X %02X%02X %02X%02X %02X%02X \n", __func__, __LINE__, \
 					buf[2], buf[1], buf[4], buf[3], buf[6], buf[5], buf[8], buf[7]);
+				printk("zforce state: %d, users: %d\n", buf[9], zForce_ir_touch_data.input->users);
+
+				/* 255 is the value contained in buf9 when the zforce
+				 * controller loses any valid state.
+				 */
+				if (buf[9] == 255) {
+					printk("[%s-%d] zforce got confused, doing reset\n", __func__, __LINE__);
+					zforce_i2c_reset(client);
+				}
 			}
 			break;
 		case 0x25:
@@ -481,9 +490,16 @@ static int zForce_ir_touch_resume(struct device *dev)
 	 * Otherwise wait for the next falling edge triggering the real interrupt
 	 */
 	if (!zForce_ir_touch_detect_int_level () && !gSleep_Mode_Suspend) {
+		printk("triggered during resume\n");
 		zForce_ir_touch_ts_triggered ();
+		return 0;
 	}
-	
+
+	if (!gSleep_Mode_Suspend && gptHWCFG->m_val.bTouchCtrl == 8) {
+		printk("checking zforce state\n");
+		i2c_master_send(client, cmd_getFirmwareVer_v2, sizeof(cmd_getFirmwareVer_v2));
+	}
+
 	return 0;
 }
 
