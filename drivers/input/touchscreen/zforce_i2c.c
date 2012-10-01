@@ -114,7 +114,7 @@ static int zforce_i2c_stop(struct i2c_client *client)
 
 static int zforce_i2c_reset(struct i2c_client *client)
 {
-	printk (KERN_ERR, "restarting zforce sensinig\n");
+	printk (KERN_ERR "restarting zforce sensinig\n");
 	zforce_i2c_stop(client);
 	msleep(200);
 	zforce_i2c_start(client);
@@ -463,7 +463,7 @@ static int zForce_ir_touch_suspend(struct device *dev)
 //	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
 	/* return immediatly if the driver is still handling touch data */
 	if (g_touch_pressed || g_touch_triggered) {
-		printk("[%s-%d] zForce still handling touch data\n");
+		printk("[%s-%d] zForce still handling touch data\n",__func__,__LINE__);
 		return -EBUSY;
 	}
 
