@@ -47,6 +47,7 @@ static unsigned long ZFORCE_TS_Y_MAX=DEFAULT_PANEL_H<<1;
 static struct zForce_data {
 	int intr_gpio;
 	struct delayed_work	work;
+	struct delayed_work	check;
 	struct i2c_client *client;
 	struct input_dev *input;
 	wait_queue_head_t wait;
@@ -68,6 +69,17 @@ static const uint8_t cmd_Deactive[] = {0x00};
 
 extern unsigned int msp430_read(unsigned int reg);
 /*--------------------------------------------------------------*/
+
+static void zForce_ir_touch_check_func(struct work_struct *work)
+{
+	pm_wakeup_event(&zForce_ir_touch_data.client->dev, 500);
+
+	printk("[%s-%d] periodic hang check\n", __func__, __LINE__);
+	i2c_master_send(zForce_ir_touch_data.client, cmd_getFirmwareVer_v2, sizeof(cmd_getFirmwareVer_v2));
+
+	schedule_delayed_work(&zForce_ir_touch_data.check, HZ * 10);
+}
+
 static int zforce_i2c_start(struct i2c_client *client)
 {
 	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
@@ -77,13 +89,20 @@ static int zforce_i2c_start(struct i2c_client *client)
 		i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
 	}	
 //	i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
-	
+
+	/* start hang check */
+	schedule_delayed_work(&zForce_ir_touch_data.check, HZ * 10);
+
 	return 0;
 }
 
 static int zforce_i2c_stop(struct i2c_client *client)
 {
 	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
+
+	/* cancel the hang check */
+	cancel_delayed_work_sync(&zForce_ir_touch_data.check);
+
 	if(8==gptHWCFG->m_val.bTouchCtrl) {
 		i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
 	}else{
@@ -461,6 +480,8 @@ static int zForce_ir_touch_suspend(struct device *dev)
 		msleep(200);
 		disable_irq_wake(zForce_ir_touch_data.client->irq);
 		disable_irq(zForce_ir_touch_data.client->irq);
+	} else if (zForce_ir_touch_data.input->users) {
+		cancel_delayed_work_sync(&zForce_ir_touch_data.check);
 	}
 	return 0;
 }
@@ -484,6 +505,8 @@ static int zForce_ir_touch_resume(struct device *dev)
 		enable_irq_wake(zForce_ir_touch_data.client->irq);
 		if (zForce_ir_touch_data.input->users)
 			zforce_i2c_start(client);
+	} else if (zForce_ir_touch_data.input->users) {
+		schedule_delayed_work(&zForce_ir_touch_data.check, HZ * 10);
 	}
 
 	/* Only check int level when we return from a light sleep
@@ -495,7 +518,7 @@ static int zForce_ir_touch_resume(struct device *dev)
 		return 0;
 	}
 
-	if (!gSleep_Mode_Suspend && gptHWCFG->m_val.bTouchCtrl == 8) {
+	if (!gSleep_Mode_Suspend && gptHWCFG->m_val.bTouchCtrl == 8 && zForce_ir_touch_data.input->users) {
 		printk("checking zforce state\n");
 		i2c_master_send(client, cmd_getFirmwareVer_v2, sizeof(cmd_getFirmwareVer_v2));
 	}
@@ -532,6 +555,7 @@ static int zForce_ir_touch_probe(
 	strlcpy(client->name, ZFORCE_TS_NAME, I2C_NAME_SIZE);
 
 	INIT_DELAYED_WORK(&zForce_ir_touch_data.work, zForce_ir_touch_work_func);
+	INIT_DELAYED_WORK(&zForce_ir_touch_data.check, zForce_ir_touch_check_func);
 	
 	zForce_ir_touch_data.intr_gpio = (client->dev).platform_data;
 	
