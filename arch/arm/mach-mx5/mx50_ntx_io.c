@@ -1607,6 +1607,16 @@ static struct platform_device ntx_gpio_key_device = {
 
 #endif//] NTX_GPIO_KEYS
 
+long ntx_panic_blink(long time)
+{
+	gpio_set_value(GPIO_LED_ON, 1);
+	gpio_set_value(GPIO_CHG_LED, 1);
+	mdelay(100);
+	gpio_set_value(GPIO_LED_ON, 0);
+	gpio_set_value(GPIO_CHG_LED, 0);
+
+	return 100;
+}
 
 
 #define IR_TOUCH_RST		(4*32 + 26)	/*GPIO_5_26 */
@@ -1653,6 +1663,8 @@ static int gpio_initials(void)
 	gpio_request(GPIO_LED_ON, "led_on");
 	gpio_direction_output(GPIO_LED_ON, 1);
 	
+	panic_blink = ntx_panic_blink;
+
 	mxc_iomux_v3_setup_pad(MX50_PAD_PWM1__GPIO_6_24);
 	gpio_request(GPIO_ACT_ON, "action_on");
 	gpio_direction_output(GPIO_ACT_ON, 1);
