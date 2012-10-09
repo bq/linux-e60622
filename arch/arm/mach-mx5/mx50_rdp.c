@@ -84,6 +84,7 @@
 #define SD2_WP	(4*32 + 16)	/*GPIO_5_16 */
 #define SD2_CD	(4*32 + 17) /*GPIO_5_17 */
 //#define HP_DETECT	(3*32 + 15)	/*GPIO_4_15 */
+//#define HP_DETECT	(3*32 + 15)	/*GPIO_4_15 */
 #define CHG_PIN		(3*32 + 18)	/*GPIO_4_18 */
 #define EPDC_D0		(2*32 + 0)	/*GPIO_3_0 */
 #define EPDC_D1		(2*32 + 1)	/*GPIO_3_1 */
@@ -93,6 +94,14 @@
 #define EPDC_D5		(2*32 + 5)	/*GPIO_3_5 */
 #define EPDC_D6		(2*32 + 6)	/*GPIO_3_6 */
 #define EPDC_D7		(2*32 + 7)	/*GPIO_3_7 */
+#define EPDC_D8		(2*32 + 8)	/*GPIO_3_8 */
+#define EPDC_D9		(2*32 + 9)	/*GPIO_3_9 */
+#define EPDC_D10		(2*32 + 10)	/*GPIO_3_10 */
+#define EPDC_D11		(2*32 + 11)	/*GPIO_3_11 */
+#define EPDC_D12		(2*32 + 12)	/*GPIO_3_12 */
+#define EPDC_D13		(2*32 + 13)	/*GPIO_3_13 */
+#define EPDC_D14		(2*32 + 14)	/*GPIO_3_14 */
+#define EPDC_D15		(2*32 + 15)	/*GPIO_3_15 */
 #define EPDC_GDCLK	(2*32 + 16)	/*GPIO_3_16 */
 #define EPDC_GDSP	(2*32 + 17)	/*GPIO_3_17 */
 #define EPDC_GDOE	(2*32 + 18)	/*GPIO_3_18 */
@@ -147,6 +156,14 @@ static void fec_gpio_iomux_init(void);
 static void fec_gpio_iomux_deinit(void);
 
 static int max17135_regulator_init(struct max17135 *max17135);
+
+#define _MYINIT_DATA	
+#define _MYINIT_TEXT	
+volatile static unsigned char _MYINIT_DATA *gpbHWCFG_paddr;
+//volatile unsigned char *gpbHWCFG_vaddr;
+volatile unsigned long _MYINIT_DATA gdwHWCFG_size;
+volatile NTX_HWCONFIG *gptHWCFG;
+
 static int num_cpu_wp;
 
 int gIsCustomerUi;
@@ -226,6 +243,14 @@ static iomux_v3_cfg_t mx50_rdp[] = {
 	MX50_PAD_EPDC_D5__EPDC_D5,
 	MX50_PAD_EPDC_D6__EPDC_D6,
 	MX50_PAD_EPDC_D7__EPDC_D7,
+	MX50_PAD_EPDC_D8__EPDC_D8,
+	MX50_PAD_EPDC_D9__EPDC_D9,
+	MX50_PAD_EPDC_D10__EPDC_D10,
+	MX50_PAD_EPDC_D11__EPDC_D11,
+	MX50_PAD_EPDC_D12__EPDC_D12,
+	MX50_PAD_EPDC_D13__EPDC_D13,
+	MX50_PAD_EPDC_D14__EPDC_D14,
+	MX50_PAD_EPDC_D15__EPDC_D15,
 	MX50_PAD_EPDC_GDCLK__EPDC_GDCLK,
 	MX50_PAD_EPDC_GDSP__EPDC_GDSP,
 	MX50_PAD_EPDC_GDOE__EPDC_GDOE	,
@@ -780,7 +805,7 @@ static u16 E50602_keymapping[] = {
 };
 
 static u16 E60672_keymapping[] = {
-	61, 62, 29, -1, 	// FrontLight, , ,     
+	90, 62, 29, -1, 	// FrontLight, , ,     
 	-1, -1, -1, -1, 	// , , ,
 	-1, -1, -1, -1, 	// , , , 
 	-1, -1, -1, 116,     // , , ,KEY_POWER 
@@ -813,6 +838,14 @@ static u16 NoKey_keymapping[] = {
 	-1, -1, -1, -1, 	// , , , 
 	-1, -1, KEY_H, 116,     // , , , 
 };
+
+static u16 FL_keymapping[] = {
+	90, -1, -1, -1, 	// FrontLight, , ,     
+	-1, -1, -1, -1, 	// , , ,
+	-1, -1, -1, -1, 	// , , , 
+	-1, -1, KEY_H, 116,     // , , ,KEY_POWER 
+};
+
 
 #else
 static u16 keymapping[] = {
@@ -1027,6 +1060,14 @@ static void epdc_get_pins(void)
 	gpio_request(EPDC_D5, "epdc_d5");
 	gpio_request(EPDC_D6, "epdc_d6");
 	gpio_request(EPDC_D7, "epdc_d7");
+	gpio_request(EPDC_D8, "epdc_d8");
+	gpio_request(EPDC_D9, "epdc_d9");
+	gpio_request(EPDC_D10, "epdc_d10");
+	gpio_request(EPDC_D11, "epdc_d11");
+	gpio_request(EPDC_D12, "epdc_d12");
+	gpio_request(EPDC_D13, "epdc_d13");
+	gpio_request(EPDC_D14, "epdc_d14");
+	gpio_request(EPDC_D15, "epdc_d15");
 	gpio_request(EPDC_GDCLK, "epdc_gdclk");
 	gpio_request(EPDC_GDSP, "epdc_gdsp");
 	gpio_request(EPDC_GDOE, "epdc_gdoe");
@@ -1053,6 +1094,14 @@ static void epdc_put_pins(void)
 	gpio_free(EPDC_D5);
 	gpio_free(EPDC_D6);
 	gpio_free(EPDC_D7);
+	gpio_free(EPDC_D8);
+	gpio_free(EPDC_D9);
+	gpio_free(EPDC_D10);
+	gpio_free(EPDC_D11);
+	gpio_free(EPDC_D12);
+	gpio_free(EPDC_D13);
+	gpio_free(EPDC_D14);
+	gpio_free(EPDC_D15);
 	gpio_free(EPDC_GDCLK);
 	gpio_free(EPDC_GDSP);
 	gpio_free(EPDC_GDOE);
@@ -1078,6 +1127,14 @@ static iomux_v3_cfg_t mx50_epdc_pads_enabled[] = {
 	MX50_PAD_EPDC_D5__EPDC_D5,
 	MX50_PAD_EPDC_D6__EPDC_D6,
 	MX50_PAD_EPDC_D7__EPDC_D7,
+	MX50_PAD_EPDC_D8__EPDC_D8,
+	MX50_PAD_EPDC_D9__EPDC_D9,
+	MX50_PAD_EPDC_D10__EPDC_D10,
+	MX50_PAD_EPDC_D11__EPDC_D11,
+	MX50_PAD_EPDC_D12__EPDC_D12,
+	MX50_PAD_EPDC_D13__EPDC_D13,
+	MX50_PAD_EPDC_D14__EPDC_D14,
+	MX50_PAD_EPDC_D15__EPDC_D15,
 	MX50_PAD_EPDC_GDCLK__EPDC_GDCLK,
 	MX50_PAD_EPDC_GDSP__EPDC_GDSP,
 	MX50_PAD_EPDC_GDOE__EPDC_GDOE,
@@ -1103,6 +1160,14 @@ static iomux_v3_cfg_t mx50_epdc_pads_disabled[] = {
 	MX50_PAD_EPDC_D5__GPIO_3_5,
 	MX50_PAD_EPDC_D6__GPIO_3_6,
 	MX50_PAD_EPDC_D7__GPIO_3_7,
+	MX50_PAD_EPDC_D8__GPIO_3_8,
+	MX50_PAD_EPDC_D9__GPIO_3_9,
+	MX50_PAD_EPDC_D10__GPIO_3_10,
+	MX50_PAD_EPDC_D11__GPIO_3_11,
+	MX50_PAD_EPDC_D12__GPIO_3_12,
+	MX50_PAD_EPDC_D13__GPIO_3_13,
+	MX50_PAD_EPDC_D14__GPIO_3_14,
+	MX50_PAD_EPDC_D15__GPIO_3_15,
 	MX50_PAD_EPDC_GDCLK__GPIO_3_16,
 	MX50_PAD_EPDC_GDSP__GPIO_3_17,
 	MX50_PAD_EPDC_GDOE__GPIO_3_18,
@@ -1134,6 +1199,14 @@ static void epdc_enable_pins(void)
 	gpio_direction_input(EPDC_D5);
 	gpio_direction_input(EPDC_D6);
 	gpio_direction_input(EPDC_D7);
+	gpio_direction_input(EPDC_D8);
+	gpio_direction_input(EPDC_D9);
+	gpio_direction_input(EPDC_D10);
+	gpio_direction_input(EPDC_D11);
+	gpio_direction_input(EPDC_D12);
+	gpio_direction_input(EPDC_D13);
+	gpio_direction_input(EPDC_D14);
+	gpio_direction_input(EPDC_D15);
 	gpio_direction_input(EPDC_GDCLK);
 	gpio_direction_input(EPDC_GDSP);
 	gpio_direction_input(EPDC_GDOE);
@@ -1166,6 +1239,14 @@ static void epdc_disable_pins(void)
 	gpio_direction_output(EPDC_D5, 0);
 	gpio_direction_output(EPDC_D6, 0);
 	gpio_direction_output(EPDC_D7, 0);
+	gpio_direction_output(EPDC_D8, 0);
+	gpio_direction_output(EPDC_D9, 0);
+	gpio_direction_output(EPDC_D10, 0);
+	gpio_direction_output(EPDC_D11, 0);
+	gpio_direction_output(EPDC_D12, 0);
+	gpio_direction_output(EPDC_D13, 0);
+	gpio_direction_output(EPDC_D14, 0);
+	gpio_direction_output(EPDC_D15, 0);
 	gpio_direction_output(EPDC_GDCLK, 0);
 	gpio_direction_output(EPDC_GDSP, 0);
 	gpio_direction_output(EPDC_GDOE, 0);
@@ -1252,7 +1333,45 @@ static struct fb_videomode e60_v110_mode = {
 .vmode = FB_VMODE_NONINTERLACED,
 .flag = 0,
 };
+
+static struct fb_videomode ed050xxx_mode = {
+	.name="ED050XXXX",
+	.refresh=85,
+	.xres=800,
+	.yres=600,
+	.pixclock=26666667,
+	.left_margin=4,
+	.right_margin=98,
+	.upper_margin=4,
+	.lower_margin=9,
+	.hsync_len=8,
+	.vsync_len=2,
+	.sync=0,
+	.vmode=FB_VMODE_NONINTERLACED,
+	.flag=0,
+};
+
+
+static struct fb_videomode ed068og1_mode = {
+.name = "E68OG1",
+.refresh=85,
+.xres=1440,
+.yres=1080,
+.pixclock=120000000,
+.left_margin=32,
+.right_margin=508,
+.upper_margin=4,
+.lower_margin=5,
+.hsync_len=32,
+.vsync_len=2,
+.sync=0,
+.vmode=FB_VMODE_NONINTERLACED,
+.flag=0,
+};
+
+
 static struct mxc_epdc_fb_mode panel_modes[] = {
+////////////////////
 {
 & ed060sc8_mode,
 4,            /* vscan_holdoff */
@@ -1266,6 +1385,8 @@ static struct mxc_epdc_fb_mode panel_modes[] = {
 8,            /* gdclk_offs changed delay to 4.5 SDCLK */
 1,            /* num_ce */
 },
+
+////////////////////
 {
 & e60_v110_mode,
 4,            /* vscan_holdoff */
@@ -1279,6 +1400,8 @@ static struct mxc_epdc_fb_mode panel_modes[] = {
 8,            /* gdclk_offs changed delay to 4.5 SDCLK */
 1,            /* num_ce */
 },
+
+////////////////////
 {
 & ed060xc5_mode,
 4,            /* vscan_holdoff */
@@ -1292,6 +1415,8 @@ static struct mxc_epdc_fb_mode panel_modes[] = {
 19,            /* gdclk_offs changed delay to 4.5 SDCLK */
 1,            /* num_ce */
 },
+
+////////////////////
 {
 & ed060xc1_mode,
 4,            /* vscan_holdoff */
@@ -1305,9 +1430,39 @@ static struct mxc_epdc_fb_mode panel_modes[] = {
 23,            /* gdclk_offs changed delay to 4.5 SDCLK */
 1,            /* num_ce */
 },
+
+////////////////////
+{
+	&ed050xxx_mode, 	/* struct fb_videomode *mode */
+		4, 	/* vscan_holdoff */
+		10, 	/* sdoed_width */
+		20, 	/* sdoed_delay */
+		10, 	/* sdoez_width */
+		20, 	/* sdoez_delay */
+		420, 	/* GDCLK_HP */
+		20, 	/* GDSP_OFF */
+		0, 	/* GDOE_OFF */
+		11, 	/* gdclk_offs */
+		3, 	/* num_ce */
+},	
+
+////////////////////
+{
+& ed068og1_mode,
+4,            /* vscan_holdoff */
+10,          /* sdoed_width */
+20,          /* sdoed_delay */
+10,          /* sdoez_width */
+20,          /* sdoez_delay */
+831,        /* GDCLK_HP */
+285,        /* GDSP_OFF */
+0,            /* GDOE_OFF */
+271,        /* gdclk_offs */
+1,            /* num_ce */},
 };
  
 #elif defined(EPD_TIMING_TW20110815) //][
+
 static struct fb_videomode ed060sc8_mode = {
 	.name = "E60SC8",
 	.refresh = 85,
@@ -1757,6 +1912,18 @@ static unsigned int sdhc_get_card_det_status(struct device *dev)
 			ret = 0; //internal mSD .
 		}
 	}
+	else if(11==iHWID) {
+			// E606CX .
+		if (0==iDevID) {
+			ret = gpio_get_value(SD2_CD);
+		}
+		else if(1==iDevID) {
+			ret = (gWifiEnabled)?0:1;
+		}
+		else if(2==iDevID) {
+			ret = 0; //internal mSD .
+		}
+	}
 	else {
 		if (iDevID == 0) {
 #if 0
@@ -2081,6 +2248,7 @@ static void mx50_suspend_enter()
 {
 	iomux_v3_cfg_t *p = suspend_enter_pads;
 	int i;
+	int iHWID;
 
 	/* Clear the SELF_BIAS bit and power down
 	*  the band-gap.
@@ -2109,8 +2277,9 @@ static void mx50_suspend_enter()
 	mxc_iomux_v3_setup_multiple_pads(suspend_enter_pads,
 			ARRAY_SIZE(suspend_enter_pads));
 
-	if(9==check_hardware_name()) {
-		// E5061X ...
+	iHWID=check_hardware_name();
+	if(9==iHWID||11==iHWID) {
+		// E5061X/E606CX ...
 		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, \
 			ARRAY_SIZE(mx50_sd2_disable_pads));
 	}
@@ -2126,6 +2295,7 @@ static void mx50_suspend_enter()
 
 static void mx50_suspend_exit()
 {
+	int iHWID;
 
   /* Power Up the band-gap and set the SELFBIAS bit. */
   __raw_writel(MXC_ANADIG_REF_PWD,
@@ -2143,9 +2313,9 @@ static void mx50_suspend_exit()
 
 	ntx_gpio_resume ();
 
-	
-	if(9==check_hardware_name()) {
-		// E5061X ...
+	iHWID=check_hardware_name();
+	if(9==iHWID||11==iHWID) {
+		// E5061X/E606CX ...
 	}
 	else {
 		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_enable_pads, \
@@ -2215,6 +2385,7 @@ static void __init mx50_rdp_io_init(void)
 
 	iomux_v3_cfg_t *p = mx50_rdp;
 	int i;
+	int iHWID;
 
 	/* Set PADCTRL to 0 for all IOMUX. */
 	for (i = 0; i < ARRAY_SIZE(mx50_rdp); i++) {
@@ -2228,24 +2399,31 @@ static void __init mx50_rdp_io_init(void)
 			ARRAY_SIZE(mx50_rdp));
 
 
-	if(9==check_hardware_name()) {
-		// SD3 should be enabled in E50612 (internal SD)
+	iHWID=check_hardware_name();
+
+	if(9==iHWID||11==iHWID) {
+		// SD3 should be enabled in E50612/E606CX (internal SD)
 		mxc_iomux_v3_setup_multiple_pads(mx50_sd3_enable_pads, \
 				ARRAY_SIZE(mx50_sd3_enable_pads));
-		// SD2 should be disabled in E50612 (WIFI interface)
+		// SD2 should be disabled in E50612/E606CX (WIFI interface)
 		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, \
 			ARRAY_SIZE(mx50_sd2_disable_pads));
-		// SD1 should be disabled in E50612 (N/A) 
-		mxc_iomux_v3_setup_multiple_pads(mx50_sd1_disable_pads, \
-				ARRAY_SIZE(mx50_sd1_disable_pads));
 
-		for(i=0;i<ARRAY_SIZE(mx50_sd1_gpioA);i++) {
-			char cNameA[6]="sd1-0";
-			cNameA[4] += i;
-			gpio_request(mx50_sd1_gpioA[i], cNameA);
-			gpio_direction_input(mx50_sd1_gpioA[i]);
-			//gpio_direction_output(mx50_sd1_gpioA[i],0);
+		if(0==gptHWCFG->m_val.bExternalMem) {
+			// no external memory (eg, E50612) ...
+			
+			mxc_iomux_v3_setup_multiple_pads(mx50_sd1_disable_pads, \
+					ARRAY_SIZE(mx50_sd1_disable_pads));
+
+			for(i=0;i<ARRAY_SIZE(mx50_sd1_gpioA);i++) {
+				char cNameA[6]="sd1-0";
+				cNameA[4] += i;
+				gpio_request(mx50_sd1_gpioA[i], cNameA);
+				gpio_direction_input(mx50_sd1_gpioA[i]);
+				//gpio_direction_output(mx50_sd1_gpioA[i],0);
+			}
 		}
+
 		for(i=0;i<ARRAY_SIZE(mx50_sd2_gpioA);i++) {
 			char cNameA[6]="sd2-0";
 			cNameA[4] += i;
@@ -2331,13 +2509,6 @@ static void __init mx50_rdp_io_init(void)
 //	mxc_iomux_v3_setup_pad(cspi_keeper);
 }
 
-
-#define _MYINIT_DATA	
-#define _MYINIT_TEXT	
-volatile static unsigned char _MYINIT_DATA *gpbHWCFG_paddr;
-//volatile unsigned char *gpbHWCFG_vaddr;
-volatile unsigned long _MYINIT_DATA gdwHWCFG_size;
-volatile NTX_HWCONFIG *gptHWCFG;
 
 
 static * _MemoryRequest(u32 addr, u32 len, const char * name)
@@ -2557,7 +2728,21 @@ static void __init mxc_board_init(void)
 		keypad_plat_data.matrix = E606B2_keymapping;
 		break;
 	default:
-		printk("%s() Undefined key mapping !!\n",__FUNCTION__);
+
+		if(4==gptHWCFG->m_val.bTouchType) {
+			// ir touch board ..
+			i2c_register_board_info(0, mxc_i2c0_E60612_board_info,	ARRAY_SIZE(mxc_i2c0_E60612_board_info));
+		}
+		else {
+		}
+
+		if(11==gptHWCFG->m_val.bKeyPad) {
+			// FrontLight key only ...
+			keypad_plat_data.matrix = FL_keymapping;
+		}
+		else {
+			printk("%s() Undefined key mapping !!\n",__FUNCTION__);
+		}
 		break;
 	}
 	mxc_register_device(&mxc_keypad_device, &keypad_plat_data);
@@ -2569,6 +2754,20 @@ static void __init mxc_board_init(void)
 		mxc_register_device(&mxcsdhc3_device, &mmc1_data);
 		//mxc_register_device(&mxcsdhc1_device, &mmc2_data);
 		mxc_register_device(&mxcsdhc2_device, &mmc_wifi_data);
+	}
+	else if(11==iHWID) {
+		// E606CX ...
+		//
+		// SD1 : ESD 
+		// SD2 : SDIO
+		// SD3 : ISD
+		//
+		mxcsdhc1_device.resource[2].start = gpio_to_irq(SD2_CD);
+		mxcsdhc1_device.resource[2].end = gpio_to_irq(SD2_CD);
+
+		mxc_register_device(&mxcsdhc3_device, &mmc1_data);
+		mxc_register_device(&mxcsdhc2_device, &mmc_wifi_data);
+		mxc_register_device(&mxcsdhc1_device, &mmc2_data);
 	}
 	else 
 #endif

@@ -285,7 +285,11 @@ static unsigned short FL_table0[100]={
 0x0118,0x011F,0x0125,0x012B,0x0131,0x0138,0x013E,0x0144,0x014A,0x0151,
 0x0157,0x015D,0x0163,0x016A,0x0170,0x0176,0x017C,0x0183,0x0189,0x018F
 };
-	
+
+struct delayed_work FL_off;
+void FL_off_func(struct work_struct *work);
+int FL_suspend(void);
+
 //kay for LED thread
 //static unsigned char LED_conitnuous=0;
 static unsigned char LED_conitnuous=1;
@@ -404,6 +408,9 @@ int check_hardware_name(void)
 			case 27: //E50610
 				pcb_id = 9;
 				break;
+			case 28: //E606C0
+				pcb_id = 11;
+				break;
 			default:
 				printk ("[%s-%d] undefined PCBA ID\n",__func__,__LINE__);
 				break;	
@@ -455,15 +462,18 @@ static void bluetooth_pwr(int i)
 #define SD2_CLK		(4*32 + 6)	/*GPIO_5_6 */
 static void wifi_sdio_enable (int isEnable)
 {
+	int iHWID;
 	extern iomux_v3_cfg_t mx50_sd3_disable_pads[];
 	extern unsigned long gdw_mx50_sd3_disable_pads;
 
 	extern iomux_v3_cfg_t mx50_sd2_disable_pads[];
 	extern unsigned long gdw_mx50_sd2_disable_pads;
 
+	iHWID=check_hardware_name();
 
-	if(9==check_hardware_name()) {
-		// E50612 .
+	if(9==iHWID || 11==iHWID) {
+		// E5061X/E606CX .
+		//
 		//printk("E50612=> %s(%d)\n",__FUNCTION__,isEnable);
 		if (isEnable) {
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_WIFI);
@@ -496,6 +506,8 @@ static void wifi_sdio_enable (int isEnable)
 
 void ntx_wifi_power_ctrl (int isWifiEnable)
 {
+	int iHWID;
+
 	gWifiEnabled=isWifiEnable;
 	printk("Wifi / BT power control %d\n", isWifiEnable);
     if(isWifiEnable == 0){
@@ -514,9 +526,12 @@ void ntx_wifi_power_ctrl (int isWifiEnable)
 		enable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
 #endif*/
 	}
-	sleep_on_timeout(&Reset_WaitQueue,HZ/10);			
-	if(9==check_hardware_name()) {
-		// E50612 .
+	sleep_on_timeout(&Reset_WaitQueue,HZ/10);
+
+	iHWID=check_hardware_name();
+
+	if(9==iHWID||11==iHWID) {
+		// E5061X/E606CX .
 		mxc_mmc_force_detect (1);
 	}
 	else {
@@ -995,16 +1010,14 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 		case CM_FRONT_LIGHT_SET:
 			if(0!=gptHWCFG->m_val.bFrontLight)
 			{
-				if (p) {			
+				if (p) {
+					if(delayed_work_pending(&FL_off)){
+						cancel_delayed_work_sync(&FL_off);
+						printk("FL_off delayed work canceled");
+					}
 					printk ("\nset front light level : %d\n",p);
-					if(p>0 && p<=50)
+					if(p>0 && p<=100)
 					{
-						gpio_direction_output(FL_R_EN,0);
-						msp430_write (0xA7, FL_table0[2*(p-1)]&0xFF00);
-						msp430_write (0xA6, FL_table0[2*(p-1)]<<8);
-						printk("PWMCNT : 0x%04x\n", FL_table0[2*(p-1)]);
-					}else if(p>50 && p<=100){
-						gpio_direction_output(FL_R_EN,1);
 						msp430_write (0xA7, FL_table0[p-1]&0xFF00);
 						msp430_write (0xA6, FL_table0[p-1]<<8);
 						printk("PWMCNT : 0x%04x\n", FL_table0[p-1]);
@@ -1022,12 +1035,10 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 						gpio_direction_output(FL_EN,0);
 					}
 				}
-				else {
-					printk ("turn off front light\n");
-					msp430_write (0xA3, 0);
-
-					gpio_direction_input(FL_EN);
-					gpio_direction_output(FL_R_EN,0);
+				else if(last_FL_duty != 0){
+					printk ("FL PWM off command\n");
+					msp430_write(0xA3, 0); 
+					schedule_delayed_work(&FL_off, 120);
 				}
 				last_FL_duty = p;
 			}
@@ -1254,6 +1265,19 @@ static void LED(int on)
 	    	gpio_set_value (GPIO_LED_ON,1);
     	break;
     }
+}
+
+void FL_off_func(struct work_struct *work)
+{
+	printk("[%s-%d]FL PWR off\n",__FUNCTION__,__LINE__);
+	gpio_direction_input(FL_EN);
+}
+
+int FL_suspend(void){
+	if(delayed_work_pending(&FL_off)){
+		return -1;
+	}	
+	return 0;
 }
 
 static int sleep_thread(void)
@@ -1820,20 +1844,20 @@ static int gpio_initials(void)
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D3__SD2_D3_DSM);
 		}
 		break;
-		/*
-		case 22:
+		
+		case 28:
 		{
-			// E606A2 
-			printk("ESD DSL\n");
-			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_DSL);
-			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CMD__SD2_CMD_DSL);
-			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D0__SD2_D0_DSL);
-			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D1__SD2_D1_DSL);
-			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D2__SD2_D2_DSL);
-			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D3__SD2_D3_DSL);
+			// E606CX 
+			printk("E606CX,ESD DSL\n");
+			// External SD .
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_CLK__SD1_CLK_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_CMD__SD1_CMD_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_D0__SD1_D0_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_D1__SD1_D1_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_D2__SD1_D2_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_D3__SD1_D3_DSL);
 		}
 		break;
-		*/
 
 		default :
 		break;
@@ -1844,11 +1868,13 @@ static int gpio_initials(void)
 	if(0!=gptHWCFG->m_val.bFrontLight) {	
 		mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI1_MISO__GPIO_4_14);
 		gpio_request(FL_EN, "fl_en");
-		gpio_direction_input(FL_EN);
+		gpio_direction_output(FL_EN,0);
 		
 		mxc_iomux_v3_setup_pad(MX50_PAD_EPDC_VCOM1__GPIO_4_22);
 		gpio_request(FL_R_EN, "fl_r_en");
 		gpio_direction_output(FL_R_EN,0);
+
+		INIT_DELAYED_WORK(&FL_off, FL_off_func);
 	}
 	
 	// WIFI_3V3_ON 
@@ -2078,6 +2104,7 @@ void ntx_gpio_suspend (void)
 		enable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
 #endif
 
+	
 	// turn off wifi power 
 #ifndef _WIFI_ALWAYS_ON_
 	gpio_direction_input(GPIO_WIFI_3V3);
@@ -2202,7 +2229,12 @@ void ntx_msp430_i2c_force_release (void)
 }
 
 void ntx_machine_restart(char mode, const char *cmd)
-{
+{	
+	if(0!=gptHWCFG->m_val.bFrontLight){
+		msp430_write (0xA3, 0); 
+		msleep (1200);		
+		gpio_direction_input(FL_EN);
+	}
 	while (1) {
 		printk("Kernel---System reset ---\n");
 		gKeepPowerAlive = 0;

@@ -41,6 +41,8 @@
 
 #include "pmic.h"
 
+#include "ntx_hwconfig.h"
+
 #define MC13892_GENERATION_ID_LSH	6
 #define MC13892_IC_ID_LSH		13
 
@@ -67,6 +69,8 @@ extern irqreturn_t pmic_irq_handler(int irq, void *dev_id);
 extern int check_hardware_name(void);
 
 static u16 msp_id;
+
+extern volatile NTX_HWCONFIG *gptHWCFG;
 
 /*
  * Platform device structure for PMIC client drivers
@@ -583,7 +587,6 @@ static int __devinit msp430_probe(struct i2c_client *client,
 	} else {
 		msp430_write(0x30,0xFF00);	// Jospeh 100108 // start ADC
 	}	
-
 	return PMIC_SUCCESS;
 }
 
