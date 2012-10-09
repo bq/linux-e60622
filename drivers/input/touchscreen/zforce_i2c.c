@@ -502,6 +502,11 @@ static int zForce_ir_touch_probe(
 			ZFORCE_TS_WIDTH=768;
 			ZFORCE_TS_HIGHT=1024;
 		}
+		else if(3==gptHWCFG->m_val.bDisplayResolution) {
+			// 1440x1080
+			ZFORCE_TS_WIDTH=1080;
+			ZFORCE_TS_HIGHT=1440;
+		}
 		else {
 			// 800x600 
 			ZFORCE_TS_WIDTH=600;

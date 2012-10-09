@@ -447,7 +447,12 @@ static int k_fake_s1d13522_init(unsigned char *pbInitDCbuf)
 
 		epdc_powerup(g_fb_data);
 		draw_mode0(g_fb_data);
-		epdc_powerdown(g_fb_data);
+
+		g_fb_data->powering_down = true;
+		schedule_delayed_work(&g_fb_data->epdc_done_work,
+			msecs_to_jiffies(g_fb_data->pwrdown_delay));
+		
+		//epdc_powerdown(g_fb_data);
 
 		giIsInited = 1;
 		complete_all(&mxc_epdc_fake13522_inited);
@@ -469,9 +474,23 @@ static int k_fake_s1d13522_init(unsigned char *pbInitDCbuf)
 			}	
 			#endif	
 			
-			if(gptHWCFG&&1==gptHWCFG->m_val.bDisplayResolution) {
-				ilogo_width = 1024 ;
-				ilogo_height = 758 ;
+			if(gptHWCFG) {
+				if(1==gptHWCFG->m_val.bDisplayResolution) {
+					ilogo_width = 1024 ;
+					ilogo_height = 758 ;
+				}
+				else if(2==gptHWCFG->m_val.bDisplayResolution) {
+					ilogo_width = 1024 ;
+					ilogo_height = 768 ;
+				}
+				else if(3==gptHWCFG->m_val.bDisplayResolution) {
+					ilogo_width = 1440 ;
+					ilogo_height = 1080 ;
+				}
+				else {
+					ilogo_width = 800 ;
+					ilogo_height = 600 ;
+				}
 			}
 			else {
 				ilogo_width = 800 ;

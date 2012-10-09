@@ -578,9 +578,11 @@ EPDFB_DC *fake_s1d13522_initEx3(unsigned char bBitsPerPixel,unsigned char *pbDCB
 
 	gwScrW = wScrW;
 	gwScrH = wScrH;
-	pDC = epdfbdc_create_ex2(wFBW,wFBH,gwScrW,gwScrH,bBitsPerPixel,pbDCBuf,\
-		EPDFB_DC_FLAG_REVERSEDRVDATA|EPDFB_DC_FLAG_SKIPRIGHTPIXEL);
+	//pDC = epdfbdc_create_ex2(wFBW,wFBH,gwScrW,gwScrH,bBitsPerPixel,pbDCBuf,\
+	//	EPDFB_DC_FLAG_REVERSEDRVDATA|EPDFB_DC_FLAG_SKIPRIGHTPIXEL);
 	
+	pDC = epdfbdc_create_ex2(wFBW,wFBH,gwScrW,gwScrH,bBitsPerPixel,pbDCBuf,\
+		EPDFB_DC_FLAG_REVERSEDRVDATA);
 
 	//currWidth = _INIT_HSIZE;
 	//currHeight = _INIT_VSIZE;
@@ -833,8 +835,14 @@ int fake_s1d13522_display_img(u16 wX,u16 wY,u16 wW,u16 wH,u8 *pbImgBuf,
 
 		printk("write raw img -> \"%s\" ,%d bits,%u bytes,w=%u,h=%u\n",cfnbufA,iBits,ptDC_temp->dwDCSize,_w,_h);
 		write_file_ex(cfnbufA,ptDC_temp->pbDCbuf, ptDC_temp->dwDCSize) ;
-		
-		printk("rawtoppm %u %u %s > xxx.ppm \n",pDC->dwWidth,pDC->dwHeight,cfnbufA);
+	
+		if(8==iBits) {
+			printk("printf \"P5\\n%u\\n%u\\n255\\n\"> xxx.ppm \n",pDC->dwWidth,pDC->dwHeight);
+			printk("cat \"%s\">> xxx.ppm \n",cfnBufA);
+		}
+		else (16=iBits) {
+			printk("rawtoppm %u %u %s > xxx.ppm \n",pDC->dwWidth,pDC->dwHeight,cfnbufA);
+		}
 
 		epdfbdc_delete(ptDC_temp);
 	}
@@ -940,7 +948,8 @@ static EN_EPSON_ERROR_CODE S1D13522_reg_write(u16 wIndex, u16 wValue)
 			if(0x0000==wRotate) {
 				//ASSERT(gptHWCFG);
 				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||\
-						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel)
+						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel||\
+						9==gptHWCFG->m_val.bDisplayPanel)
 				{
 					// Left Out EPD Panel ...
 					GALLEN_DBGLOCAL_RUNLOG(12);
@@ -954,7 +963,8 @@ static EN_EPSON_ERROR_CODE S1D13522_reg_write(u16 wIndex, u16 wValue)
 			else if(0x0200==wRotate) {
 				ASSERT(gptHWCFG);
 				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||\
-						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel)
+						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel||\
+						9==gptHWCFG->m_val.bDisplayPanel)
 				{
 					// Left Out EPD Panel ...
 					GALLEN_DBGLOCAL_RUNLOG(12);
@@ -968,7 +978,8 @@ static EN_EPSON_ERROR_CODE S1D13522_reg_write(u16 wIndex, u16 wValue)
 			else if(0x0100==wRotate) {
 				ASSERT(gptHWCFG);
 				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||\
-						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel)
+						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel||\
+						9==gptHWCFG->m_val.bDisplayPanel)
 				{
 					// Left Out EPD Panel ...
 					GALLEN_DBGLOCAL_RUNLOG(24);
@@ -982,7 +993,8 @@ static EN_EPSON_ERROR_CODE S1D13522_reg_write(u16 wIndex, u16 wValue)
 			else if(0x0300==wRotate) {
 				ASSERT(gptHWCFG);
 				if(0==gptHWCFG->m_val.bDisplayPanel||3==gptHWCFG->m_val.bDisplayPanel||\
-						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel)
+						6==gptHWCFG->m_val.bDisplayPanel||8==gptHWCFG->m_val.bDisplayPanel||\
+						9==gptHWCFG->m_val.bDisplayPanel)
 				{
 					// Left Out EPD Panel ...
 					GALLEN_DBGLOCAL_RUNLOG(26);
@@ -2415,19 +2427,66 @@ static int Epson_LoadImageArea(PTloadImageArea area,EPDFB_DC *pDC)
 int fake_s1d13522_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 {
 	GALLEN_DBGLOCAL_BEGIN();
-	if(gptHWCFG&&1==gptHWCFG->m_val.bDisplayResolution) {
-		switch(gtRotate)
-		{
-		case epdfb_rotate_0:
-		case epdfb_rotate_180:
-			var->xres = 1024;
-			var->yres = 758;
-			break;	
-		case epdfb_rotate_90:
-		case epdfb_rotate_270:
-			var->xres = 758;
-			var->yres = 1024;
-			break;
+	if(gptHWCFG) {
+		if(1==gptHWCFG->m_val.bDisplayResolution) {
+			switch(gtRotate)
+			{
+			case epdfb_rotate_0:
+			case epdfb_rotate_180:
+				var->xres = 1024;
+				var->yres = 758;
+				break;	
+			case epdfb_rotate_90:
+			case epdfb_rotate_270:
+				var->xres = 758;
+				var->yres = 1024;
+				break;
+			}
+		}
+		else if(2==gptHWCFG->m_val.bDisplayResolution) {
+			switch(gtRotate)
+			{
+			case epdfb_rotate_0:
+			case epdfb_rotate_180:
+				var->xres = 1024;
+				var->yres = 768;
+				break;	
+			case epdfb_rotate_90:
+			case epdfb_rotate_270:
+				var->xres = 768;
+				var->yres = 1024;
+				break;
+			}
+		}	
+		else if(3==gptHWCFG->m_val.bDisplayResolution) {
+			switch(gtRotate)
+			{
+			case epdfb_rotate_0:
+			case epdfb_rotate_180:
+				var->xres = 1440;
+				var->yres = 1080;
+				break;	
+			case epdfb_rotate_90:
+			case epdfb_rotate_270:
+				var->xres = 1080;
+				var->yres = 1440;
+				break;
+			}
+		}	
+		else {
+			switch(gtRotate)
+			{
+			case epdfb_rotate_0:
+			case epdfb_rotate_180:
+				var->xres = 800;
+				var->yres = 600;
+				break;	
+			case epdfb_rotate_90:
+			case epdfb_rotate_270:
+				var->xres = 600;
+				var->yres = 800;
+				break;
+			}
 		}
 	}
 	else {
@@ -2562,7 +2621,7 @@ int32_t fake_s1d13522_ioctl(unsigned int cmd,unsigned long arg,EPDFB_DC *pDC)
 			if(pt) {
 				GALLEN_DBGLOCAL_RUNLOG(1);
 
-				if(gptHWCFG&&1==gptHWCFG->m_val.bDisplayResolution) {
+				if(gptHWCFG&&0!=gptHWCFG->m_val.bDisplayResolution) {
 					copy_from_user(pt,(ST_IMAGE_PGM *)arg,sizeof(ST_IMAGE_PGM));
 					GALLEN_DBGLOCAL_PRINTMSG("DISPLAY INFO : X=%ld,Y=%ld,W=%ld,H=%ld\n\twaveform=%ld,LUT no.=%ld,datap=%p,size=%ld\n",
 							pt->StartX,pt->StartY,pt->Width,pt->Height,
