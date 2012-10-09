@@ -110,8 +110,8 @@
 
   //#define _INIT_HSIZE         				800  // max panel original width .
   //#define _INIT_VSIZE         				600	 // max panel original height .
-  #define _INIT_HSIZE         				1024  // max panel original width .
-  #define _INIT_VSIZE         				768	 // max panel original height .
+  #define _INIT_HSIZE         				1440  // max panel original width .
+  #define _INIT_VSIZE         				1080	 // max panel original height .
   
   #define _INIT_FSLEN         				4
   #define _INIT_FBLEN         				4
