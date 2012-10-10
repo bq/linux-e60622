@@ -805,7 +805,7 @@ static u16 E50602_keymapping[] = {
 };
 
 static u16 E60672_keymapping[] = {
-	90, 62, 29, -1, 	// FrontLight, , ,     
+	61, 62, 29, -1, 	// FrontLight, , ,     
 	-1, -1, -1, -1, 	// , , ,
 	-1, -1, -1, -1, 	// , , , 
 	-1, -1, -1, 116,     // , , ,KEY_POWER 
