@@ -1812,7 +1812,7 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 	if (!chip)
 		return 0;
 
-	if (last_event > 0 && time_before(jiffies, last_event + 3 * HZ)) {
+	if (!gSleep_Mode_Suspend && last_event > 0 && time_before(jiffies, last_event + 3 * HZ)) {
 		dev_warn(&pdev->dev, "processing a sd event, not suspending\n");
 		return -EBUSY;
 	}
