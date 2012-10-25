@@ -215,6 +215,7 @@ EXPORT_SYMBOL(__USB_ADAPTOR__);
 static int Driver_Count = -1;
 unsigned char __TOUCH_LOCK__= 0;
 int gSleep_Mode_Suspend;
+EXPORT_SYMBOL(gSleep_Mode_Suspend);
 
 extern volatile NTX_HWCONFIG *gptHWCFG;
 
