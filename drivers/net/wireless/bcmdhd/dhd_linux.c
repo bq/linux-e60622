@@ -2346,6 +2346,35 @@ exit:
 	return 0;
 }
 
+static int dhd_init(struct net_device *net)
+{
+	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(net);
+	int ifidx = dhd_net2idx(dhd, net);
+	int ret;
+
+	if (ifidx == 0) { /* do it only for primary eth0 */
+
+		/* Normally the bus is already started at this point
+		 * But check nevertheless.
+		 */
+		if (dhd->pub.busstate != DHD_BUS_DATA)
+		{
+			int ret;
+
+			/* try to bring up bus */
+			if ((ret = dhd_bus_start(&dhd->pub)) != 0) {
+				DHD_ERROR(("%s: failed with code %d\n", __FUNCTION__, ret));
+				return -1;
+			}
+		}
+
+		memcpy(net->dev_addr, dhd->pub.mac.octet, ETHER_ADDR_LEN);
+	}
+
+	return 0;
+}
+
+
 static int
 dhd_open(struct net_device *net)
 {
@@ -2410,6 +2439,7 @@ dhd_open(struct net_device *net)
 		}
 #endif /* defined(WL_CFG80211) */
 
+		/* bus may have been initalizated on dhd_init */
 		if (dhd->pub.busstate != DHD_BUS_DATA) {
 
 			/* try to bring up bus */
@@ -2567,6 +2597,7 @@ dhd_del_if(dhd_info_t *dhd, int ifidx)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 31))
 static struct net_device_ops dhd_ops_pri = {
+	.ndo_init = dhd_init,
 	.ndo_open = dhd_open,
 	.ndo_stop = dhd_stop,
 	.ndo_get_stats = dhd_get_stats,
@@ -2807,6 +2838,22 @@ fail:
 	return NULL;
 }
 
+#ifdef READ_MACADDR
+void
+dhd_read_macaddr(dhd_pub_t *dhd)
+{
+        int ret = 0;
+        char buf[128];
+
+        /* Get the device MAC address */
+        strcpy(buf, "cur_etheraddr");
+        ret = dhd_wl_ioctl_cmd(dhd, WLC_GET_VAR, buf, sizeof(buf), FALSE, 0);
+        if (ret < 0)
+		return;
+        memcpy(dhd->mac.octet, buf, ETHER_ADDR_LEN);
+}
+#endif
+
 int
 dhd_bus_start(dhd_pub_t *dhdp)
 {
@@ -2903,7 +2950,7 @@ dhd_bus_start(dhd_pub_t *dhdp)
 #endif /* DHDTHREAD */
 
 #ifdef READ_MACADDR
-	dhd_read_macaddr(dhd);
+	dhd_read_macaddr(dhdp);
 #endif
 
 	/* Bus is ready, do any protocol initialization */
