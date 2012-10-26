@@ -2392,7 +2392,10 @@ dhd_open(struct net_device *net)
 		if (firmware_path[strlen(firmware_path)-1] == '\n')
 			firmware_path[strlen(firmware_path)-1] = '\0';
 		strcpy(fw_path, firmware_path);
+/* don't invalidate the firmware_path as dhd_common_init also does not care
+ * and overwrites it again on a powercycle.
 		firmware_path[0] = '\0';
+*/
 	}
 
 	dhd->pub.hang_was_sent = 0;
