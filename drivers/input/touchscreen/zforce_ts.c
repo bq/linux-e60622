@@ -33,18 +33,18 @@
 
 #define WAIT_TIMEOUT		msecs_to_jiffies(1000)
 
-#define FRAME_START		0xEE
+#define FRAME_START		0xee
 
 /* Offsets of the different parts of the payload the controller sends */
 #define PAYLOAD_HEADER		0
 #define PAYLOAD_LENGTH		1
 #define PAYLOAD_BODY		2
 
-// Response offsets
+/* Response offsets */
 #define RESPONSE_ID		0
 #define RESPONSE_DATA		1
 
-// Commands
+/* Commands */
 #define COMMAND_DEACTIVATE	0x00
 #define COMMAND_INITIALIZE	0x01
 #define COMMAND_RESOLUTION	0x02
@@ -113,6 +113,8 @@ struct zforce_ts {
 	u16			version_rev;
 
 	struct completion	command_done;
+	bool			command_active;
+	int			command_waiting;
 	int			command_result;
 	int			irq;
 	u8	zf_status_info[64];
@@ -128,13 +130,13 @@ static int zforce_command(struct zforce_ts *ts, u8 cmd)
 	char buf[3];
 	int ret;
 
-	dev_dbg(&client->dev, "%s: %d\n", __FUNCTION__, cmd);
+	dev_dbg(&client->dev, "%s: 0x%x\n", __FUNCTION__, cmd);
 
-	buf[0] = 0xee;	/* frame start */
-	buf[1] = 1;	/* data size */
-	buf[2] = cmd;	/* the command */
+	buf[0] = FRAME_START;
+	buf[1] = 1; /* data size, command only */
+	buf[2] = cmd;
 
-	ret = i2c_master_send(client, &buf, ARRAY_SIZE(buf));
+	ret = i2c_master_send(client, &buf[0], ARRAY_SIZE(buf));
 	if (ret < 0) {
 		dev_err(&client->dev, "i2c send data request error: %d\n", ret);
 		return ret;
@@ -143,58 +145,90 @@ static int zforce_command(struct zforce_ts *ts, u8 cmd)
 	return 0;
 }
 
-static int zforce_command_wait(struct zforce_ts *ts, u8 cmd)
+static int zforce_send_wait(struct zforce_ts *ts, const char *buf, const int len)
 {
 	struct i2c_client *client = ts->client;
 	int ret;
 
-	ret = zforce_command(ts, cmd);
+	if (ts->command_active) {
+		dev_err(&client->dev, "already waiting for a command\n");
+		return -EBUSY;
+	}
+
+	ts->command_active = 1;
+
+//FIXME: sanity checks
+
+	dev_dbg(&client->dev, "sending %d bytes for command 0x%x\n", buf[1], buf[2]);
+
+	ts->command_waiting = buf[2];
+
+	ret = i2c_master_send(client, buf, len);
 	if (ret < 0) {
-		dev_err(&client->dev, "command 0x%x request error: %d\n", cmd, ret);
+		dev_err(&client->dev, "i2c send data request error: %d\n", ret);
+		goto unlock;
+	}
+
+	dev_dbg(&client->dev, "waiting for result for command 0x%x\n", buf[2]);
+
+	if (wait_for_completion_timeout(&ts->command_done, WAIT_TIMEOUT) == 0) {
+		ret = -ETIME;
+		goto unlock;
+	}
+
+	ret = ts->command_result;
+
+unlock:
+	ts->command_active = 0;
+	return ret;
+}
+
+static int zforce_command_wait(struct zforce_ts *ts, u8 cmd)
+{
+	struct i2c_client *client = ts->client;
+	char buf[3];
+	int ret;
+
+	dev_dbg(&client->dev, "%s: 0x%x\n", __FUNCTION__, cmd);
+
+	buf[0] = FRAME_START;
+	buf[1] = 1; /* data size, command only */
+	buf[2] = cmd;
+
+	ret = zforce_send_wait(ts, &buf[0], ARRAY_SIZE(buf));
+	if (ret < 0) {
+		dev_err(&client->dev, "i2c send data request error: %d\n", ret);
 		return ret;
 	}
 
-	dev_dbg(&client->dev, "%s: waiting for result for command 0x%x\n", __FUNCTION__, cmd);
-
-	if (wait_for_completion_timeout(&ts->command_done, WAIT_TIMEOUT) == 0)
-		return -ETIME;
-
-	return ts->command_result;
+	return 0;
 }
 
 static int zforce_resolution(struct zforce_ts *ts, u16 x, u16 y)
 {
 	struct i2c_client *client = ts->client;
-	struct i2c_msg msg[2];
-	u8 request[16];
-	int ret;
+	char buf[7] = { FRAME_START, 5, COMMAND_RESOLUTION,
+			(x & 0xff), ((x >> 8) & 0xff),
+			(y & 0xff), ((y >> 8) & 0xff) };
 
-	dev_dbg(&client->dev, "%s (%d,%d)\n", __FUNCTION__, x, y);
+	dev_dbg(&client->dev, "set resolution to (%d,%d)\n", x, y);
 
-	//FIXME: should be doable via smbus
-	request[0] = COMMAND_RESOLUTION;
-	memcpy(&request[1], &x, sizeof(u16));
-	memcpy(&request[3], &y, sizeof(u16));
-
-	msg[0].addr = ts->client->addr;
-	msg[0].flags = 0;
-	msg[0].len = 5;
-	msg[0].buf = request;
-
-	ret = i2c_transfer(ts->client->adapter, msg, 1);
-	if (ret < 0) {
-		dev_err(&ts->client->dev, "i2c send resolution error: %d\n", ret);
-		return ret;
-	}
-
-	if (wait_for_completion_timeout(&ts->command_done, WAIT_TIMEOUT) == 0)
-		return -1;
-
-	// I2C opperations was successful
-	// Return the results from the controler. (0 == success)
-	return ts->command_result;
+	return zforce_send_wait(ts, &buf[0], ARRAY_SIZE(buf));
 }
 
+static int zforce_scan_frequency(struct zforce_ts *ts, u16 idle, u16 finger, u16 stylus)
+{
+	struct i2c_client *client = ts->client;
+	char buf[9] = { FRAME_START, 7, COMMAND_SCANFREQ,
+			(idle & 0xff), ((idle >> 8) & 0xff),
+			(finger & 0xff), ((finger >> 8) & 0xff),
+			(stylus & 0xff), ((stylus >> 8) & 0xff) };
+
+	dev_dbg(&client->dev, "set scan frequency to (idle: %d, finger: %d, stylus: %d)\n",
+		idle, finger, stylus);
+
+	return zforce_send_wait(ts, &buf[0], ARRAY_SIZE(buf));
+}
 
 //////////////////////////////// todo ////////////////////////////////
 
@@ -463,7 +497,6 @@ static int process_touch_event(struct zforce_ts *ts, u8* payload)
 	// Request the next event ASAP.
 	if (ts->version_major == 1)
 	{
-		zforce_command(ts, COMMAND_DATAREQUEST);
 		size = 5;
 	}
 	else
@@ -533,12 +566,14 @@ static int process_touch_event(struct zforce_ts *ts, u8* payload)
 		dev_dbg(&ts->client->dev, "%d down(%d,%d)\n", id, x, y);
 		input_report_abs(ts->input, ABS_X, x);
 		input_report_abs(ts->input, ABS_Y, y);
+		input_report_abs(ts->input, ABS_PRESSURE, 1024); /* FIXME: not for upstream, but for old tslib versions */
 		input_report_key(ts->input, BTN_TOUCH, 1);
 		break;
 	case STATE_UP:
 		dev_dbg(&ts->client->dev, "%d up(%d,%d)\n", id, x, y);
 		input_report_abs(ts->input, ABS_X, x);
 		input_report_abs(ts->input, ABS_Y, y);
+		input_report_abs(ts->input, ABS_PRESSURE, 0); /* FIXME: not for upstream, but for old tslib versions */
 		input_report_key(ts->input, BTN_TOUCH, 0);
 		break;
 	default:
@@ -552,7 +587,7 @@ static int process_touch_event(struct zforce_ts *ts, u8* payload)
 static int zforce_read_packet(struct zforce_ts *ts, u8 *buffer)
 {
 	struct i2c_client *client = ts->client;
-  	int ret;
+	int ret;
 
 	/* read 2 byte header */
 	ret = i2c_master_recv(client, buffer, 2);
@@ -566,7 +601,7 @@ static int zforce_read_packet(struct zforce_ts *ts, u8 *buffer)
 		return -EINVAL;
 	}
 
-	if ((buffer[PAYLOAD_LENGTH] <= 0) || (buffer[PAYLOAD_LENGTH] > 255)) {
+	if (buffer[PAYLOAD_LENGTH] <= 0 || buffer[PAYLOAD_LENGTH] > 255) {
 		dev_err(&client->dev, "invalid payload length: %d\n", buffer[PAYLOAD_LENGTH]);
 		return -EINVAL;
 	}
@@ -577,7 +612,23 @@ static int zforce_read_packet(struct zforce_ts *ts, u8 *buffer)
 		dev_err(&client->dev, "error reading payload: %d\n", ret);
 		return ret;
 	}
+
+	dev_dbg(&client->dev, "read %d bytes with response 0x%x\n", buffer[PAYLOAD_LENGTH], buffer[PAYLOAD_BODY]);
+
 	return 0;
+}
+
+static void zforce_complete(struct zforce_ts *ts, int cmd, int result)
+{
+	struct i2c_client *client = ts->client;
+
+	if (ts->command_waiting == cmd) {
+		dev_dbg(&client->dev, "completing command %d\n", cmd);
+		ts->command_result = result;
+		complete(&ts->command_done);
+	} else {
+		dev_dbg(&client->dev, "not for us command %d\n", cmd);
+	}
 }
 
 static irqreturn_t zforce_interrupt(int irq, void *dev_id)
@@ -589,6 +640,7 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	u8 payload_buffer[512];
 	u8 *payload;
 
+dev_err(&client->dev, "intstart, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
 
 	while(!gpio_get_value(pdata->gpio_int)) {
 dev_err(&client->dev, "inthandler, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
@@ -617,18 +669,20 @@ dev_err(&client->dev, "inthandler, gpio: %d, value: %d\n", pdata->gpio_int, gpio
 		case RESPONSE_DEACTIVATE:
 		case RESPONSE_SETCONFIG:
 		case RESPONSE_RESOLUTION:
-			ts->command_result = payload[RESPONSE_DATA];
-			complete(&ts->command_done);
+		case RESPONSE_SCANFREQ:
+			zforce_complete(ts, payload[RESPONSE_ID], payload[RESPONSE_DATA]);
 			break;
 		case RESPONSE_LED_LEVEL:
 			process_level_response(ts, &payload[RESPONSE_DATA]);
-			ts->command_result = 0;
-			complete(&ts->command_done);
+			zforce_complete(ts, payload[RESPONSE_ID], 0);
+/*			ts->command_result = 0;
+			complete(&ts->command_done);*/
 			break;
 		case RESPONSE_PULSESTRENG:
 			process_pulsestreng_response(ts, &payload[RESPONSE_DATA]);
-			ts->command_result = 0;
-			complete(&ts->command_done);
+			zforce_complete(ts, payload[RESPONSE_ID], 0);
+/*			ts->command_result = 0;
+			complete(&ts->command_done);*/
 			break;
 		case RESPONSE_STATUS:
 			/* Version Payload Results
@@ -651,8 +705,9 @@ dev_err(&client->dev, "inthandler, gpio: %d, value: %d\n", pdata->gpio_int, gpio
 			#define ZF_STATUS_SIZE 64
 			memcpy(pyld, &payload[RESPONSE_DATA], ZF_STATUS_SIZE);
 	
-			ts->command_result = 0;
-			complete(&ts->command_done);
+			zforce_complete(ts, payload[RESPONSE_ID], 0);
+/*			ts->command_result = 0;
+			complete(&ts->command_done);*/
 			break;
 		case NOTIFICATION_INVALID_COMMAND:
 			dev_err(&ts->client->dev, "invalid command: 0x%x (err_cnt: %d)", payload[RESPONSE_DATA], ++(ts->err_cnt) );
@@ -696,6 +751,13 @@ static int zforce_start(struct zforce_ts *ts)
 		dev_err(&client->dev, "Unable to set resolution, %d\n", ret);
 		goto error;
 	}
+
+	ret = zforce_scan_frequency(ts, 10, 100, 100);
+	if (ret) {
+		dev_err(&client->dev, "Unable to set scan frequency, %d\n", ret);
+		goto error;
+	}
+
 /*
 	#define ZF_SETCONFIG_DUALTOUCH 0x00000001
 	// Set configuration, enable dual touch
@@ -731,9 +793,11 @@ error:
 static int zforce_stop(struct zforce_ts *ts)
 {
 	struct i2c_client *client = ts->client;
+	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
 	int ret;
 
 	dev_dbg(&client->dev, "stopping device\n");
+dev_err(&client->dev, "zforce_stop, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
 
 	/* deactivates touch sensing and puts the device into sleep */
 	ret = zforce_command_wait(ts, COMMAND_DEACTIVATE);
@@ -774,40 +838,65 @@ static int zforce_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct zforce_ts *ts = i2c_get_clientdata(client);
+	struct input_dev *input = ts->input;
+	int ret = 0;
 
-	zforce_stop(ts);
+	mutex_lock(&input->mutex);
 
-	return 0;
+	/* when configured as wakeup source, device should always wake system
+	 * therefore start device if necessary
+	 */
+	if (true || device_may_wakeup(&client->dev)) {
+		dev_dbg(&client->dev, "suspend while being a wakeup source\n");
+
+		/* need to start device if not open, to be wakeup source */
+		if (!input->users) {
+			ret = zforce_start(ts);
+			if (ret)
+				goto unlock;
+		}
+
+		enable_irq_wake(client->irq);
+	} else if (input->users) {
+		ret = zforce_stop(ts);
+	}
+
+unlock:
+	mutex_unlock(&input->mutex);
+
+	return ret;
 }
 
 static int zforce_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct zforce_ts *ts = i2c_get_clientdata(client);
-	struct zforce_ts_platdata *pdata = client->dev.platform_data;
+	struct input_dev *input = ts->input;
+	int ret = 0;
 
-/*	zforce_touch_hw_init(1);
-	enable_irq(ts->irq);
+	mutex_lock(&input->mutex);
 
-	// TODO touch fw 2.0.0.13 and later will have default 
-	//      resolution and config to speed up suspend&resume
-	// TODO Therefore read version first and skip setting 
-	//	resolution and setconfig if newer fw is running.
-	if (send_initialize_request(ts) ||
-		send_resolution(ts, pdata->width, pdata->height) ||
-		send_setconfig(ts, ZF_SETCONFIG_DUALTOUCH)) 
-	{
-		dev_err(&client->dev, "Unable to wakeup the device\n");
+	if (true || device_may_wakeup(&client->dev)) {
+		dev_dbg(&client->dev, "resume from being a wakeup source\n");
+
+		disable_irq_wake(client->irq);
+
+		/* need to stop device if it was not open on suspend */
+		if (!input->users) {
+			ret = zforce_stop(ts);
+			if (ret)
+				goto unlock;
+		}
+
+		/* device wakes automatically from SLEEP */
+	} else if (input->users) {
+		ret = zforce_start(ts);
 	}
-	if (send_data_request(ts))
-	{
-		dev_err(&client->dev, "Unable to request data\n");
-	}
-	// Allow time for initial cal to complete
-	msleep(200);
-	
-*/
-	return 0;
+
+unlock:
+	mutex_unlock(&input->mutex);
+
+	return ret;
 }
 
 static SIMPLE_DEV_PM_OPS(zforce_pm_ops, zforce_suspend, zforce_resume);
@@ -822,13 +911,6 @@ static int zforce_probe(struct i2c_client *client,
 
 	if (!pdata)
 		return -EINVAL;
-
-	/* FIXME: necessary? */
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
-	{
-		dev_err(&client->dev, "need I2C_FUNC_I2C\n");
-		return -ENODEV;
-	}
 
 	ts = kzalloc(sizeof(struct zforce_ts), GFP_KERNEL);
 	if (!ts)
@@ -854,6 +936,7 @@ static int zforce_probe(struct i2c_client *client,
 	input_dev = input_allocate_device();
 	if (!input_dev) {
 		dev_err(&client->dev, "could not allocate input device\n");
+		ret = -ENOMEM;
 		goto err_input_alloc;
 	}
 
@@ -868,7 +951,7 @@ static int zforce_probe(struct i2c_client *client,
 	input_dev->close = zforce_input_close;
 
 	__set_bit(EV_KEY, input_dev->evbit);
-//	__set_bit(EV_SYN, input_dev->evbit); //FIXME: necessary?
+	__set_bit(EV_SYN, input_dev->evbit);
 	__set_bit(EV_ABS, input_dev->evbit);
 
 	__set_bit(BTN_TOUCH, input_dev->keybit);
@@ -876,6 +959,9 @@ static int zforce_probe(struct i2c_client *client,
 	/* For single touch */
 	input_set_abs_params(input_dev, ABS_X, 0, pdata->x_max, 0, 0);
 	input_set_abs_params(input_dev, ABS_Y, 0, pdata->y_max, 0, 0);
+
+	/* FIXME: not for upstream, but for old tslib versions */
+	input_set_abs_params(input_dev, ABS_PRESSURE, 0, 1048, 0, 0);
 
 	/* For multi touch */
 	input_set_abs_params(input_dev, ABS_MT_POSITION_X, 0,
@@ -896,10 +982,14 @@ static int zforce_probe(struct i2c_client *client,
 	ts->err_cnt = 0;
 
 	init_completion(&ts->command_done);
-dev_err(&client->dev, "probe, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
 
+	/* FIXME: beware the IMX5 does not support EDGE triggers, I think there
+	 * was a workaround for this around somewhere. Until then don't limit
+	 * the trigger events.
+	 * This is uncritical, as the ISR also does check the gpio value itself
+	 */
 	ret = request_threaded_irq(client->irq, NULL, zforce_interrupt,
-				   /*IRQF_TRIGGER_FALLING |*/ IRQF_ONESHOT,
+				   /*IRQF_TRIGGER_FALLING |*/ IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 				   input_dev->name, ts);
 	if (ret) {
 		dev_err(&client->dev, "irq %d request failed\n", client->irq);
@@ -908,15 +998,12 @@ dev_err(&client->dev, "probe, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_
 
 	i2c_set_clientdata(client, ts);
 
-dev_err(&client->dev, "probe, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
 	/* need to start device to get version information */
-	// We are now ready for some events..
 	ret = zforce_command_wait(ts, COMMAND_INITIALIZE);
 	if (ret) {
 		dev_err(&client->dev, "Unable to initialize, %d\n", ret);
 		goto err_input_register;
 	}
-dev_err(&client->dev, "probe, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
 
 	/* this gets the firmware version among other informations */
 	ret = zforce_command_wait(ts, COMMAND_STATUS);
@@ -927,7 +1014,7 @@ dev_err(&client->dev, "probe, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_
 	}
 
 
-	/* stop device and put it into deep sleep until it is opened */
+	/* stop device and put it into sleep until it is opened */
 	ret = zforce_stop(ts);
 	if (ret < 0)
 		goto err_input_register;
