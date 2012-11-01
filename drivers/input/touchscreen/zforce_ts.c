@@ -438,9 +438,18 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 		}
 	}
 
-
+/*
 	input_report_abs(ts->input, ABS_X, point[0].coord_x);
 	input_report_abs(ts->input, ABS_Y, point[0].coord_y);
+ * for some unknown reasion ntx swapped the correct coordinates from the
+ * zforce-ic in their driver (x <-> y),
+ * only to swap them back via the tslib pointercal :-S .
+ * So to stay compatible for a while do the same.
+ * FIXME: resolve this crap
+ */
+	input_report_abs(ts->input, ABS_X, point[0].coord_y);
+	input_report_abs(ts->input, ABS_Y, pdata->x_max - point[0].coord_x);
+
 	if (point[0].state == STATE_DOWN || point[0].state == STATE_MOVE) {
 		input_report_abs(ts->input, ABS_PRESSURE, 1024); /* FIXME: not for upstream, but for old tslib versions */
 		input_report_key(ts->input, BTN_TOUCH, 1);
