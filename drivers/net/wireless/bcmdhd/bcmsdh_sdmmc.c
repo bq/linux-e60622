@@ -769,7 +769,8 @@ sdioh_request_byte(sdioh_info_t *sd, uint rw, uint func, uint regaddr, uint8 *by
 	sd_info(("%s: rw=%d, func=%d, addr=0x%05x\n", __FUNCTION__, rw, func, regaddr));
 
 	if (!gInstance->func[func] || !gInstance->func[func]->card ||
-	    !gInstance->func[func]->card->host) {
+	    !gInstance->func[func]->card->host || !gInstance->func[2] ||
+	    !gInstance->func[2]->card || !gInstance->func[2]->card->host) {
 		printk(KERN_ERR "%s: func %d vanished, ignoring byte: rw=%d, addr=0x%05x\n",
 		       __FUNCTION__, func, rw, regaddr);
 		return -EIO;
@@ -874,7 +875,8 @@ sdioh_request_word(sdioh_info_t *sd, uint cmd_type, uint rw, uint func, uint add
 	         __FUNCTION__, cmd_type, rw, func, addr, nbytes));
 
 	if (!gInstance->func[func] || !gInstance->func[func]->card ||
-	    !gInstance->func[func]->card->host) {
+	    !gInstance->func[func]->card->host || !gInstance->func[2] ||
+	    !gInstance->func[2]->card || !gInstance->func[2]->card->host) {
 		printk(KERN_ERR "%s: func %d vanished, ignoring word: cmd_type=%d, rw=%d, addr=0x%05x, nbytes=%d\n",
 		       __FUNCTION__, func, cmd_type, rw, addr, nbytes);
 		return -EIO;
