@@ -98,16 +98,22 @@ static int zforce_i2c_start(struct i2c_client *client)
 
 static int zforce_i2c_stop(struct i2c_client *client)
 {
+	int ret;
+
 	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
 
 	/* cancel the hang check */
 	cancel_delayed_work_sync(&zForce_ir_touch_data.check);
 
 	if(8==gptHWCFG->m_val.bTouchCtrl) {
-		i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
+		ret = i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
 	}else{
-		i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
+		ret = i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
 	}	
+
+	if (ret < 0) {
+		dev_err(&client->dev, "stop command did not succeed %d\n", ret);
+	}
 
 	return 0;
 }
@@ -138,6 +144,8 @@ static int __zForce_read_data (struct i2c_client *client, char* buffer)
 	while (zForce_ir_touch_detect_int_level())
 		schedule_timeout(2);
 	rc = i2c_master_recv(client, buf_recv, 2);
+	if (rc < 0)
+		printk(KERN_ERR, "could not read header %d\n", rc);
 	if (0xEE != buf_recv[0]) {
 		printk (KERN_ERR "[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
 
