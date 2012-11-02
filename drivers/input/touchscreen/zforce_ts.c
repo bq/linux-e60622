@@ -69,7 +69,6 @@
 #define RESPONSE_ACTIVE_LEDS	0x1d
 #define RESPONSE_STATUS		0X1e
 
-
 /* Notifications are send by the touch controller without
  * beeing requested by the driver and include for example
  * touch indications
@@ -80,11 +79,12 @@
 #define NOTIFICATION_PROXIMITY		0x26
 #define NOTIFICATION_INVALID_COMMAND	0xfe
 
-#define ZFORCE_REPORT_POINTS 2
+#define ZFORCE_REPORT_POINTS		2
+#define ZFORCE_MAX_AREA			0xff
 
-#define STATE_DOWN 0
-#define STATE_MOVE 1
-#define STATE_UP   2
+#define STATE_DOWN			0
+#define STATE_MOVE			1
+#define STATE_UP			2
 
 #define SETCONFIG_DUALTOUCH (1 << 0)
 
@@ -119,8 +119,12 @@ struct zforce_ts {
 	int			command_waiting;
 	int			command_result;
 	int			irq;
-	u8	zf_status_info[64];
-	int	err_cnt;
+
+	int			err_cnt;
+
+	/* FIXME: not for upstream */
+	struct delayed_work	check;
+	int			int_pending;
 };
 
 static int zforce_command(struct zforce_ts *ts, u8 cmd)
@@ -238,6 +242,114 @@ static int zforce_setconfig(struct zforce_ts *ts, char b1)
 	dev_dbg(&client->dev, "set config to (%d)\n", b1);
 
 	return zforce_send_wait(ts, &buf[0], ARRAY_SIZE(buf));
+}
+
+static int zforce_start(struct zforce_ts *ts)
+{
+	struct i2c_client *client = ts->client;
+	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
+	int ret;
+
+	dev_dbg(&client->dev, "starting device\n");
+
+	ts->stopped = false;
+
+	// We are now ready for some events..
+	ret = zforce_command_wait(ts, COMMAND_INITIALIZE);
+	if (ret) {
+		dev_err(&client->dev, "Unable to initialize, %d\n", ret);
+		return ret;
+	}
+
+	/* Set the touch panel dimensions */
+	ret = zforce_resolution(ts, pdata->x_max, pdata->y_max);
+	if (ret) {
+		dev_err(&client->dev, "Unable to set resolution, %d\n", ret);
+		goto error;
+	}
+
+	ret = zforce_scan_frequency(ts, 10, 100, 100);
+	if (ret) {
+		dev_err(&client->dev, "Unable to set scan frequency, %d\n", ret);
+		goto error;
+	}
+
+	/* enable dual touch */
+	if (zforce_setconfig(ts, SETCONFIG_DUALTOUCH)) {
+		dev_err(&client->dev, "Unable to set config\n");
+		goto error;
+	}
+
+	/* start sending touch events */
+	ret = zforce_command(ts, COMMAND_DATAREQUEST);
+	if (ret) {
+		dev_err(&client->dev, "Unable to request data\n");
+		goto error;
+	}
+
+	/* Per NN, initial cal. take max. of 200msec.
+	 * Allow time to complete this calibration
+	 */
+	msleep(200);
+
+	/* FIXME: not for uptream, start hang check */
+	schedule_delayed_work(&ts->check, HZ * 10);
+
+	return 0;
+
+error:
+	zforce_command_wait(ts, COMMAND_DEACTIVATE);
+	disable_irq(client->irq);
+	ts->stopped = true;
+	return ret;
+}
+
+static int zforce_stop(struct zforce_ts *ts)
+{
+	struct i2c_client *client = ts->client;
+	int ret;
+
+	/* FIXME: not for upstream, cancel the hang check */
+	cancel_delayed_work_sync(&ts->check);
+
+	dev_dbg(&client->dev, "stopping device\n");
+
+	/* deactivates touch sensing and puts the device into sleep */
+	ret = zforce_command_wait(ts, COMMAND_DEACTIVATE);
+	if (ret != 0) {
+		dev_err(&client->dev, "could not deactivate device, %d\n",
+			ret);
+
+		/* FIXME: not for upstream */
+		msleep(100);
+		dev_err(&client->dev, "trying again\n");
+		ret = zforce_command_wait(ts, COMMAND_DEACTIVATE);
+
+		return ret;
+	}
+
+	ts->stopped = true;
+
+	return 0;
+}
+
+/* FIXME: not for upstream */
+static void zforce_check_work(struct work_struct *work)
+{
+	struct zforce_ts *ts = container_of(work, struct zforce_ts, check.work);
+	struct i2c_client *client = ts->client;
+	int ret;
+
+	pm_wakeup_event(&client->dev, 500);
+
+	dev_dbg(&client->dev, "periodic hang check\n");
+	
+	ret = zforce_command_wait(ts, COMMAND_STATUS);
+	if (ret < 0) {
+		dev_err(&client->dev, "could not get device status, %d\n", ret);
+	}
+
+	schedule_delayed_work(&ts->check, HZ * 10);
 }
 
 //////////////////////////////// todo ////////////////////////////////
@@ -371,9 +483,6 @@ static int process_pulsestreng_response(struct zforce_ts *ts, u8* payload)
 	return ZF_FIXSP_BUFF_SIZE;
 }
 
-// Touch Payload Results
-// [1:count] [2:x] [2:y] [1:state]
-// ###############################
 static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 {
 	struct i2c_client *client = ts->client;
@@ -423,6 +532,10 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 			point[i].area_major, point[i].area_minor,
 			point[i].orientation);
 
+		/* FIXME: convert to multitouch protocal b when we switch to a
+		 * newer kernel, as the zforce supports tracking the contacts
+		 * in hardware.
+		 */
 		if (point[i].state == STATE_DOWN || point[i].state == STATE_MOVE) {
 			input_report_abs(ts->input, ABS_MT_POSITION_X,
 					 point[i].coord_x);
@@ -463,36 +576,38 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 	return 0;
 }
 
-static int zforce_read_packet(struct zforce_ts *ts, u8 *buffer)
+static int zforce_read_packet(struct zforce_ts *ts, u8 *buf)
 {
 	struct i2c_client *client = ts->client;
 	int ret;
 
 	/* read 2 byte header */
-	ret = i2c_master_recv(client, buffer, 2);
+	ret = i2c_master_recv(client, buf, 2);
 	if (ret < 0) {
 		dev_err(&client->dev, "error reading header: %d\n", ret);
 		return ret;
 	}
 
-	if (buffer[PAYLOAD_HEADER] != FRAME_START) {
-		dev_err(&client->dev, "invalid frame start: %d\n", buffer[0]);
+	if (buf[PAYLOAD_HEADER] != FRAME_START) {
+		dev_err(&client->dev, "invalid frame start: %d\n", buf[0]);
 		return -EINVAL;
 	}
 
-	if (buffer[PAYLOAD_LENGTH] <= 0 || buffer[PAYLOAD_LENGTH] > 255) {
-		dev_err(&client->dev, "invalid payload length: %d\n", buffer[PAYLOAD_LENGTH]);
+	if (buf[PAYLOAD_LENGTH] <= 0 || buf[PAYLOAD_LENGTH] > 255) {
+		dev_err(&client->dev, "invalid payload length: %d\n",
+			buf[PAYLOAD_LENGTH]);
 		return -EINVAL;
 	}
 
 	/* read payload */
-	ret = i2c_master_recv(client, &buffer[PAYLOAD_BODY], buffer[PAYLOAD_LENGTH]);
+	ret = i2c_master_recv(client, &buf[PAYLOAD_BODY], buf[PAYLOAD_LENGTH]);
 	if (ret < 0) {
 		dev_err(&client->dev, "error reading payload: %d\n", ret);
 		return ret;
 	}
 
-	dev_dbg(&client->dev, "read %d bytes with response 0x%x\n", buffer[PAYLOAD_LENGTH], buffer[PAYLOAD_BODY]);
+	dev_dbg(&client->dev, "read %d bytes for response command 0x%x\n",
+		buf[PAYLOAD_LENGTH], buf[PAYLOAD_BODY]);
 
 	return 0;
 }
@@ -510,16 +625,26 @@ static void zforce_complete(struct zforce_ts *ts, int cmd, int result)
 	}
 }
 
+static irqreturn_t zforce_interrupt_primary(int irq, void *dev_id)
+{
+	struct zforce_ts *ts = dev_id;
+	struct i2c_client *client = ts->client;
+
+	pm_wakeup_event(&client->dev, 500);
+
+	return IRQ_WAKE_THREAD;
+}
+
 static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 {
 	struct zforce_ts *ts = dev_id;
 	struct i2c_client *client = ts->client;
 	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
-	int ret, i;
+	int ret;
 	u8 payload_buffer[512];
 	u8 *payload;
 
-//	pm_stay_awake(&client->dev);
+	pm_stay_awake(&client->dev);
 
 //dev_err(&client->dev, "intstart, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
 
@@ -569,21 +694,24 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 			/* Version Payload Results
 			 * [2:major] [2:minor] [2:build] [2:rev]
 			 */
-			memcpy(&ts->version_major, &payload[RESPONSE_DATA+0], sizeof(u16));
-			memcpy(&ts->version_minor, &payload[RESPONSE_DATA+2], sizeof(u16));
-			memcpy(&ts->version_build, &payload[RESPONSE_DATA+4], sizeof(u16));
-			memcpy(&ts->version_rev,   &payload[RESPONSE_DATA+6], sizeof(u16));
-	dev_info(&ts->client->dev, "Firmware Version %04x:%04x %04x:%04x\n", ts->version_major, ts->version_minor, ts->version_build, ts->version_rev);
+			ts->version_major = (payload[RESPONSE_DATA + 1] << 8) | payload[RESPONSE_DATA];
+			ts->version_minor = (payload[RESPONSE_DATA + 3] << 8) | payload[RESPONSE_DATA + 2];
+			ts->version_build = (payload[RESPONSE_DATA + 5] << 8) | payload[RESPONSE_DATA + 4];
+			ts->version_rev   = (payload[RESPONSE_DATA + 7] << 8) | payload[RESPONSE_DATA + 6];
+			dev_info(&ts->client->dev, "Firmware Version %04x:%04x %04x:%04x\n", ts->version_major, ts->version_minor, ts->version_build, ts->version_rev);
 
-			u8 *pyld =  NULL;
-	
-			pyld = (u8 *)ts->zf_status_info;
-			#define ZF_STATUS_SIZE 64
-			memcpy(pyld, &payload[RESPONSE_DATA], ZF_STATUS_SIZE);
-	
+			/* 255 is the value contained in buf9 when the zforce
+			 * controller loses any valid state.
+			 * FIXME: probably not for upstream
+			 */
+			if (payload[RESPONSE_DATA + 8] == 255) {
+				printk("[%s-%d] zforce got confused, doing reset\n", __func__, __LINE__);
+				zforce_stop(ts);
+				msleep(100);
+				zforce_start(ts);
+			}
+
 			zforce_complete(ts, payload[RESPONSE_ID], 0);
-/*			ts->command_result = 0;
-			complete(&ts->command_done);*/
 			break;
 		case NOTIFICATION_INVALID_COMMAND:
 			dev_err(&ts->client->dev, "invalid command: 0x%x (err_cnt: %d)", payload[RESPONSE_DATA], ++(ts->err_cnt) );
@@ -599,91 +727,9 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	}
 //dev_err(&client->dev, "intend, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
 
-//	pm_relax();
+	pm_relax();
 
 	return IRQ_HANDLED;
-}
-
-static int zforce_start(struct zforce_ts *ts)
-{
-	struct i2c_client *client = ts->client;
-	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
-	int ret;
-
-	dev_dbg(&client->dev, "starting device\n");
-
-	ts->stopped = false;
-	mb();
-	enable_irq(client->irq);
-
-	// We are now ready for some events..
-	ret = zforce_command_wait(ts, COMMAND_INITIALIZE);
-	if (ret) {
-		dev_err(&client->dev, "Unable to initialize, %d\n", ret);
-		return ret;
-	}
-
-	/* Set the touch panel dimensions */
-	ret = zforce_resolution(ts, pdata->x_max, pdata->y_max);
-	if (ret) {
-		dev_err(&client->dev, "Unable to set resolution, %d\n", ret);
-		goto error;
-	}
-
-	ret = zforce_scan_frequency(ts, 10, 100, 100);
-	if (ret) {
-		dev_err(&client->dev, "Unable to set scan frequency, %d\n", ret);
-		goto error;
-	}
-
-	/* enable dual touch */
-	if (zforce_setconfig(ts, SETCONFIG_DUALTOUCH)) {
-		dev_err(&client->dev, "Unable to set config\n");
-		goto error;
-	}
-
-	/* start sending touch events */
-	ret = zforce_command(ts, COMMAND_DATAREQUEST);
-	if (ret) {
-		dev_err(&client->dev, "Unable to request data\n");
-		goto error;
-	}
-
-	/* Per NN, initial cal. take max. of 200msec.
-	 * Allow time to complete this calibration
-	 */
-	msleep(200);
-
-	return 0;
-
-error:
-	zforce_command_wait(ts, COMMAND_DEACTIVATE);
-	disable_irq(client->irq);
-	ts->stopped = true;
-	return ret;
-}
-
-static int zforce_stop(struct zforce_ts *ts)
-{
-	struct i2c_client *client = ts->client;
-	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
-	int ret;
-
-	dev_dbg(&client->dev, "stopping device\n");
-dev_err(&client->dev, "zforce_stop, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
-
-	/* deactivates touch sensing and puts the device into sleep */
-	ret = zforce_command_wait(ts, COMMAND_DEACTIVATE);
-	if (ret != 0) {
-		dev_err(&client->dev, "could not deactivate device, %d\n",
-			ret);
-		return ret;
-	}
-
-	disable_irq(client->irq);
-	ts->stopped = true;
-
-	return 0;
 }
 
 static int zforce_input_open(struct input_dev *dev)
@@ -712,9 +758,16 @@ static int zforce_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct zforce_ts *ts = i2c_get_clientdata(client);
 	struct input_dev *input = ts->input;
+	const struct zforce_ts_platdata *pdata = client->dev.platform_data; /* FIXME: temporary for gpio debug output*/
 	int ret = 0;
 
 	mutex_lock(&input->mutex);
+
+dev_err(&client->dev, "suspend, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
+if (!gpio_get_value(pdata->gpio_int)) {
+	dev_err(&client->dev, "gpio was low during suspend, this should not happen\n");
+	return -EBUSY;
+}
 
 	/* when configured as wakeup source, device should always wake system
 	 * therefore start device if necessary
@@ -730,6 +783,10 @@ static int zforce_suspend(struct device *dev)
 		}
 
 		enable_irq_wake(client->irq);
+
+		/* FIXME: not for upstream */
+		if (input->users)
+			cancel_delayed_work_sync(&ts->check);
 	} else if (input->users) {
 		ret = zforce_stop(ts);
 	}
@@ -761,7 +818,9 @@ static int zforce_resume(struct device *dev)
 				goto unlock;
 		}
 
-		/* device wakes automatically from SLEEP */
+		/* FIXME: not for upstream */
+		if (input->users)
+			schedule_delayed_work(&ts->check, HZ * 10);
 	} else if (input->users) {
 		ret = zforce_start(ts);
 	}
@@ -772,7 +831,30 @@ unlock:
 	return ret;
 }
 
-static SIMPLE_DEV_PM_OPS(zforce_pm_ops, zforce_suspend, zforce_resume);
+/* FIXME: not for upstream */
+static int zForce_suspend_noirq(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct zforce_ts *ts = i2c_get_clientdata(client);
+	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
+
+/*
+	if (true || device_may_wakeup(&client->dev)) {
+		if (ts->action_pending ||  !gpio_get_value(pdata->gpio_int)) {
+			dev_warn(dev, "touch during late suspend detected\n");
+			return -EBUSY;
+		}
+	}
+*/
+	return 0;
+}
+
+//static SIMPLE_DEV_PM_OPS(zforce_pm_ops, zforce_suspend, zforce_resume);
+static struct dev_pm_ops zforce_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(zforce_suspend, zforce_resume)
+	.suspend_noirq = zForce_suspend_noirq,
+	.freeze_noirq = zForce_suspend_noirq,
+};
 
 static int zforce_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
@@ -842,13 +924,11 @@ static int zforce_probe(struct i2c_client *client,
 	input_set_abs_params(input_dev, ABS_MT_POSITION_Y, 0,
 			     pdata->y_max, 0, 0);
 
-/* FIXME: do we get information on touch object dimensions? Then activate the following:
 	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0,
-			     AUO_PIXCIR_MAX_AREA, 0, 0);
+			     ZFORCE_MAX_AREA, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_TOUCH_MINOR, 0,
-			     AUO_PIXCIR_MAX_AREA, 0, 0);
+			     ZFORCE_MAX_AREA, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_ORIENTATION, 0, 1, 0, 0);
-*/
 
 	input_set_drvdata(ts->input, ts);
 	ts->stopped = true;
@@ -856,12 +936,15 @@ static int zforce_probe(struct i2c_client *client,
 
 	init_completion(&ts->command_done);
 
+	/* FIXME: not for upstream */
+	INIT_DELAYED_WORK(&ts->check, zforce_check_work);
+
 	/* FIXME: beware the IMX5 does not support EDGE triggers, I think there
 	 * was a workaround for this around somewhere. Until then don't limit
 	 * the trigger events.
 	 * This is uncritical, as the ISR also does check the gpio value itself
 	 */
-	ret = request_threaded_irq(client->irq, NULL, zforce_interrupt,
+	ret = request_threaded_irq(client->irq, zforce_interrupt_primary, zforce_interrupt,
 				   /*IRQF_TRIGGER_FALLING |*/ IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 				   input_dev->name, ts);
 	if (ret) {
@@ -881,7 +964,7 @@ static int zforce_probe(struct i2c_client *client,
 	/* this gets the firmware version among other informations */
 	ret = zforce_command_wait(ts, COMMAND_STATUS);
 	if (ret < 0) {
-		dev_err(&client->dev, "could not get device status\n");
+		dev_err(&client->dev, "could not get device status, %d\n", ret);
 		zforce_stop(ts);
 		goto err_input_register;
 	}
@@ -894,7 +977,7 @@ static int zforce_probe(struct i2c_client *client,
 
 	ret = input_register_device(input_dev);
 	if (ret) {
-		dev_err(&client->dev, "could not register input device\n");
+		dev_err(&client->dev, "could not register input device, %d\n", ret);
 		goto err_input_register;
 	}
 
