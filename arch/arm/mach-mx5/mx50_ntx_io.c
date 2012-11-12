@@ -169,6 +169,7 @@
 #define	CM_SET_ALARM_WAKEUP	 	207	
 #define	CM_WIFI_CTRL	 		208	
 #define	CM_ROTARY_ENABLE 		209	
+#define	CM_WIFI_GET_STATUS	 	210	
 
 #define CM_GET_UP_VERSION 		215
 
@@ -970,6 +971,10 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 		case CM_WIFI_CTRL:		
 			ntx_wifi_power_ctrl (p);
 			break;	
+		case CM_WIFI_GET_STATUS:		
+			i = gWifiEnabled;	
+			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
+			break;
 					
 		case CM_3G_GET_WAKE_STATUS:	
 			i = 0;	
