@@ -490,10 +490,10 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
 	int count, i;
 
-
 	count = payload[0];
 	if (count > ZFORCE_REPORT_POINTS) {
-		dev_warn(&client->dev, "to many coordinates %d\n", count);
+		dev_warn(&client->dev, "to many coordinates %d, expected max %d\n",
+			 count, ZFORCE_REPORT_POINTS);
 		count = ZFORCE_REPORT_POINTS;
 	}
 
@@ -563,6 +563,7 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 	input_report_abs(ts->input, ABS_X, point[0].coord_y);
 	input_report_abs(ts->input, ABS_Y, pdata->x_max - point[0].coord_x);
 
+	/* determine the button state */
 	if (point[0].state == STATE_DOWN || point[0].state == STATE_MOVE) {
 		input_report_abs(ts->input, ABS_PRESSURE, 1024); /* FIXME: not for upstream, but for old tslib versions */
 		input_report_key(ts->input, BTN_TOUCH, 1);
@@ -581,7 +582,7 @@ static int zforce_read_packet(struct zforce_ts *ts, u8 *buf)
 	struct i2c_client *client = ts->client;
 	int ret;
 
-	/* read 2 byte header */
+	/* read 2 byte message header */
 	ret = i2c_master_recv(client, buf, 2);
 	if (ret < 0) {
 		dev_err(&client->dev, "error reading header: %d\n", ret);
@@ -599,7 +600,7 @@ static int zforce_read_packet(struct zforce_ts *ts, u8 *buf)
 		return -EINVAL;
 	}
 
-	/* read payload */
+	/* read the message */
 	ret = i2c_master_recv(client, &buf[PAYLOAD_BODY], buf[PAYLOAD_LENGTH]);
 	if (ret < 0) {
 		dev_err(&client->dev, "error reading payload: %d\n", ret);
@@ -621,11 +622,11 @@ static void zforce_complete(struct zforce_ts *ts, int cmd, int result)
 		ts->command_result = result;
 		complete(&ts->command_done);
 	} else {
-		dev_dbg(&client->dev, "not for us command %d\n", cmd);
+		dev_dbg(&client->dev, "command %d not for us\n", cmd);
 	}
 }
 
-static irqreturn_t zforce_interrupt_primary(int irq, void *dev_id)
+/*static irqreturn_t zforce_interrupt_primary(int irq, void *dev_id)
 {
 	struct zforce_ts *ts = dev_id;
 	struct i2c_client *client = ts->client;
@@ -633,7 +634,7 @@ static irqreturn_t zforce_interrupt_primary(int irq, void *dev_id)
 	pm_wakeup_event(&client->dev, 500);
 
 	return IRQ_WAKE_THREAD;
-}
+}*/
 
 static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 {
@@ -646,11 +647,7 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 
 	pm_stay_awake(&client->dev);
 
-//dev_err(&client->dev, "intstart, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
-
 	while(!gpio_get_value(pdata->gpio_int)) {
-//dev_err(&client->dev, "inthandler, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
-
 		ret = zforce_read_packet(ts, payload_buffer);
 		if (ret < 0) {
 			dev_err(&client->dev, "could not read packet, ret: %d\n", ret); 
@@ -725,9 +722,8 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 			break;
 		}
 	}
-//dev_err(&client->dev, "intend, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
 
-	pm_relax();
+	pm_relax(&client->dev);
 
 	return IRQ_HANDLED;
 }
@@ -763,16 +759,15 @@ static int zforce_suspend(struct device *dev)
 
 	mutex_lock(&input->mutex);
 
-dev_err(&client->dev, "suspend, gpio: %d, value: %d\n", pdata->gpio_int, gpio_get_value(pdata->gpio_int));
-if (!gpio_get_value(pdata->gpio_int)) {
-	dev_err(&client->dev, "gpio was low during suspend, this should not happen\n");
-	return -EBUSY;
-}
+	if (!gpio_get_value(pdata->gpio_int)) {
+		dev_err(&client->dev, "data request pending during suspend, this should not happen\n");
+		return -EBUSY;
+	}
 
 	/* when configured as wakeup source, device should always wake system
 	 * therefore start device if necessary
 	 */
-	if (true || device_may_wakeup(&client->dev)) {
+	if (device_may_wakeup(&client->dev)) {
 		dev_dbg(&client->dev, "suspend while being a wakeup source\n");
 
 		/* need to start device if not open, to be wakeup source */
@@ -788,6 +783,8 @@ if (!gpio_get_value(pdata->gpio_int)) {
 		if (input->users)
 			cancel_delayed_work_sync(&ts->check);
 	} else if (input->users) {
+		dev_dbg(&client->dev, "suspend without being a wakeup source\n");
+
 		ret = zforce_stop(ts);
 	}
 
@@ -822,6 +819,8 @@ static int zforce_resume(struct device *dev)
 		if (input->users)
 			schedule_delayed_work(&ts->check, HZ * 10);
 	} else if (input->users) {
+		dev_dbg(&client->dev, "resume without being a wakeup source\n");
+
 		ret = zforce_start(ts);
 	}
 
@@ -849,12 +848,12 @@ static int zForce_suspend_noirq(struct device *dev)
 	return 0;
 }
 
-//static SIMPLE_DEV_PM_OPS(zforce_pm_ops, zforce_suspend, zforce_resume);
-static struct dev_pm_ops zforce_pm_ops = {
+static SIMPLE_DEV_PM_OPS(zforce_pm_ops, zforce_suspend, zforce_resume);
+/*static struct dev_pm_ops zforce_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(zforce_suspend, zforce_resume)
 	.suspend_noirq = zForce_suspend_noirq,
 	.freeze_noirq = zForce_suspend_noirq,
-};
+};*/
 
 static int zforce_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
@@ -871,7 +870,7 @@ static int zforce_probe(struct i2c_client *client,
 	if (!ts)
 		return -ENOMEM;
 
-/* enable once we got rid of the ntx stuff
+/* FIXME; enable once we got rid of the ntx stuff
 	ret = gpio_request(pdata->gpio_int, "zforce_ts_int");
 	if (ret) {
 		dev_err(&client->dev, "request of gpio %d failed, %d\n",
@@ -939,13 +938,17 @@ static int zforce_probe(struct i2c_client *client,
 	/* FIXME: not for upstream */
 	INIT_DELAYED_WORK(&ts->check, zforce_check_work);
 
-	/* FIXME: beware the IMX5 does not support EDGE triggers, I think there
-	 * was a workaround for this around somewhere. Until then don't limit
-	 * the trigger events.
-	 * This is uncritical, as the ISR also does check the gpio value itself
+	/* FIXME: somehow we don't get the interrupt if we set the edge-trigger
+	 * to FALLING. When the ntx-code sets the irq-type for FALLING, via
+	 * set_irq_type the trigger is set correctly, but when we do it here,
+	 * the same operation run from request_threaded_irq here while doing
+	 * the same, blocks the irq completely.
+	 * But the trigger setting here is uncritical, as the ISR also does
+	 * check the gpio value itself too.
 	 */
-	ret = request_threaded_irq(client->irq, zforce_interrupt_primary, zforce_interrupt,
-				   /*IRQF_TRIGGER_FALLING |*/ IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+//	ret = request_threaded_irq(client->irq, zforce_interrupt_primary, zforce_interrupt,
+	ret = request_threaded_irq(client->irq, NULL, zforce_interrupt,
+				   /*IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW |*/ IRQF_ONESHOT,
 				   input_dev->name, ts);
 	if (ret) {
 		dev_err(&client->dev, "irq %d request failed\n", client->irq);
@@ -975,6 +978,8 @@ static int zforce_probe(struct i2c_client *client,
 	if (ret < 0)
 		goto err_input_register;
 
+	device_set_wakeup_capable(&client->dev, true);
+
 	ret = input_register_device(input_dev);
 	if (ret) {
 		dev_err(&client->dev, "could not register input device, %d\n", ret);
@@ -989,7 +994,9 @@ err_irq_request:
 err_input_alloc:
 	if (pdata->exit_hw)
 		pdata->exit_hw(client);
-//	gpio_free(pdata->gpio_int);
+/* FIXME; enable once we got rid of the ntx stuff
+	gpio_free(pdata->gpio_int);
+*/
 err_gpio_int:
 	kfree(ts);
 
@@ -1008,8 +1015,9 @@ static int zforce_remove(struct i2c_client *client)
 	if (pdata->exit_hw)
 		pdata->exit_hw(client);
 
-//	gpio_free(pdata->gpio_int);
-
+/* FIXME; enable once we got rid of the ntx stuff
+	gpio_free(pdata->gpio_int);
+*/
 	kfree(ts);
 
 	return 0;
