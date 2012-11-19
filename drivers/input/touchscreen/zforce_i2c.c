@@ -387,7 +387,7 @@ static void zForce_ir_touch_work_func(struct work_struct *work)
 	else
 		g_touch_triggered = 0;
 
-	pm_relax();
+	pm_relax(&zForce_ir_touch_data.client->dev);
 }
 
 static irqreturn_t zForce_ir_touch_ts_interrupt(int irq, void *dev_id)
@@ -647,6 +647,8 @@ static int zForce_ir_touch_probe(
 		cmd_Resolution_v2[5] = (uint8_t)(ZFORCE_TS_HIGHT&0xff);
 		cmd_Resolution_v2[6] = (uint8_t)(ZFORCE_TS_HIGHT>>8);
 	}
+
+	device_set_wakeup_capable(&client->dev, true);
 
 	err = input_register_device(zForce_ir_touch_data.input);
 	if (err < 0) {

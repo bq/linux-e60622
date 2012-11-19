@@ -1597,7 +1597,7 @@ static void esdhc_cd_callback(struct work_struct *work)
 			mod_timer(&host->cd_timer, jiffies + HZ / 4);
 			GALLEN_DBGLOCAL_ESC();
 
-			pm_relax();
+			pm_relax(&host->chip->pdev->dev);
 
 			return;
 		}
@@ -1680,7 +1680,7 @@ static void esdhc_cd_callback(struct work_struct *work)
 
 	GALLEN_DBGLOCAL_END();
 
-	pm_relax();
+	pm_relax(&host->chip->pdev->dev);
 }
 
 /*!

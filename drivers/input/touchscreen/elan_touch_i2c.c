@@ -309,7 +309,7 @@ static void elan_touch_work_func(struct work_struct *work)
 	g_touch_triggered = 0;
 #endif			
 
-	pm_relax();
+	pm_relax(&elan_touch_data.client->dev);
 }
 
 static irqreturn_t elan_touch_ts_interrupt(int irq, void *dev_id)
@@ -341,7 +341,7 @@ void elan_touch_ts_triggered(void)
 	queue_work(elan_wq, &elan_touch_data.work);
 #endif			
 
-	pm_relax();
+	pm_relax(&elan_touch_data.client->dev);
 }
 
 static enum hrtimer_restart elan_touch_timer_func(struct hrtimer *timer)
