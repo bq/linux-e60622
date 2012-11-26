@@ -590,6 +590,7 @@ static int zForce_ir_touch_probe(
 	zForce_ir_touch_data.input->id.bustype = BUS_I2C;
 	zForce_ir_touch_data.input->open = zforce_i2c_open;
 	zForce_ir_touch_data.input->close = zforce_i2c_close;
+	zForce_ir_touch_data.input->dev.parent = &client->dev;
 
 	input_set_drvdata(zForce_ir_touch_data.input, client);
 	
