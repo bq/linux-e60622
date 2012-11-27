@@ -111,6 +111,7 @@ struct zforce_ts {
 	char			phys[32];
 
 	bool			stopped;
+	bool			suspended;
 	bool			boot_complete;
 
 	/* Firmware version information */
@@ -621,16 +622,6 @@ static void zforce_complete(struct zforce_ts *ts, int cmd, int result)
 	}
 }
 
-/*static irqreturn_t zforce_interrupt_primary(int irq, void *dev_id)
-{
-	struct zforce_ts *ts = dev_id;
-	struct i2c_client *client = ts->client;
-
-	pm_wakeup_event(&client->dev, 500);
-
-	return IRQ_WAKE_THREAD;
-}*/
-
 static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 {
 	struct zforce_ts *ts = dev_id;
@@ -642,6 +633,16 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 
 	pm_stay_awake(&client->dev);
 
+	/* As we're triggering on the low level, and the data is still sitting
+	 * in the controller, the interrupt will just retrigger later,
+	 * hopefully after the device is resumed.
+	 */
+	if (ts->suspended) {
+		dev_warn(&client->dev, "device is suspended, not handling interrupt at this point\n");
+		msleep(50);
+		goto out;
+	}
+
 	while(!gpio_get_value(pdata->gpio_int)) {
 		ret = zforce_read_packet(ts, payload_buffer);
 		if (ret < 0) {
@@ -651,10 +652,10 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 
 		payload =  &payload_buffer[PAYLOAD_BODY];
 
-/*		dev_err(&ts->client->dev, " response frame:  " );
+		dev_err(&ts->client->dev, " response frame:  " );
 		for (i = 0; i < (payload_buffer[PAYLOAD_LENGTH] + 2); i++ )
 			printk( " 0x%02X ", payload_buffer[i] );
-		printk( "\n" );*/
+		printk( "\n" );
 
 		switch (payload[RESPONSE_ID]) {
 		case NOTIFICATION_TOUCH:
@@ -718,6 +719,7 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 		}
 	}
 
+out:
 	pm_relax(&client->dev);
 
 	return IRQ_HANDLED;
@@ -781,7 +783,10 @@ static int zforce_suspend(struct device *dev)
 		dev_dbg(&client->dev, "suspend without being a wakeup source\n");
 
 		ret = zforce_stop(ts);
+		ret = 0; /* sometimes the zforce produces strange results on stop */
 	}
+
+	ts->suspended = true;
 
 unlock:
 	mutex_unlock(&input->mutex);
@@ -798,7 +803,9 @@ static int zforce_resume(struct device *dev)
 
 	mutex_lock(&input->mutex);
 
-	if (true || device_may_wakeup(&client->dev)) {
+	ts->suspended = false;
+
+	if (device_may_wakeup(&client->dev)) {
 		dev_dbg(&client->dev, "resume from being a wakeup source\n");
 
 		disable_irq_wake(client->irq);
@@ -939,7 +946,6 @@ static int zforce_probe(struct i2c_client *client,
 	 * Therefore we can trigger the interrupt anytime it is low and do not need
 	 * to limit it to the interrupt edge.
 	 */
-//	ret = request_threaded_irq(client->irq, zforce_interrupt_primary, zforce_interrupt,
 	ret = request_threaded_irq(client->irq, NULL, zforce_interrupt,
 				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 				   input_dev->name, ts);
