@@ -100,6 +100,11 @@ struct zforce_point {
 	int prblty;
 };
 
+/*
+ * @command_active	true when already waiting for a command to return
+ * @command_waiting	the id of the command that that is currently waiting
+ *			for a result 
+ */
 struct zforce_ts {
 	struct i2c_client	*client;
 	struct input_dev	*input;
@@ -124,7 +129,6 @@ struct zforce_ts {
 
 	/* FIXME: not for upstream */
 	struct delayed_work	check;
-	int			int_pending;
 };
 
 static int zforce_command(struct zforce_ts *ts, u8 cmd)
@@ -254,14 +258,12 @@ static int zforce_start(struct zforce_ts *ts)
 
 	ts->stopped = false;
 
-	// We are now ready for some events..
 	ret = zforce_command_wait(ts, COMMAND_INITIALIZE);
 	if (ret) {
 		dev_err(&client->dev, "Unable to initialize, %d\n", ret);
 		return ret;
 	}
 
-	/* Set the touch panel dimensions */
 	ret = zforce_resolution(ts, pdata->x_max, pdata->y_max);
 	if (ret) {
 		dev_err(&client->dev, "Unable to set resolution, %d\n", ret);
@@ -274,7 +276,6 @@ static int zforce_start(struct zforce_ts *ts)
 		goto error;
 	}
 
-	/* enable dual touch */
 	if (zforce_setconfig(ts, SETCONFIG_DUALTOUCH)) {
 		dev_err(&client->dev, "Unable to set config\n");
 		goto error;
@@ -319,12 +320,6 @@ static int zforce_stop(struct zforce_ts *ts)
 	if (ret != 0) {
 		dev_err(&client->dev, "could not deactivate device, %d\n",
 			ret);
-
-		/* FIXME: not for upstream */
-		msleep(100);
-		dev_err(&client->dev, "trying again\n");
-		ret = zforce_command_wait(ts, COMMAND_DEACTIVATE);
-
 		return ret;
 	}
 
@@ -558,7 +553,7 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
  * zforce-ic in their driver (x <-> y),
  * only to swap them back via the tslib pointercal :-S .
  * So to stay compatible for a while do the same.
- * FIXME: resolve this crap
+ * FIXME: resolve this
  */
 	input_report_abs(ts->input, ABS_X, point[0].coord_y);
 	input_report_abs(ts->input, ABS_Y, pdata->x_max - point[0].coord_x);
