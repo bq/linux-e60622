@@ -933,17 +933,15 @@ static int zforce_probe(struct i2c_client *client,
 	/* FIXME: not for upstream */
 	INIT_DELAYED_WORK(&ts->check, zforce_check_work);
 
-	/* FIXME: somehow we don't get the interrupt if we set the edge-trigger
-	 * to FALLING. When the ntx-code sets the irq-type for FALLING, via
-	 * set_irq_type the trigger is set correctly, but when we do it here,
-	 * the same operation run from request_threaded_irq here while doing
-	 * the same, blocks the irq completely.
-	 * But the trigger setting here is uncritical, as the ISR also does
-	 * check the gpio value itself too.
+	/* The zforce pulls the interrupt low when it has data ready.
+	 * After it is triggered the isr thread runs until all the available
+	 * packets have been read and the interrupt is high again.
+	 * Therefore we can trigger the interrupt anytime it is low and do not need
+	 * to limit it to the interrupt edge.
 	 */
 //	ret = request_threaded_irq(client->irq, zforce_interrupt_primary, zforce_interrupt,
 	ret = request_threaded_irq(client->irq, NULL, zforce_interrupt,
-				   /*IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW |*/ IRQF_ONESHOT,
+				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 				   input_dev->name, ts);
 	if (ret) {
 		dev_err(&client->dev, "irq %d request failed\n", client->irq);
