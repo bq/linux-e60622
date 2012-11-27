@@ -630,6 +630,7 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	int ret;
 	u8 payload_buffer[512];
 	u8 *payload;
+	int i;
 
 	pm_stay_awake(&client->dev);
 
