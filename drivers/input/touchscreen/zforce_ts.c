@@ -257,6 +257,8 @@ static int zforce_start(struct zforce_ts *ts)
 
 	dev_dbg(&client->dev, "starting device\n");
 
+	enable_irq(client->irq);
+
 	ts->stopped = false;
 
 	ret = zforce_command_wait(ts, COMMAND_INITIALIZE);
@@ -325,6 +327,8 @@ static int zforce_stop(struct zforce_ts *ts)
 	}
 
 	ts->stopped = true;
+
+	disable_irq(client->irq);
 
 	return 0;
 }
@@ -741,8 +745,17 @@ static int zforce_input_open(struct input_dev *dev)
 static void zforce_input_close(struct input_dev *dev)
 {
 	struct zforce_ts *ts = input_get_drvdata(dev);
+	struct i2c_client *client = ts->client;
+	int ret;
 
-	zforce_stop(ts);
+	/* need to disable the irq even if stop failed, to prevent
+	 * enable/disable mismatches
+	 */
+	ret = zforce_stop(ts);
+	if (ret) {
+		dev_warn(&client->dev, "stopping zforce failed, disabling irq manually\n");
+		disable_irq(client->irq);
+	}
 
 	return;
 }
@@ -784,7 +797,8 @@ static int zforce_suspend(struct device *dev)
 		dev_dbg(&client->dev, "suspend without being a wakeup source\n");
 
 		ret = zforce_stop(ts);
-		ret = 0; /* sometimes the zforce produces strange results on stop */
+		if (ret)
+			goto unlock;
 	}
 
 	ts->suspended = true;
