@@ -111,6 +111,7 @@ struct zforce_ts {
 	char			phys[32];
 
 	bool			stopped;
+	bool			suspending;
 	bool			suspended;
 	bool			boot_complete;
 
@@ -339,8 +340,6 @@ static void zforce_check_work(struct work_struct *work)
 	struct zforce_ts *ts = container_of(work, struct zforce_ts, check.work);
 	struct i2c_client *client = ts->client;
 	int ret;
-
-	pm_wakeup_event(&client->dev, 500);
 
 	dev_dbg(&client->dev, "periodic hang check\n");
 	
@@ -636,7 +635,8 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	u8 *payload;
 	int i;
 
-	pm_stay_awake(&client->dev);
+	if (!ts->suspending)
+		pm_stay_awake(&client->dev);
 
 	/* As we're triggering on the low level, and the data is still sitting
 	 * in the controller, the interrupt will just retrigger later,
@@ -717,7 +717,8 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	}
 
 out:
-	pm_relax(&client->dev);
+	if (!ts->suspending)
+		pm_relax(&client->dev);
 
 	return IRQ_HANDLED;
 }
@@ -761,6 +762,7 @@ static int zforce_suspend(struct device *dev)
 	int ret = 0;
 
 	mutex_lock(&input->mutex);
+	ts->suspending = true;
 
 	if (!gpio_get_value(pdata->gpio_int)) {
 		dev_err(&client->dev, "data request pending during suspend, this should not happen\n");
@@ -796,6 +798,7 @@ static int zforce_suspend(struct device *dev)
 	ts->suspended = true;
 
 unlock:
+	ts->suspending = false;
 	mutex_unlock(&input->mutex);
 
 	return ret;
