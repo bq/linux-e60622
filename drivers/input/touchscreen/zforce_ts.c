@@ -532,7 +532,7 @@ static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 			point[i].area_major, point[i].area_minor,
 			point[i].orientation);
 
-		/* FIXME: convert to multitouch protocal b when we switch to a
+		/* FIXME: convert to multitouch protocol b when we switch to a
 		 * newer kernel, as the zforce supports tracking the contacts
 		 * in hardware.
 		 */
@@ -657,11 +657,11 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 
 		payload =  &payload_buffer[PAYLOAD_BODY];
 
-		dev_err(&ts->client->dev, " response frame:  " );
+/*		dev_err(&ts->client->dev, " response frame:  " );
 		for (i = 0; i < (payload_buffer[PAYLOAD_LENGTH] + 2); i++ )
 			printk( " 0x%02X ", payload_buffer[i] );
 		printk( "\n" );
-
+*/
 		switch (payload[RESPONSE_ID]) {
 		case NOTIFICATION_TOUCH:
 			zforce_touch_event(ts, &payload[RESPONSE_DATA]);
@@ -679,14 +679,10 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 		case RESPONSE_LED_LEVEL:
 			process_level_response(ts, &payload[RESPONSE_DATA]);
 			zforce_complete(ts, payload[RESPONSE_ID], 0);
-/*			ts->command_result = 0;
-			complete(&ts->command_done);*/
 			break;
 		case RESPONSE_PULSESTRENG:
 			process_pulsestreng_response(ts, &payload[RESPONSE_DATA]);
 			zforce_complete(ts, payload[RESPONSE_ID], 0);
-/*			ts->command_result = 0;
-			complete(&ts->command_done);*/
 			break;
 		case RESPONSE_STATUS:
 			/* Version Payload Results
@@ -716,10 +712,6 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 			break;
 		default:
 			dev_err(&ts->client->dev, "unrecognized response id: 0x%x (err_cnt: %d)\n", payload[RESPONSE_ID], ++(ts->err_cnt) );
-/*			dev_err(&ts->client->dev, " response frame:  " );
-			for (i = 0; i < (payload_buffer[PAYLOAD_LENGTH] + 2); i++ )
-				printk( " 0x%02X ", payload_buffer[i] );
-			printk( "\n" );*/
 			break;
 		}
 	}
