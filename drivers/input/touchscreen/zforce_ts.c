@@ -274,7 +274,7 @@ static int zforce_start(struct zforce_ts *ts)
 		goto error;
 	}
 
-	ret = zforce_scan_frequency(ts, 10, 100, 100);
+	ret = zforce_scan_frequency(ts, 10, 50, 50);
 	if (ret) {
 		dev_err(&client->dev, "Unable to set scan frequency, %d\n", ret);
 		goto error;
