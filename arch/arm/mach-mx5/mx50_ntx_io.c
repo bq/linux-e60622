@@ -2138,7 +2138,10 @@ void ntx_gpio_suspend (void)
 	gpio_set_value (GPIO_LED_ON, 1);
 	gpio_set_value (GPIO_ACT_ON, 1);
 
-	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_SET);	// Powers down the bandgap reference
+/* Needs to be disabled to prevent hangs with Freescale patch
+ * ENGR00223524 MX508-Fix the incorrect reset by SRTC
+ *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_SET);	// Powers down the bandgap reference
+ */
 	gUart2_ucr1 = __raw_readl(ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
 	__raw_writel(0, ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
 	
@@ -2147,7 +2150,10 @@ void ntx_gpio_suspend (void)
 void ntx_gpio_resume (void)
 {
 	__raw_writel(gUart2_ucr1, ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
-	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
+/* Needs to be disabled to prevent hangs with Freescale patch
+ * ENGR00223524 MX508-Fix the incorrect reset by SRTC
+ *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
+ */
 	
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
 	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {
