@@ -799,7 +799,6 @@ config MFD_MAX17135
 config MFD_MXC_HDMI
 	tristate "MXC HDMI Core"
 	select MFD_CORE
-	default y
 	help
 	  This is the core driver for the i.Mx on-chip HDMI.  This MFD
 	  driver connects with the video and audio drivers for HDMI.

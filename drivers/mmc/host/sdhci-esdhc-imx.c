@@ -232,7 +232,7 @@ static u32 esdhc_readl_le(struct sdhci_host *host, int reg)
 	}
 
 	if (reg == SDHCI_INT_STATUS && cpu_is_mx6()
-		&& mx6q_revision() == IMX_CHIP_REVISION_1_0) {
+		/*&& mx6q_revision() == IMX_CHIP_REVISION_1_0*/) {
 		/*
 		 * on mx6q TO1.0, there is low possibility that
 		 * DATA END interrupt comes ealier than DMA
@@ -302,7 +302,7 @@ static void esdhc_writel_le(struct sdhci_host *host, u32 val, int reg)
 				SDHCI_INT_CARD_INSERT);
 
 		if (!(val & SDHCI_INT_CARD_INT) && cpu_is_mx6()
-			&& mx6q_revision() == IMX_CHIP_REVISION_1_0)
+			/*&& mx6q_revision() == IMX_CHIP_REVISION_1_0*/)
 			/*
 			 * write 1 to clear card interrupt status bit
 			 * (only applied to mx6q TO1.0)
@@ -825,8 +825,8 @@ static int esdhc_pltfm_init(struct sdhci_host *host, struct sdhci_pltfm_data *pd
 	 * on mx6dl TO 1.1, ADMA can work when ahb bus frequency is low,
 	 * like 24Mhz.
 	 */
-	if (mx6dl_revision() >= IMX_CHIP_REVISION_1_1)
-		host->quirks &= ~SDHCI_QUIRK_BROKEN_ADMA;
+/*	if (mx6dl_revision() >= IMX_CHIP_REVISION_1_1)
+		host->quirks &= ~SDHCI_QUIRK_BROKEN_ADMA;*/
 
 	if (cpu_is_mx6())
 		host->quirks2 |= SDHCI_QUIRK_BROKEN_AUTO_CMD23,

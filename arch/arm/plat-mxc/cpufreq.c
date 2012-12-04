@@ -53,8 +53,10 @@ static struct cpu_op *cpu_op_tbl;
 static u32 pre_suspend_rate;
 
 extern struct regulator *cpu_regulator;
-extern struct regulator *soc_regulator;
-extern struct regulator *pu_regulator;
+//extern struct regulator *soc_regulator;
+//extern struct regulator *pu_regulator;
+struct regulator *soc_regulator = NULL;
+struct regulator *pu_regulator = NULL;
 extern int dvfs_core_is_active;
 extern struct cpu_op *(*get_cpu_op)(int *op);
 extern void bus_freq_update(struct clk *clk, bool flag);
@@ -89,7 +91,7 @@ int set_cpu_freq(int freq)
 	/*Set the voltage for the GP domain. */
 	if (freq > org_cpu_rate) {
 		/* Check if the bus freq needs to be increased first */
-		bus_freq_update(cpu_clk, true);
+//		bus_freq_update(cpu_clk, true);
 
 		if (!IS_ERR(soc_regulator)) {
 			ret = regulator_set_voltage(soc_regulator, soc_volt,
@@ -153,7 +155,7 @@ int set_cpu_freq(int freq)
 			}
 		}
 		/* Check if the bus freq can be decreased.*/
-		bus_freq_update(cpu_clk, false);
+//		bus_freq_update(cpu_clk, false);
 	}
 
 	return ret;

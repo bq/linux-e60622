@@ -103,9 +103,9 @@ void mxc_cpu_lp_set(enum mxc_cpu_pwr_mode mode)
 		if (tzic_enable_wake(1) != 0)
 			return;
 		break;
-	case STOP_POWER_ON:
+/*	case STOP_POWER_ON:
 		ccm_clpcr |= 0x2 << MXC_CCM_CLPCR_LPM_OFFSET;
-		break;
+		break;*/
 	default:
 		printk(KERN_WARNING "UNKNOWN cpu power mode: %d\n", mode);
 		return;
@@ -269,13 +269,13 @@ static int __mxs_reset_block(void __iomem *hwreg, int just_enable)
 	return 0;
 }
 
-int mxs_reset_block(void __iomem *hwreg, int just_enable)
+int mxs_reset_block(void __iomem *hwreg)
 {
 	int try = 10;
 	int r;
 
 	while (try--) {
-		r = __mxs_reset_block(hwreg, just_enable);
+		r = __mxs_reset_block(hwreg, false);
 		if (!r)
 			break;
 		pr_debug("%s: try %d failed\n", __func__, 10 - try);
