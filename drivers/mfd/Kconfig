@@ -786,6 +786,13 @@ config MFD_TPS65910
 	  if you say yes here you get support for the TPS65910 series of
 	  Power Management chips.
 
+config MFD_NTXEC
+	bool "Netronix Power Management chip"
+	depends on I2C=y
+	select MFD_CORE
+	help
+	  if you say yes here you get support for Netronix Power Management chips.
+
 config TPS65911_COMPARATOR
 	tristate
 
