@@ -29,11 +29,12 @@
 #include <linux/mfd/max8998-private.h>
 
 
-#define NTXEC_VERSION 0
+#define NTXEC_REG_VERSION 0
 
-struct ntxec_dev {
+struct ntxec_mfd {
 	struct device *dev;
 	struct i2c_client *client;
+	int version;
 };
 
 static struct mfd_cell max8998_devs[] = {
@@ -46,10 +47,24 @@ static struct mfd_cell max8998_devs[] = {
 	},
 };
 
+int ntxec_read_reg(struct ntxec_mfd *ntxec, unsigned int reg)
+{
+	struct i2c_client *client = ntxec->client;
+	int ret;
+
+	ret = i2c_smbus_read_word_data(client, reg);
+	if (ret < 0) {
+		dev_err(&client->dev, "couldn't read register\n");
+		return ret;
+	}
+
+	return ((ret & 0xff) << 8) | ((ret >> 8) & 0xff);
+}
+
 /*
 int ntxec_read_reg(struct i2c_client *i2c, u8 reg, u16 *dest)
 {
-	struct ntxec_dev *ntxec = i2c_get_clientdata(i2c);
+	struct ntxec_mfd *ntxec = i2c_get_clientdata(i2c);
 	int ret;
 
 //	mutex_lock(&max8998->iolock);
@@ -125,14 +140,47 @@ int max8998_update_reg(struct i2c_client *i2c, u8 reg, u8 val, u8 mask)
 }
 EXPORT_SYMBOL(max8998_update_reg);
 */
+
+static int ntxec_suspend(struct device *dev)
+{
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+/*	struct max8998_dev *max8998 = i2c_get_clientdata(i2c);
+
+	if (max8998->wakeup)
+		irq_set_irq_wake(max8998->irq, 1);*/
+	return 0;
+}
+
+static int ntxec_resume(struct device *dev)
+{
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+	struct max8998_dev *max8998 = i2c_get_clientdata(i2c);
+
+//	if (max8998->wakeup)
+//		irq_set_irq_wake(max8998->irq, 0);
+	/*
+	 * In LP3974, if IRQ registers are not "read & clear"
+	 * when it's set during sleep, the interrupt becomes
+	 * disabled.
+	 */
+//	return max8998_irq_resume(i2c_get_clientdata(i2c));
+	return 0;
+}
+
+static const struct dev_pm_ops ntxec_pm = {
+	.suspend = ntxec_suspend,
+	.resume = ntxec_resume,
+};
+
 static int ntxec_i2c_probe(struct i2c_client *client,
 			    const struct i2c_device_id *id)
 {
 //	struct max8998_platform_data *pdata = i2c->dev.platform_data;
-	struct ntxec_dev *ntxec;
+	struct ntxec_mfd *ntxec;
 	int ret = 0;
+	u8 buf[2];
 
-	ntxec = kzalloc(sizeof(struct ntxec_dev), GFP_KERNEL);
+	ntxec = kzalloc(sizeof(struct ntxec_mfd), GFP_KERNEL);
 	if (ntxec == NULL)
 		return -ENOMEM;
 
@@ -140,8 +188,13 @@ static int ntxec_i2c_probe(struct i2c_client *client,
 	ntxec->dev = &client->dev;
 	ntxec->client = client;
 
-	ret = i2c_smbus_read_word_data(client, NTXEC_VERSION);
-	printk("ntxec-version: %xßn", ret);
+//firmware sollte 0xb83a sein
+
+	ret = ntxec_read_reg(ntxec, NTXEC_REG_VERSION);
+	if (ret < 0)
+		goto err;
+	ntxec->version = ret;
+	printk("ntxec-version: %x\n", ntxec->version);
 ret = 0;
 /*	if (pdata) {
 		max8998->ono = pdata->ono;
@@ -187,7 +240,7 @@ err:
 
 static int ntxec_i2c_remove(struct i2c_client *i2c)
 {
-	struct ntxec_dev *ntxec = i2c_get_clientdata(i2c);
+	struct ntxec_mfd *ntxec = i2c_get_clientdata(i2c);
 
 	mfd_remove_devices(ntxec->dev);
 //	ntxec_irq_exit(ntxec);
@@ -201,37 +254,6 @@ static const struct i2c_device_id ntxec_i2c_id[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, max8998_i2c_id);
-
-static int max8998_suspend(struct device *dev)
-{
-	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
-/*	struct max8998_dev *max8998 = i2c_get_clientdata(i2c);
-
-	if (max8998->wakeup)
-		irq_set_irq_wake(max8998->irq, 1);*/
-	return 0;
-}
-
-static int max8998_resume(struct device *dev)
-{
-	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
-	struct max8998_dev *max8998 = i2c_get_clientdata(i2c);
-
-//	if (max8998->wakeup)
-//		irq_set_irq_wake(max8998->irq, 0);
-	/*
-	 * In LP3974, if IRQ registers are not "read & clear"
-	 * when it's set during sleep, the interrupt becomes
-	 * disabled.
-	 */
-//	return max8998_irq_resume(i2c_get_clientdata(i2c));
-	return 0;
-}
-
-static const struct dev_pm_ops ntxec_pm = {
-//	.suspend = ntxec_suspend,
-//	.resume = ntxec_resume,
-};
 
 static struct i2c_driver ntxec_i2c_driver = {
 	.driver = {
