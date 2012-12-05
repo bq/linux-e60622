@@ -720,17 +720,15 @@ static struct mxc_regulator_platform_data rdp_regulator_data = {
 };
 
 static const struct esdhc_platform_data mx50_rdp_sd1_data __initconst = {
-	.cd_gpio = MX50_RDP_SD1_CD,
-	.wp_gpio = MX50_RDP_SD1_WP,
+	.always_present = 1,
+//	.cd_gpio = MX50_RDP_SD1_CD,
 };
 
 static const struct esdhc_platform_data mx50_rdp_sd2_data __initconst = {
 	.cd_gpio = MX50_RDP_SD2_CD,
-	.wp_gpio = MX50_RDP_SD2_WP,
 };
 
 static const struct esdhc_platform_data mx50_rdp_sd3_data __initconst = {
-	.wp_gpio = MX50_RDP_SD3_WP,
 	.always_present = 1,
 };
 
