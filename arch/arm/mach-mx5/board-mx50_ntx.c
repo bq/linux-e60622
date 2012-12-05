@@ -154,6 +154,8 @@ static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
 	MX50_PAD_I2C1_SDA__I2C1_SDA,
 	MX50_PAD_I2C2_SCL__I2C2_SCL,
 	MX50_PAD_I2C2_SDA__I2C2_SDA,
+	MX50_PAD_I2C3_SCL__I2C3_SCL,
+	MX50_PAD_I2C3_SDA__I2C3_SDA,
 
 	/* EPDC pins */
 	MX50_PAD_EPDC_PWRSTAT__GPIO_3_28,
@@ -183,7 +185,6 @@ static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
 	MX50_PAD_OWIRE__USBH1_OC,
 	/* using gpio to control otg pwr */
 	MX50_PAD_PWM2__GPIO_6_25,
-	MX50_PAD_I2C3_SCL__USBOTG_OC,
 
 	MX50_PAD_SSI_RXC__FEC_MDIO,
 	MX50_PAD_SSI_RXFS__FEC_MDC,
@@ -195,7 +196,6 @@ static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
 	MX50_PAD_DISP_D5__FEC_TX_EN,
 	MX50_PAD_DISP_D6__FEC_TXD1,
 	MX50_PAD_DISP_D7__FEC_TXD0,
-	MX50_PAD_I2C3_SDA__GPIO_6_23,
 	MX50_PAD_ECSPI1_SCLK__GPIO_4_12,
 
 	MX50_PAD_CSPI_SS0__CSPI_SS0,
@@ -358,6 +358,13 @@ static struct i2c_board_info mxc_i2c0_board_info[] __initdata = {
 	 .type = "eeprom",
 	 .addr = 0x50,
 	 },*/
+};
+
+static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("ntxec", 0x43),
+//		.irq = gpio_to_irq(),
+	},
 };
 
 static int epdc_get_pins(void)
@@ -786,6 +793,8 @@ static void __init mx50_rdp_board_init(void)
 	imx50_add_imx_i2c(2, &i2c_data);
 	i2c_register_board_info(0, mxc_i2c0_board_info,
 				ARRAY_SIZE(mxc_i2c0_board_info));
+	i2c_register_board_info(2, mxc_i2c2_board_info,
+				ARRAY_SIZE(mxc_i2c2_board_info));
 	imx50_add_imx_epdc(&epdc_data);
 //	imx50_add_mxc_gpu(&gpu_data);
 	imx50_add_sdhci_esdhc_imx(0, &mx50_rdp_sd1_data);
