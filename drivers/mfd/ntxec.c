@@ -31,23 +31,25 @@
 
 #define NTXEC_REG_VERSION 0
 
-struct ntxec_mfd {
+struct ntxec_chip {
 	struct device *dev;
 	struct i2c_client *client;
 	int version;
 };
 
-static struct mfd_cell max8998_devs[] = {
+static struct mfd_cell ntxec_devs[] = {
 	{
 		.name = "ntxec-pmic",
 	}, {
 		.name = "ntxec-watchdog",
 	}, {
 		.name = "ntxec-rtc",
+	}, {
+		.name = "ntxec-backlight",
 	},
 };
 
-int ntxec_read_reg(struct ntxec_mfd *ntxec, unsigned int reg)
+int ntxec_read_reg(struct ntxec_chip *ntxec, unsigned int reg)
 {
 	struct i2c_client *client = ntxec->client;
 	int ret;
@@ -64,7 +66,7 @@ int ntxec_read_reg(struct ntxec_mfd *ntxec, unsigned int reg)
 /*
 int ntxec_read_reg(struct i2c_client *i2c, u8 reg, u16 *dest)
 {
-	struct ntxec_mfd *ntxec = i2c_get_clientdata(i2c);
+	struct ntxec_chip *ntxec = i2c_get_clientdata(i2c);
 	int ret;
 
 //	mutex_lock(&max8998->iolock);
@@ -176,11 +178,11 @@ static int ntxec_i2c_probe(struct i2c_client *client,
 			    const struct i2c_device_id *id)
 {
 //	struct max8998_platform_data *pdata = i2c->dev.platform_data;
-	struct ntxec_mfd *ntxec;
+	struct ntxec_chip *ntxec;
 	int ret = 0;
 	u8 buf[2];
 
-	ntxec = kzalloc(sizeof(struct ntxec_mfd), GFP_KERNEL);
+	ntxec = kzalloc(sizeof(struct ntxec_chip), GFP_KERNEL);
 	if (ntxec == NULL)
 		return -ENOMEM;
 
@@ -240,7 +242,7 @@ err:
 
 static int ntxec_i2c_remove(struct i2c_client *i2c)
 {
-	struct ntxec_mfd *ntxec = i2c_get_clientdata(i2c);
+	struct ntxec_chip *ntxec = i2c_get_clientdata(i2c);
 
 	mfd_remove_devices(ntxec->dev);
 //	ntxec_irq_exit(ntxec);
