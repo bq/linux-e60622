@@ -37,12 +37,12 @@ int tps65185_wait_panel_poweroff(void);
 #define TPS65185_MODE_ACTIVE		0x00000001
 #define TPS65185_MODE_SLEEP			0x00000002
 #define TPS65185_MODE_STANDBY		0x00000004
-int tps65185_chg_mode(unsigned long *IO_pdwMode);
+int tps65185_chg_mode(unsigned long *IO_pdwMode,int iIsWaitPwrOff);
 
 int tps65185_vcom_set(int I_iVCOM_mv,int iIsWriteToFlash);
 int tps65185_vcom_get(int *O_piVCOM_mv);
 int tps65185_vcom_kickback_measurement(int *O_piVCOM_mv);
-void tps65185_suspend(void);
+int tps65185_suspend(void);
 void tps65185_resume(void);
 
 #endif //]LK_LM75_H

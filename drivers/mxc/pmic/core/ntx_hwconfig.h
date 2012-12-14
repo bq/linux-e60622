@@ -1,0 +1,1 @@
+/home/devel/hstuebner/00_git-repos/linux-2.6-imx/arch/arm/mach-mx5/ntx_hwconfig.h
