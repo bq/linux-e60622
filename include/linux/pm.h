@@ -448,22 +448,24 @@ enum rpm_request {
 	RPM_REQ_RESUME,
 };
 
+struct wakeup_source;
+
 struct dev_pm_info {
 	pm_message_t		power_state;
 	unsigned int		can_wakeup:1;
-	unsigned int		should_wakeup:1;
 	unsigned		async_suspend:1;
 	enum dpm_state		status;		/* Owned by the PM core */
+	spinlock_t		lock;
 #ifdef CONFIG_PM_SLEEP
 	struct list_head	entry;
 	struct completion	completion;
+	struct wakeup_source	*wakeup;
 #endif
 #ifdef CONFIG_PM_RUNTIME
 	struct timer_list	suspend_timer;
 	unsigned long		timer_expires;
 	struct work_struct	work;
 	wait_queue_head_t	wait_queue;
-	spinlock_t		lock;
 	atomic_t		usage_count;
 	atomic_t		child_count;
 	unsigned int		disable_depth:3;
