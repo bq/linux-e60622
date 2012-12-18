@@ -51,7 +51,6 @@
 #define COMMAND_SETCONFIG	0x03
 #define COMMAND_DATAREQUEST	0x04
 #define COMMAND_SCANFREQ	0x08
-#define COMMAND_PULSESTRENG	0x0F
 #define COMMAND_LEVEL		0x1C
 #define COMMAND_FORCECAL	0X1a
 #define COMMAND_STATUS		0X1e
@@ -64,7 +63,6 @@
 #define RESPONSE_RESOLUTION	0x02
 #define RESPONSE_SETCONFIG	0x03
 #define RESPONSE_SCANFREQ	0x08
-#define RESPONSE_PULSESTRENG	0x0f
 #define RESPONSE_LED_LEVEL	0x1c
 #define RESPONSE_ACTIVE_LEDS	0x1d
 #define RESPONSE_STATUS		0X1e
@@ -354,39 +352,6 @@ static void zforce_check_work(struct work_struct *work)
 
 //////////////////////////////// todo ////////////////////////////////
 
-// Fixed Pulse and Strength Request
-// ############################
-static int send_pulsestreng(struct zforce_ts *ts, u8 strength, u8 time)
-{
-	struct i2c_msg msg[2];
-	u8 request[16];
-	int ret;
-
-	dev_info(&ts->client->dev, "%s(%d,%d)\n", __FUNCTION__, strength, time);
-
-	request[0] = COMMAND_PULSESTRENG;
-	request[1] = (strength&0x0F) | ( time<<4 ) ;
-
-	msg[0].addr = ts->client->addr;
-	msg[0].flags = 0;
-	msg[0].len = 2;
-	msg[0].buf = request;
-
-	ret = i2c_transfer(ts->client->adapter, msg, 1);
-	if (ret < 0)
-	{
-		dev_err(&ts->client->dev, "i2c send pulsestreng error: %d\n", ret);
-		return ret;
-	}
-
-	if (wait_for_completion_timeout(&ts->command_done, WAIT_TIMEOUT) == 0)
-		return -1;
-
-	// I2C opperations was successful
-	// Return the results from the controler. (0 == success)
-	return ts->command_result;
-}
-
 // Force Calibration Request
 // [1:cmd]
 // #######
@@ -447,40 +412,6 @@ static int process_level_response(struct zforce_ts *ts, u8* payload)
 		ledlevel[i] = payload[i] ;
 	}
 	return ZF_LEDDATA_LEN;
-}
-
-// Fix Pulse Strength  Payload Results
-// [1:x] [1:y] [3*x:xdata] [3*y:ydata]
-// #####################################
-#define ZF_FIXSP_BUFF_SIZE (ZF_NUMX*2+ZF_NUMY*2+2)
-static u8 fixps_data[ZF_FIXSP_BUFF_SIZE];
-static int process_pulsestreng_response(struct zforce_ts *ts, u8* payload)
-{
-	int i = 0;
-	int numx = -1, numy = -1;
-	int datasize;
-
-	dev_dbg(&ts->client->dev, "%s()\n", __FUNCTION__);
-	numx = payload[0];
-	numy = payload[1];
-	datasize = (numx+numy+2);
-	if( datasize != ZF_FIXSP_BUFF_SIZE )
-	{
-		dev_err(&ts->client->dev, "fixps buffer mismatch.(E%d, G%d)(TC%d).\n", ZF_FIXSP_BUFF_SIZE, datasize, ++(ts->err_cnt) );
-	}
-	if( datasize > ZF_FIXSP_BUFF_SIZE )
-	{
-		dev_err(&ts->client->dev, "fixps buff overflow:(E%d, G%d)(TC%d).\n", ZF_FIXSP_BUFF_SIZE, datasize, ++(ts->err_cnt) );
-		// Clamp datasize to prevent buffer overflow
-		datasize = ZF_FIXSP_BUFF_SIZE;
-		
-	}
-	// Save fix pulse strength data
-	for(i=0; i<datasize; i++)
-	{
-		fixps_data[i]=payload[i];
-	}
-	return ZF_FIXSP_BUFF_SIZE;
 }
 
 static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
@@ -634,7 +565,6 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	int ret;
 	u8 payload_buffer[512];
 	u8 *payload;
-	int i;
 
 	if (!ts->suspending)
 		pm_stay_awake(&client->dev);
@@ -674,10 +604,6 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 			break;
 		case RESPONSE_LED_LEVEL:
 			process_level_response(ts, &payload[RESPONSE_DATA]);
-			zforce_complete(ts, payload[RESPONSE_ID], 0);
-			break;
-		case RESPONSE_PULSESTRENG:
-			process_pulsestreng_response(ts, &payload[RESPONSE_DATA]);
 			zforce_complete(ts, payload[RESPONSE_ID], 0);
 			break;
 		case RESPONSE_STATUS:
