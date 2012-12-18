@@ -275,7 +275,7 @@ static int zforce_start(struct zforce_ts *ts)
 		goto error;
 	}
 
-	ret = zforce_scan_frequency(ts, 10, 50, 50);
+	ret = zforce_scan_frequency(ts, 50, 50, 50);
 	if (ret) {
 		dev_err(&client->dev, "Unable to set scan frequency, %d\n", ret);
 		goto error;
@@ -618,7 +618,7 @@ static void zforce_complete(struct zforce_ts *ts, int cmd, int result)
 	struct i2c_client *client = ts->client;
 
 	if (ts->command_waiting == cmd) {
-		dev_dbg(&client->dev, "completing command %d\n", cmd);
+		dev_dbg(&client->dev, "completing command 0x%x\n", cmd);
 		ts->command_result = result;
 		complete(&ts->command_done);
 	} else {
@@ -749,6 +749,9 @@ static void zforce_input_close(struct input_dev *dev)
 	return;
 }
 
+/* FIXME: not for upstream */
+extern int gSleep_Mode_Suspend;
+
 static int zforce_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -768,7 +771,8 @@ static int zforce_suspend(struct device *dev)
 	/* when configured as wakeup source, device should always wake system
 	 * therefore start device if necessary
 	 */
-	if (device_may_wakeup(&client->dev)) {
+	/* FIXME: remove gSleep_Mode_Suspend condition */
+	if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend) {
 		dev_dbg(&client->dev, "suspend while being a wakeup source\n");
 
 		/* need to start device if not open, to be wakeup source */
@@ -811,7 +815,8 @@ static int zforce_resume(struct device *dev)
 
 	ts->suspended = false;
 
-	if (device_may_wakeup(&client->dev)) {
+	/* FIXME: remove gSleep_Mode_Suspend condition */
+	if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend) {
 		dev_dbg(&client->dev, "resume from being a wakeup source\n");
 
 		disable_irq_wake(client->irq);
