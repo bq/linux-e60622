@@ -52,7 +52,6 @@
 #define COMMAND_DATAREQUEST	0x04
 #define COMMAND_SCANFREQ	0x08
 #define COMMAND_LEVEL		0x1C
-#define COMMAND_FORCECAL	0X1a
 #define COMMAND_STATUS		0X1e
 
 /* Responses the controller sends as a result of
@@ -351,25 +350,6 @@ static void zforce_check_work(struct work_struct *work)
 }
 
 //////////////////////////////// todo ////////////////////////////////
-
-// Force Calibration Request
-// [1:cmd]
-// #######
-static int send_forcecal_request(struct zforce_ts *ts)
-{
-	int ret;
-
-	dev_dbg(&ts->client->dev, "%s()\n", __FUNCTION__);
-
-	ret = i2c_smbus_write_byte(ts->client, COMMAND_FORCECAL);
-	if (ret < 0)
-	{
-		dev_err(&ts->client->dev, "i2c send version request error: %d\n", ret);
-		return ret;
-	}
-
-	return ts->command_result;
-}
 
 // LED LEVEL Request
 // [1:cmd]
