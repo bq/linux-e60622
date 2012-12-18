@@ -101,7 +101,10 @@ struct zforce_point {
 };
 
 /*
- * @command_active	true when already waiting for a command to return
+ * @client		the i2c_client
+ * @input		the input device
+ * @command_done	completion to wait for the command result
+ * @command_mutex	serialize commands send to the ic
  * @command_waiting	the id of the command that that is currently waiting
  *			for a result 
  */
@@ -122,10 +125,9 @@ struct zforce_ts {
 	u16			version_rev;
 
 	struct completion	command_done;
-	bool			command_active;
+	struct mutex		command_mutex;
 	int			command_waiting;
 	int			command_result;
-	int			irq;
 
 	int			err_cnt;
 
@@ -159,12 +161,11 @@ static int zforce_send_wait(struct zforce_ts *ts, const char *buf, const int len
 	struct i2c_client *client = ts->client;
 	int ret;
 
-	if (ts->command_active) {
+	ret = mutex_trylock(&ts->command_mutex);
+	if (!ret) {
 		dev_err(&client->dev, "already waiting for a command\n");
 		return -EBUSY;
 	}
-
-	ts->command_active = 1;
 
 //FIXME: sanity checks
 
@@ -188,7 +189,7 @@ static int zforce_send_wait(struct zforce_ts *ts, const char *buf, const int len
 	ret = ts->command_result;
 
 unlock:
-	ts->command_active = 0;
+	mutex_unlock(&ts->command_mutex);
 	return ret;
 }
 
@@ -896,6 +897,7 @@ static int zforce_probe(struct i2c_client *client,
 	if (pdata->init_hw)
 		pdata->init_hw(client);
 
+	mutex_init(&ts->command_mutex);
 	ts->client = client;
 
 	snprintf(ts->phys, sizeof(ts->phys),
