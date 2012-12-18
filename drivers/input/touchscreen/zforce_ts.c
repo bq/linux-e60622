@@ -758,7 +758,7 @@ static int zforce_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 	struct zforce_ts *ts = i2c_get_clientdata(client);
 	struct input_dev *input = ts->input;
-	const struct zforce_ts_platdata *pdata = client->dev.platform_data; /* FIXME: temporary for gpio debug output*/
+	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
 	int ret = 0;
 
 	mutex_lock(&input->mutex);
@@ -889,6 +889,13 @@ static int zforce_probe(struct i2c_client *client,
 			pdata->gpio_int, ret);
 		goto err_gpio_int;
 	}
+
+	ret = gpio_direction_input(pdata->gpio_int);
+	if (ret) {
+		dev_err("setting direction of gpio %d failed, %d\n",
+			pdata->gpio_int, ret);
+		goto err
+	}
 */
 
 	if (pdata->init_hw)
@@ -1004,6 +1011,7 @@ err_input_alloc:
 	if (pdata->exit_hw)
 		pdata->exit_hw(client);
 /* FIXME; enable once we got rid of the ntx stuff
+err_gpio_direction:
 	gpio_free(pdata->gpio_int);
 */
 err_gpio_int:
