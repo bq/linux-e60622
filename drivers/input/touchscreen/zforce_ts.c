@@ -51,19 +51,16 @@
 #define COMMAND_SETCONFIG	0x03
 #define COMMAND_DATAREQUEST	0x04
 #define COMMAND_SCANFREQ	0x08
-#define COMMAND_LEVEL		0x1C
 #define COMMAND_STATUS		0X1e
 
 /* Responses the controller sends as a result of
  * command requests
  */
 #define RESPONSE_DEACTIVATE	0x00
-#define RESPONSE_ACTIVATE	0x01
+#define RESPONSE_INITIALIZE	0x01
 #define RESPONSE_RESOLUTION	0x02
 #define RESPONSE_SETCONFIG	0x03
 #define RESPONSE_SCANFREQ	0x08
-#define RESPONSE_LED_LEVEL	0x1c
-#define RESPONSE_ACTIVE_LEDS	0x1d
 #define RESPONSE_STATUS		0X1e
 
 /* Notifications are send by the touch controller without
@@ -349,51 +346,6 @@ static void zforce_check_work(struct work_struct *work)
 	schedule_delayed_work(&ts->check, HZ * 10);
 }
 
-//////////////////////////////// todo ////////////////////////////////
-
-// LED LEVEL Request
-// [1:cmd]
-// #######
-static int send_level_request(struct zforce_ts *ts)
-{
-	int ret;
-
-	dev_dbg(&ts->client->dev, "%s()\n", __FUNCTION__);
-
-	ret = i2c_smbus_write_byte(ts->client, COMMAND_LEVEL);
-	if (ret < 0)
-	{
-		dev_err(&ts->client->dev, "i2c send level request error: %d\n", ret);
-		return ret;
-	}
-
-	if (wait_for_completion_timeout(&ts->command_done, WAIT_TIMEOUT) == 0)
-		return -1;
-
-	return ts->command_result;
-}
-#define ZF_NUMX 11
-#define ZF_NUMY 15
-#define ZF_LEDDATA_LEN (2+(ZF_NUMX + ZF_NUMY)*3)
-static u8 ledlevel[ZF_LEDDATA_LEN];
-
-// LED Level Payload Results
-// [1:x] [1:y] [3*x:xdata] [3*y:ydata]
-// #####################################
-static int process_level_response(struct zforce_ts *ts, u8* payload)
-{
-	int i = 0;
-
-	dev_dbg(&ts->client->dev, "%s()\n", __FUNCTION__);
-
-	// save data
-	for (i = 0; i < ZF_LEDDATA_LEN; i++ )
-	{
-		ledlevel[i] = payload[i] ;
-	}
-	return ZF_LEDDATA_LEN;
-}
-
 static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
 {
 	struct i2c_client *client = ts->client;
@@ -575,16 +527,12 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 		case NOTIFICATION_BOOTCOMPLETE:
 			ts->boot_complete = payload[RESPONSE_DATA];
 			break;
-		case RESPONSE_ACTIVATE:
+		case RESPONSE_INITIALIZE:
 		case RESPONSE_DEACTIVATE:
 		case RESPONSE_SETCONFIG:
 		case RESPONSE_RESOLUTION:
 		case RESPONSE_SCANFREQ:
 			zforce_complete(ts, payload[RESPONSE_ID], payload[RESPONSE_DATA]);
-			break;
-		case RESPONSE_LED_LEVEL:
-			process_level_response(ts, &payload[RESPONSE_DATA]);
-			zforce_complete(ts, payload[RESPONSE_ID], 0);
 			break;
 		case RESPONSE_STATUS:
 			/* Version Payload Results
