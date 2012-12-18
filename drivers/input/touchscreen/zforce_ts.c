@@ -275,7 +275,7 @@ static int zforce_start(struct zforce_ts *ts)
 		goto error;
 	}
 
-	ret = zforce_scan_frequency(ts, 50, 50, 50);
+	ret = zforce_scan_frequency(ts, 10, 50, 50);
 	if (ret) {
 		dev_err(&client->dev, "Unable to set scan frequency, %d\n", ret);
 		goto error;
@@ -644,8 +644,8 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	 * hopefully after the device is resumed.
 	 */
 	if (ts->suspended) {
-		dev_warn(&client->dev, "device is suspended, not handling interrupt at this point\n");
-		msleep(50);
+		dev_dbg(&client->dev, "device is suspended, not handling interrupt at this point\n");
+		msleep(20);
 		goto out;
 	}
 
