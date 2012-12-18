@@ -657,11 +657,6 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 
 		payload =  &payload_buffer[PAYLOAD_BODY];
 
-/*		dev_err(&ts->client->dev, " response frame:  " );
-		for (i = 0; i < (payload_buffer[PAYLOAD_LENGTH] + 2); i++ )
-			printk( " 0x%02X ", payload_buffer[i] );
-		printk( "\n" );
-*/
 		switch (payload[RESPONSE_ID]) {
 		case NOTIFICATION_TOUCH:
 			zforce_touch_event(ts, &payload[RESPONSE_DATA]);
