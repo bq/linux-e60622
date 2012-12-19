@@ -123,8 +123,6 @@ struct zforce_ts {
 	int			command_waiting;
 	int			command_result;
 
-	int			err_cnt;
-
 	/* FIXME: not for upstream */
 	struct delayed_work	check;
 };
@@ -558,10 +556,10 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 			zforce_complete(ts, payload[RESPONSE_ID], 0);
 			break;
 		case NOTIFICATION_INVALID_COMMAND:
-			dev_err(&ts->client->dev, "invalid command: 0x%x (err_cnt: %d)", payload[RESPONSE_DATA], ++(ts->err_cnt) );
+			dev_err(&ts->client->dev, "invalid command: 0x%x\n", payload[RESPONSE_DATA]);
 			break;
 		default:
-			dev_err(&ts->client->dev, "unrecognized response id: 0x%x (err_cnt: %d)\n", payload[RESPONSE_ID], ++(ts->err_cnt) );
+			dev_err(&ts->client->dev, "unrecognized response id: 0x%x\n", payload[RESPONSE_ID]);
 			break;
 		}
 	}
@@ -783,7 +781,6 @@ static int zforce_probe(struct i2c_client *client,
 
 	input_set_drvdata(ts->input, ts);
 	ts->stopped = true;
-	ts->err_cnt = 0;
 
 	init_completion(&ts->command_done);
 
