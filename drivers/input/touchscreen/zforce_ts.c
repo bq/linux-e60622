@@ -697,30 +697,7 @@ unlock:
 	return ret;
 }
 
-/* FIXME: not for upstream */
-static int zForce_suspend_noirq(struct device *dev)
-{
-	struct i2c_client *client = to_i2c_client(dev);
-	struct zforce_ts *ts = i2c_get_clientdata(client);
-	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
-
-/*
-	if (true || device_may_wakeup(&client->dev)) {
-		if (ts->action_pending ||  !gpio_get_value(pdata->gpio_int)) {
-			dev_warn(dev, "touch during late suspend detected\n");
-			return -EBUSY;
-		}
-	}
-*/
-	return 0;
-}
-
 static SIMPLE_DEV_PM_OPS(zforce_pm_ops, zforce_suspend, zforce_resume);
-/*static struct dev_pm_ops zforce_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(zforce_suspend, zforce_resume)
-	.suspend_noirq = zForce_suspend_noirq,
-	.freeze_noirq = zForce_suspend_noirq,
-};*/
 
 static int zforce_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
