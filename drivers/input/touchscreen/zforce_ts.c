@@ -846,8 +846,8 @@ err_input_alloc:
 /* FIXME; enable once we got rid of the ntx stuff
 err_gpio_direction:
 	gpio_free(pdata->gpio_int);
-*/
 err_gpio_int:
+*/
 	kfree(ts);
 
 	return ret;
