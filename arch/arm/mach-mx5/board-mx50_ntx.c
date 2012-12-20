@@ -46,6 +46,16 @@
 #include "usb.h"
 #include "crm_regs.h"
 
+
+#define GPIO_TPS65185_VIN		(0*32 + 27) /* GPIO_1_27 */
+#define GPIO_TPS65185_PWRGOOD		(2*32 + 28) /* GPIO_3_28 */
+#define GPIO_TPS65185_WAKEUP		(2*32 + 29) /* GPIO_3_29 */
+#define GPIO_TPS65185_PWRUP		(2*32 + 30) /* GPIO_3_30 */
+#define GPIO_TPS65185_INT		(3*32 + 15) /* GPIO_4_15 */
+#define GPIO_TPS65185_VCOMCTRL		(3*32 + 21) /* GPIO_4_21 */
+
+
+/* RDP stuff */
 #define FEC_EN		IMX_GPIO_NR(6, 23)
 #define FEC_RESET_B	IMX_GPIO_NR(4, 12)
 #define MX50_RDP_CSPI_CS0	IMX_GPIO_NR(4, 13)
@@ -99,11 +109,21 @@ extern char *lp_reg_id;
 extern char *gp_reg_id;
 
 static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
+
+	/* TPS6518x */
+	MX50_PAD_EIM_CRE__GPIO_1_27, /* FIXME: is this the gpio of another regulator? */
+	MX50_PAD_EPDC_PWRSTAT__GPIO_3_28_INT,
+	MX50_PAD_EPDC_PWRCTRL0__GPIO_3_29,
+	MX50_PAD_EPDC_PWRCTRL1__GPIO_3_30,
+	MX50_PAD_EPDC_VCOM0__GPIO_4_21,
+	MX50_PAD_ECSPI1_SS0__GPIO_4_15_PUINT,
+
+/* FIXME: check below muxes */
+
 	/* SD1 */
 	MX50_PAD_ECSPI2_SS0__GPIO_4_19,
 	MX50_PAD_EIM_CRE__GPIO_1_27,
 	MX50_PAD_SD1_CMD__SD1_CMD,
-
 	MX50_PAD_SD1_CLK__SD1_CLK,
 	MX50_PAD_SD1_D0__SD1_D0,
 	MX50_PAD_SD1_D1__SD1_D1,
@@ -137,7 +157,7 @@ static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
 	MX50_PAD_SD3_D7__SD3_D7,
 
 	/* PWR_INT */
-	MX50_PAD_ECSPI2_MISO__GPIO_4_18,
+//	MX50_PAD_ECSPI2_MISO__GPIO_4_18,
 
 	/* UART pad setting */
 	MX50_PAD_UART1_TXD__GPIO_6_6,
@@ -150,6 +170,7 @@ static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
 	MX50_PAD_UART2_CTS__GPIO_6_12,
 	MX50_PAD_UART2_RTS__GPIO_6_13,
 
+	/* I2C settings */
 	MX50_PAD_I2C1_SCL__I2C1_SCL,
 	MX50_PAD_I2C1_SDA__I2C1_SDA,
 	MX50_PAD_I2C2_SCL__I2C2_SCL,
@@ -423,6 +444,14 @@ static struct i2c_board_info mxc_i2c0_board_info[] __initdata = {
 	 .type = "eeprom",
 	 .addr = 0x50,
 	 },*/
+};
+
+static struct i2c_board_info mxc_i2c1_board_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("tps6518x", 0x68),
+//		.platform_data = tps65185_pdata,
+		.irq = gpio_to_irq(GPIO_TPS65185_INT),
+	},
 };
 
 static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
@@ -856,6 +885,8 @@ static void __init mx50_rdp_board_init(void)
 	imx50_add_imx_i2c(2, &i2c_data);
 	i2c_register_board_info(0, mxc_i2c0_board_info,
 				ARRAY_SIZE(mxc_i2c0_board_info));
+	i2c_register_board_info(1, mxc_i2c1_board_info,
+				ARRAY_SIZE(mxc_i2c1_board_info));
 	i2c_register_board_info(2, mxc_i2c2_board_info,
 				ARRAY_SIZE(mxc_i2c2_board_info));
 	imx50_add_imx_epdc(&epdc_data);
