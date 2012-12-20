@@ -335,5 +335,11 @@ config REGULATOR_TPS65910
 	help
 	  This driver supports TPS65910 voltage regulator chips.
 
+config REGULATOR_TPS6518X
+	tristate "TI TPS6518x Power Regulator"
+	depends on I2C
+	help
+	  This driver supports TPS6518x epd regulator chips.
+
 endif
 
