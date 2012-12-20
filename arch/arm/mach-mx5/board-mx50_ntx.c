@@ -255,6 +255,71 @@ static const struct fec_platform_data fec_data __initconst = {
 	.phy = PHY_INTERFACE_MODE_RMII,
 };
 
+/*
+static struct regulator_init_data tps65185_init_data[] = {
+	{
+		.constraints = {
+			.name = "DISPLAY",
+			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		},
+	}, {
+		.constraints = {
+			.name = "VCOM",
+			.min_uV = 0,
+			.max_uV = 5110000,
+			.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE | REGULATOR_CHANGE_STATUS,
+		},
+	},{
+		.constraints = {
+			.name = "V3P3_CTRL",
+			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		},
+	},{
+		.constraints = {
+			.name = "PMIC_TEMP",
+		},
+	},{
+		.constraints = {
+			.name = "PWR0_CTRL",
+			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		},
+	},{
+		.constraints = {
+			.name = "PWR2_CTRL",
+			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		},
+	}, {
+		.constraints = {
+			.name = "VSYS_EPD",
+			.valid_ops_mask = REGULATOR_CHANGE_STATUS,
+		},
+	},
+};
+
+static struct tps65180_platform_data tps65180_pdata = {
+	.vneg_pwrup = 1,
+	.gvee_pwrup = 1,
+	.vpos_pwrup = 2,
+	.gvdd_pwrup = 1,
+	.gvdd_pwrdn = 1,
+	.vpos_pwrdn = 2,
+	.gvee_pwrdn = 1,
+	.vneg_pwrdn = 1,
+	.gpio_pmic_pwrgood = EPDC_PWRSTAT,
+	.gpio_pmic_vcom_ctrl = EPDC_VCOM,
+	.gpio_pmic_wakeup = EPDC_PMIC_WAKE,
+	.gpio_pmic_intr = EPDC_PMIC_INT,
+#if 0
+	.gpio_pmic_pwr2_ctrl = EPDC_PWR2_CTRL,
+#endif
+	.gpio_pmic_pwr0_ctrl = EPDC_PWR0_CTRL,
+	.gpio_pmic_v3p3_ctrl = EPDC_PWR0_CTRL,
+	.gpio_pmic_vsys = EPD_PMIC_VSYS,
+	.regulator_init = tps65180_init_data,
+};
+
+*/
+
 #define mV_to_uV(mV) (mV * 1000)
 #define uV_to_mV(uV) (uV / 1000)
 #define V_to_uV(V) (mV_to_uV(V * 1000))
