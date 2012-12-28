@@ -29,7 +29,7 @@
 #include <linux/regulator/tps6518x.h>
 #include <linux/gpio.h>
 /* 2011/05/30 FY11 : Supported to read vcom from eMMC. */
-#include <linux/mmc/rawdatatable.h>
+//#include <linux/mmc/rawdatatable.h>
 
 /*
  * PMIC build options
@@ -806,7 +806,7 @@ static int tps6518x_vcom_set_voltage(struct regulator_dev *reg,
 		break;
 	}
 
-	ulWfIndex = rawdata_index("Waveform", &ulWfAreaSize);
+/*	ulWfIndex = rawdata_index("Waveform", &ulWfAreaSize);
 	ret = rawdata_write( 	ulWfIndex, 
 				ulWfAreaSize -VCOM_INFO_ADDR_OFFSET, 
 				(char*)&ulVcomRegVal, 
@@ -815,7 +815,7 @@ static int tps6518x_vcom_set_voltage(struct regulator_dev *reg,
 	{
 		printk ( KERN_ERR "%s fail to write to eMMC.\n", __func__ );
 		return ret;
-	}
+	}*/
 
 
 	ret = tps6518x_vcom_set_voltage_to_pmic( reg, minuV, uV );
@@ -1026,7 +1026,7 @@ static int tps6518x_display_enable(struct regulator_dev *reg)
 	{
 		unsigned long ulWfIndex, ulWfAreaSize;
 		unsigned long ulVcomRegVal;
-		ulWfIndex = rawdata_index("Waveform", &ulWfAreaSize);
+/*		ulWfIndex = rawdata_index("Waveform", &ulWfAreaSize);
 		ret = rawdata_read( 	ulWfIndex, 
 					ulWfAreaSize -VCOM_INFO_ADDR_OFFSET, 
 					(char*)&ulVcomRegVal, 
@@ -1035,7 +1035,7 @@ static int tps6518x_display_enable(struct regulator_dev *reg)
 		{
 			printk( KERN_ERR "%s fail to read vcom from eMMC. %d\n", __func__, ret );
 			return ret;
-		}
+		}*/
 
 		switch (TPS6518x_REVID_VERSION(tps6518x->revId))
 		{
