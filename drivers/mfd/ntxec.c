@@ -60,8 +60,27 @@ int ntxec_read_reg(struct ntxec_chip *ntxec, unsigned int reg)
 		return ret;
 	}
 
-	return ((ret & 0xff) << 8) | ((ret >> 8) & 0xff);
+printk(KERN_ERR "soft: %d, macro: %d\n", ((ret & 0xff) << 8) | ((ret >> 8) & 0xff), be16_to_cpu(ret));
+
+	return be16_to_cpu(ret);
+//	return ((ret & 0xff) << 8) | ((ret >> 8) & 0xff);
 }
+EXPORT_SYMBOL(ntxec_read_reg);
+
+int ntxec_write_reg(struct ntxec_chip *ntxec, unsigned int reg, u16 value)
+{
+	struct i2c_client *client = ntxec->client;
+	int ret;
+
+	ret = i2c_smbus_write_word_data(client, reg, cpu_to_be16(value));
+	if (ret < 0) {
+		dev_err(&client->dev, "couldn't read register\n");
+		return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(ntxec_write_reg);
 
 /*
 int ntxec_read_reg(struct i2c_client *i2c, u8 reg, u16 *dest)
@@ -191,6 +210,8 @@ static int ntxec_i2c_probe(struct i2c_client *client,
 	ntxec->client = client;
 
 //firmware sollte 0xb83a sein
+//		  0xc851
+// der newmsp ist 0xe916
 
 	ret = ntxec_read_reg(ntxec, NTXEC_REG_VERSION);
 	if (ret < 0)
