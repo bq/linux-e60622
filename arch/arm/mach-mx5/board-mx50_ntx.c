@@ -54,8 +54,12 @@
 #define GPIO_TPS65185_INT		(3*32 + 15) /* GPIO_4_15 */
 #define GPIO_TPS65185_VCOMCTRL		(3*32 + 21) /* GPIO_4_21 */
 
+#define GPIO_NTXEC_INT			(3*32 + 11) /* GPIO_4_11 */
 
-/* RDP stuff */
+
+
+
+/* RDP stuff - to check */
 #define FEC_EN		IMX_GPIO_NR(6, 23)
 #define FEC_RESET_B	IMX_GPIO_NR(4, 12)
 #define MX50_RDP_CSPI_CS0	IMX_GPIO_NR(4, 13)
@@ -112,11 +116,14 @@ static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
 
 	/* TPS6518x */
 	MX50_PAD_EIM_CRE__GPIO_1_27, /* FIXME: is this the gpio of another regulator? */
-	MX50_PAD_EPDC_PWRSTAT__GPIO_3_28_INT,
+	MX50_PAD_EPDC_PWRSTAT__GPIO_3_28,
 	MX50_PAD_EPDC_PWRCTRL0__GPIO_3_29,
 	MX50_PAD_EPDC_PWRCTRL1__GPIO_3_30,
 	MX50_PAD_EPDC_VCOM0__GPIO_4_21,
-	MX50_PAD_ECSPI1_SS0__GPIO_4_15_PUINT,
+	MX50_PAD_ECSPI1_SS0__GPIO_4_15,
+
+	/* NTXEC */
+	MX50_PAD_CSPI_SS0__GPIO_4_11,
 
 /* FIXME: check below muxes */
 
@@ -457,7 +464,7 @@ static struct i2c_board_info mxc_i2c1_board_info[] __initdata = {
 static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
 	{
 		I2C_BOARD_INFO("ntxec", 0x43),
-//		.irq = gpio_to_irq(),
+		.irq = gpio_to_irq(GPIO_NTXEC_INT),
 	},
 };
 
