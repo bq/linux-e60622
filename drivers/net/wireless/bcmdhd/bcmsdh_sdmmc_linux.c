@@ -174,7 +174,11 @@ static const struct sdio_device_id bcmsdh_sdmmc_ids[] = {
 
 MODULE_DEVICE_TABLE(sdio, bcmsdh_sdmmc_ids);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)) && defined(CONFIG_PM)
+/* Netronix stuff, should use device_make_wakeup instead but
+ * this is a bit far fetched for the short terminate
+ */
+extern int gSleep_Mode_Suspend;
+
 static int bcmsdh_sdmmc_suspend(struct device *pdev)
 {
 	struct sdio_func *func = dev_to_sdio_func(pdev);
@@ -190,21 +194,31 @@ static int bcmsdh_sdmmc_suspend(struct device *pdev)
 		return -EBUSY;
 	sdio_flags = sdio_get_host_pm_caps(func);
 
-	if (!(sdio_flags & MMC_PM_KEEP_POWER)) {
+/* setting the keep_power flag is done the hard way in the mx-sdhci driver
+ * FIXME: fix the pm-capabilities there, so that the code here can be reactivated
+ */
+
+/*	if (!(sdio_flags & MMC_PM_KEEP_POWER)) {
 		sd_err(("%s: can't keep power while host is suspended\n", __FUNCTION__));
 		return  -EINVAL;
-	}
+	}*/
 
 	/* keep power while host suspended */
-	ret = sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
+/*	ret = sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
 	if (ret) {
 		sd_err(("%s: error while trying to keep power\n", __FUNCTION__));
 		return ret;
-	}
+	}*/
+
+	if (!gSleep_Mode_Suspend) {
+	} else {
 #if defined(OOB_INTR_ONLY)
-	bcmsdh_oob_intr_set(0);
+		bcmsdh_oob_intr_set(0);
 #endif	/* defined(OOB_INTR_ONLY) */
-	dhd_mmc_suspend = TRUE;
+		dhd_mmc_suspend = TRUE;
+	}
+
+
 	smp_mb();
 
 	return 0;
@@ -212,17 +226,24 @@ static int bcmsdh_sdmmc_suspend(struct device *pdev)
 
 static int bcmsdh_sdmmc_resume(struct device *pdev)
 {
-#if defined(OOB_INTR_ONLY)
 	struct sdio_func *func = dev_to_sdio_func(pdev);
-#endif
+
+	if (func->num != 2)
+		return 0;
+
 	sd_trace(("%s Enter\n", __FUNCTION__));
-	dhd_mmc_suspend = FALSE;
+
+	if (!gSleep_Mode_Suspend) {
+	} else {
+		dhd_mmc_suspend = FALSE;
 #if defined(OOB_INTR_ONLY)
-	if ((func->num == 2) && dhd_os_check_if_up(bcmsdh_get_drvdata()))
-		bcmsdh_oob_intr_set(1);
+			if (dhd_os_check_if_up(bcmsdh_get_drvdata()))
+				bcmsdh_oob_intr_set(1);
 #endif /* (OOB_INTR_ONLY) */
+	}
 
 	smp_mb();
+
 	return 0;
 }
 
@@ -230,18 +251,15 @@ static const struct dev_pm_ops bcmsdh_sdmmc_pm_ops = {
 	.suspend	= bcmsdh_sdmmc_suspend,
 	.resume		= bcmsdh_sdmmc_resume,
 };
-#endif  /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)) && defined(CONFIG_PM) */
 
 static struct sdio_driver bcmsdh_sdmmc_driver = {
 	.probe		= bcmsdh_sdmmc_probe,
 	.remove		= bcmsdh_sdmmc_remove,
 	.name		= "bcmsdh_sdmmc",
 	.id_table	= bcmsdh_sdmmc_ids,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)) && defined(CONFIG_PM)
 	.drv = {
 		.pm	= &bcmsdh_sdmmc_pm_ops,
 	},
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)) && defined(CONFIG_PM) */
 };
 
 struct sdos_info {

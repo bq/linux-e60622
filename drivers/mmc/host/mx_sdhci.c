@@ -64,6 +64,7 @@
 
 static unsigned int debug_quirks;
 static int last_op_dir;
+static unsigned long last_event = 0;
 
 /*
  * Different quirks to handle when the hardware deviates from a strict
@@ -455,6 +456,8 @@ static void sdhci_prepare_data(struct sdhci_host *host, struct mmc_data *data)
 	BUG_ON(data->blksz * data->blocks > 524288);
 	BUG_ON(data->blksz > host->mmc->max_blk_size);
 	BUG_ON(data->blocks > 65535);
+	BUG_ON(host->clock == 0);
+	BUG_ON(host->timeout_clk == 0);
 
 	host->data = data;
 	host->data_early = 0;
@@ -1556,7 +1559,14 @@ static void esdhc_cd_callback(struct work_struct *work)
 	unsigned int cd_status = 0;
 	struct sdhci_host *host = container_of(work, struct sdhci_host, cd_wq);
 
+	pm_stay_awake(&host->chip->pdev->dev);
+
 	GALLEN_DBGLOCAL_BEGIN();
+
+	if (host->id == 1) {
+		printk("external sd event\n");
+		last_event = jiffies;
+	}
 
 	do {
 		if (host->detect_irq == 0) {
@@ -1586,6 +1596,9 @@ static void esdhc_cd_callback(struct work_struct *work)
 		else {
 			mod_timer(&host->cd_timer, jiffies + HZ / 4);
 			GALLEN_DBGLOCAL_ESC();
+
+			pm_relax(&host->chip->pdev->dev);
+
 			return;
 		}
 	}
@@ -1647,6 +1660,9 @@ static void esdhc_cd_callback(struct work_struct *work)
 		else {
 			GALLEN_DBGLOCAL_RUNLOG(9);
 			sdhci_init(host);
+
+			/* reset the clock, as sdhci_init will set it to 0 */
+			sdhci_set_clock(host, host->mmc->ios.clock);
 		}
 	}
 
@@ -1663,6 +1679,8 @@ static void esdhc_cd_callback(struct work_struct *work)
 
 
 	GALLEN_DBGLOCAL_END();
+
+	pm_relax(&host->chip->pdev->dev);
 }
 
 /*!
@@ -1678,6 +1696,8 @@ static void esdhc_cd_callback(struct work_struct *work)
 static irqreturn_t sdhci_cd_irq(int irq, void *dev_id)
 {
 	struct sdhci_host *host = dev_id;
+
+	pm_wakeup_event(&host->chip->pdev->dev, 100);
 
 	schedule_work(&host->cd_wq);
 
@@ -1792,6 +1812,11 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 	if (!chip)
 		return 0;
 
+	if (!gSleep_Mode_Suspend && last_event > 0 && time_before(jiffies, last_event + 3 * HZ)) {
+		dev_warn(&pdev->dev, "processing a sd event, not suspending\n");
+		return -EBUSY;
+	}
+
 	DBG("Suspending...\n");
 	iHWID = check_hardware_name();
 
@@ -1814,10 +1839,19 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 		}
 	}
 	
-	if(gptHWCFG->m_val.bCustomer != 5) {
+//	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
+	if (gSleep_Mode_Suspend) {
+		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])
 				continue;
+
+			/* don't power down the wifi
+			 * This should be solved more intelligently but will do for now
+			 */
+			if (pdev->id == 2)
+				chip->hosts[i]->mmc->pm_flags |= MMC_PM_KEEP_POWER;
+
 			ret = mmc_suspend_host(chip->hosts[i]->mmc);
 			if (ret) {
 				for (i--; i >= 0; i--)
@@ -1868,7 +1902,9 @@ static int sdhci_resume(struct platform_device *pdev)
 		}
 	}
 	
-	if(gptHWCFG->m_val.bCustomer != 5) {
+//	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
+	if (gSleep_Mode_Suspend) {
+		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])
 				continue;

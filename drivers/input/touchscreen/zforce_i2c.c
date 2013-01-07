@@ -47,6 +47,7 @@ static unsigned long ZFORCE_TS_Y_MAX=DEFAULT_PANEL_H<<1;
 static struct zForce_data {
 	int intr_gpio;
 	struct delayed_work	work;
+	struct delayed_work	check;
 	struct i2c_client *client;
 	struct input_dev *input;
 	wait_queue_head_t wait;
@@ -68,6 +69,66 @@ static const uint8_t cmd_Deactive[] = {0x00};
 
 extern unsigned int msp430_read(unsigned int reg);
 /*--------------------------------------------------------------*/
+
+static void zForce_ir_touch_check_func(struct work_struct *work)
+{
+	pm_wakeup_event(&zForce_ir_touch_data.client->dev, 500);
+
+	printk("[%s-%d] periodic hang check\n", __func__, __LINE__);
+	i2c_master_send(zForce_ir_touch_data.client, cmd_getFirmwareVer_v2, sizeof(cmd_getFirmwareVer_v2));
+
+	schedule_delayed_work(&zForce_ir_touch_data.check, HZ * 10);
+}
+
+static int zforce_i2c_start(struct i2c_client *client)
+{
+	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		i2c_master_send(client, cmd_Active_v2, sizeof(cmd_Active_v2));
+	}else{
+		i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
+	}	
+//	i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
+
+	/* start hang check */
+	schedule_delayed_work(&zForce_ir_touch_data.check, HZ * 10);
+
+	return 0;
+}
+
+static int zforce_i2c_stop(struct i2c_client *client)
+{
+	int ret;
+
+	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
+
+	/* cancel the hang check */
+	cancel_delayed_work_sync(&zForce_ir_touch_data.check);
+
+	if(8==gptHWCFG->m_val.bTouchCtrl) {
+		ret = i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
+	}else{
+		ret = i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
+	}	
+
+	if (ret < 0) {
+		dev_err(&client->dev, "stop command did not succeed %d\n", ret);
+	}
+
+	return 0;
+}
+
+static int zforce_i2c_reset(struct i2c_client *client)
+{
+	printk (KERN_ERR "restarting zforce sensinig\n");
+	zforce_i2c_stop(client);
+	msleep(200);
+	zforce_i2c_start(client);
+	msleep(100);
+
+	return 0;
+}
+
 static int zForce_ir_touch_detect_int_level(void)
 {
 	unsigned v;
@@ -83,8 +144,14 @@ static int __zForce_read_data (struct i2c_client *client, char* buffer)
 	while (zForce_ir_touch_detect_int_level())
 		schedule_timeout(2);
 	rc = i2c_master_recv(client, buf_recv, 2);
+	if (rc < 0)
+		printk(KERN_ERR, "could not read header %d\n", rc);
 	if (0xEE != buf_recv[0]) {
 		printk (KERN_ERR "[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
+
+		/* powercycle the device */
+		zforce_i2c_reset(client);
+
 		return 0;
 	}
 	
@@ -130,6 +197,10 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 	if (0xEE != buf_recv[0]) {
 		if (0xEE != buf_recv[1]) {
 			printk (KERN_ERR "[%s-%d] Error , frame start not found !!\n",__func__,__LINE__);
+
+			/* powercycle the device */
+			zforce_i2c_reset(client);
+
 			return 0;
 		}
 		else
@@ -192,6 +263,15 @@ static int zForce_ir_touch_recv_data(struct i2c_client *client, uint8_t *buf)
 			if(8==gptHWCFG->m_val.bTouchCtrl) {  //neonode v2
 				printk ("[%s-%d] firmware version %02X%02X %02X%02X %02X%02X %02X%02X \n", __func__, __LINE__, \
 					buf[2], buf[1], buf[4], buf[3], buf[6], buf[5], buf[8], buf[7]);
+				printk("zforce state: %d, users: %d\n", buf[9], zForce_ir_touch_data.input->users);
+
+				/* 255 is the value contained in buf9 when the zforce
+				 * controller loses any valid state.
+				 */
+				if (buf[9] == 255) {
+					printk("[%s-%d] zforce got confused, doing reset\n", __func__, __LINE__);
+					zforce_i2c_reset(client);
+				}
 			}
 			break;
 		case 0x25:
@@ -295,6 +375,8 @@ void zForce_ir_touch_enqueue (void)
 
 static void zForce_ir_touch_work_func(struct work_struct *work)
 {
+	pm_stay_awake(&zForce_ir_touch_data.client->dev);
+
 	zForce_ir_touch_enqueue ();	
 	while (gQueueRear != gQueueFront){
 		zForce_ir_touch_report_data(zForce_ir_touch_data.client, gzForceBuffer[gQueueFront]);
@@ -304,10 +386,14 @@ static void zForce_ir_touch_work_func(struct work_struct *work)
 		schedule_delayed_work(&zForce_ir_touch_data.work, 1);
 	else
 		g_touch_triggered = 0;
+
+	pm_relax(&zForce_ir_touch_data.client->dev);
 }
 
 static irqreturn_t zForce_ir_touch_ts_interrupt(int irq, void *dev_id)
 {
+	pm_wakeup_event(&zForce_ir_touch_data.client->dev, 100);
+
 	g_touch_triggered = 1;
 	schedule_delayed_work(&zForce_ir_touch_data.work, 0);
 	return IRQ_HANDLED;
@@ -315,6 +401,14 @@ static irqreturn_t zForce_ir_touch_ts_interrupt(int irq, void *dev_id)
 
 void zForce_ir_touch_ts_triggered(void)
 {
+	pm_wakeup_event(&zForce_ir_touch_data.client->dev, 100);
+
+	/* don't queue stuff when we're already processing things */
+	if (g_touch_triggered) {
+		printk(KERN_ERR "ts_triggered: zforce already processing an event\n");
+		return;
+	}
+
 	g_touch_triggered = 1;
 	schedule_delayed_work(&zForce_ir_touch_data.work, 0);
 }
@@ -367,71 +461,97 @@ static ssize_t neo_ctl(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 static DEVICE_ATTR(neocmd, 0644, neo_info, neo_ctl);
+
 extern int gSleep_Mode_Suspend;
 
-static int zForce_ir_touch_suspend(struct platform_device *pdev, pm_message_t state)
+static int zForce_ir_touch_suspend(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
+
 //	printk ("[%s-%d] %s() %d\n",__FILE__,__LINE__,__func__,gSleep_Mode_Suspend);
-	if (g_touch_pressed || g_touch_triggered || !zForce_ir_touch_detect_int_level ()) 
+	/* return immediatly if the driver is still handling touch data */
+	if (g_touch_pressed || g_touch_triggered) {
+		printk("[%s-%d] zForce still handling touch data\n",__func__,__LINE__);
+		return -EBUSY;
+	}
+
+	if (!gSleep_Mode_Suspend && !zForce_ir_touch_detect_int_level())
 	{
 		zForce_ir_touch_ts_triggered ();
 		printk ("[%s-%d] zForce touch event not processed.\n",__func__,__LINE__);
 		return -1;
 	}
+
 	if (gSleep_Mode_Suspend) {
-		if(8==gptHWCFG->m_val.bTouchCtrl) {
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
-		}else{
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Deactive, sizeof(cmd_Deactive));
-		}	
+		if (zForce_ir_touch_data.input->users)
+			zforce_i2c_stop(client);
 		msleep(200);
 		disable_irq_wake(zForce_ir_touch_data.client->irq);
+		disable_irq(zForce_ir_touch_data.client->irq);
+	} else if (zForce_ir_touch_data.input->users) {
+		cancel_delayed_work_sync(&zForce_ir_touch_data.check);
 	}
 	return 0;
 }
 
-static int zForce_ir_touch_resume(struct platform_device *pdev)
+static int zForce_ir_touch_suspend_noirq(struct device *dev)
 {
-	if (gSleep_Mode_Suspend) {
-		if(8==gptHWCFG->m_val.bTouchCtrl) {
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Active_v2, sizeof(cmd_Active_v2));
-		}else{
-			i2c_master_send(zForce_ir_touch_data.client, cmd_Active, sizeof(cmd_Active));
-		}	
-		enable_irq_wake(zForce_ir_touch_data.client->irq);
+	if (!gSleep_Mode_Suspend && !zForce_ir_touch_detect_int_level()) {
+		dev_warn(dev, "touch during late suspend detected\n");
+		return -EBUSY;
 	}
-	if (!zForce_ir_touch_detect_int_level ()) {
-		zForce_ir_touch_ts_triggered ();
-	}
-	
+
 	return 0;
 }
+
+static int zForce_ir_touch_resume(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+
+	if (gSleep_Mode_Suspend) {
+		enable_irq(zForce_ir_touch_data.client->irq);
+		enable_irq_wake(zForce_ir_touch_data.client->irq);
+		if (zForce_ir_touch_data.input->users)
+			zforce_i2c_start(client);
+	} else if (zForce_ir_touch_data.input->users) {
+		schedule_delayed_work(&zForce_ir_touch_data.check, HZ * 10);
+	}
+
+	/* Only check int level when we return from a light sleep
+	 * Otherwise wait for the next falling edge triggering the real interrupt
+	 */
+	if (!zForce_ir_touch_detect_int_level () && !gSleep_Mode_Suspend) {
+		printk("triggered during resume\n");
+		zForce_ir_touch_ts_triggered ();
+		return 0;
+	}
+
+	if (!gSleep_Mode_Suspend && gptHWCFG->m_val.bTouchCtrl == 8 && zForce_ir_touch_data.input->users) {
+		printk("checking zforce state\n");
+		i2c_master_send(client, cmd_getFirmwareVer_v2, sizeof(cmd_getFirmwareVer_v2));
+	}
+
+	return 0;
+}
+
+static struct dev_pm_ops zForce_ir_touch_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(zForce_ir_touch_suspend, zForce_ir_touch_resume)
+	.suspend_noirq = zForce_ir_touch_suspend_noirq,
+	.freeze_noirq = zForce_ir_touch_suspend_noirq,
+};
 
 static int zforce_i2c_open(struct input_dev *dev)
 {
 	struct i2c_client *client = input_get_drvdata(dev);
 
-	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
-	if(8==gptHWCFG->m_val.bTouchCtrl) {
-		i2c_master_send(client, cmd_Active_v2, sizeof(cmd_Active_v2));
-	}else{
-		i2c_master_send(client, cmd_Active, sizeof(cmd_Active));
-	}	
-//	i2c_master_send(client, cmd_Resolution, sizeof(cmd_Resolution));
-	
-	return 0;
+	return zforce_i2c_start(client);
 }
 
 static void zforce_i2c_close(struct input_dev *dev)
 {
 	struct i2c_client *client = input_get_drvdata(dev);
-	
-	printk ("[%s-%d] %s()\n",__FILE__,__LINE__,__func__);
-	if(8==gptHWCFG->m_val.bTouchCtrl) {
-		i2c_master_send(client, cmd_Deactive_v2, sizeof(cmd_Deactive_v2));
-	}else{
-		i2c_master_send(client, cmd_Deactive, sizeof(cmd_Deactive));
-	}	
+
+	zforce_i2c_stop(client);
 }
 
 static int zForce_ir_touch_probe(
@@ -443,6 +563,7 @@ static int zForce_ir_touch_probe(
 	strlcpy(client->name, ZFORCE_TS_NAME, I2C_NAME_SIZE);
 
 	INIT_DELAYED_WORK(&zForce_ir_touch_data.work, zForce_ir_touch_work_func);
+	INIT_DELAYED_WORK(&zForce_ir_touch_data.check, zForce_ir_touch_check_func);
 	
 	zForce_ir_touch_data.intr_gpio = (client->dev).platform_data;
 	
@@ -469,6 +590,7 @@ static int zForce_ir_touch_probe(
 	zForce_ir_touch_data.input->id.bustype = BUS_I2C;
 	zForce_ir_touch_data.input->open = zforce_i2c_open;
 	zForce_ir_touch_data.input->close = zforce_i2c_close;
+	zForce_ir_touch_data.input->dev.parent = &client->dev;
 
 	input_set_drvdata(zForce_ir_touch_data.input, client);
 	
@@ -527,6 +649,8 @@ static int zForce_ir_touch_probe(
 		cmd_Resolution_v2[6] = (uint8_t)(ZFORCE_TS_HIGHT>>8);
 	}
 
+	device_set_wakeup_capable(&client->dev, true);
+
 	err = input_register_device(zForce_ir_touch_data.input);
 	if (err < 0) {
 		pr_debug("Register device file!\n");
@@ -569,12 +693,11 @@ static const struct i2c_device_id zForce_ir_touch_id[] = {
 static struct i2c_driver zForce_ir_touch_driver = {
 	.probe		= zForce_ir_touch_probe,
 	.remove		= zForce_ir_touch_remove,
-	.suspend	= zForce_ir_touch_suspend,
-	.resume		= zForce_ir_touch_resume,
 	.id_table	= zForce_ir_touch_id,
 	.driver		= {
 		.name = "zforce-ir-touch",
 		.owner = THIS_MODULE,
+		.pm = &zForce_ir_touch_pm,
 	},
 };
 

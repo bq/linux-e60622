@@ -40,6 +40,7 @@
 #include "pmic.h"
 extern int msp430_write(unsigned int reg, unsigned int value);
 extern int msp430_poweroff();
+extern void msp430_reset();
 
 /*
  * Defines
@@ -348,11 +349,23 @@ void mc13892_power_off(void)
 
 	pmic_write_reg(REG_POWER_CTL0, value, 0xffffff);
 #else
-   	while (1) {
+	value = 0;
+   	while (value < 10) {
 		printk("Kernel---Power Down ---\n");
 		msp430_poweroff();
 
       	msleep(1400);
+		value++;
 	}
+
+	value = 0;
+	while (value < 10) {
+		printk("Kernel---trying reset ---\n");
+		msp430_reset();
+		msleep(1400);
+		value++;
+	}
+
+
 #endif
 }

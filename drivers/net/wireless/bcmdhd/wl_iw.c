@@ -7778,7 +7778,7 @@ static const iw_handler wl_iw_handler[] =
 static const iw_handler wl_iw_priv_handler[] = {
 	NULL,
 	(iw_handler)wl_iw_set_active_scan,
-	NULL,
+	(iw_handler)wl_iw_set_priv,
 	(iw_handler)wl_iw_get_rssi,
 	NULL,
 	(iw_handler)wl_iw_set_passive_scan,
@@ -7932,6 +7932,12 @@ static const struct iw_priv_args wl_iw_priv_args[] =
 		"CSCAN"
 	},
 #endif 
+	{	
+		WL_IW_SET_SUSPEND,
+		IW_PRIV_TYPE_CHAR | 1024,
+		0,
+		SETSUSPENDMODE_CMD
+	},
 	};
 
 const struct iw_handler_def wl_iw_handler_def =

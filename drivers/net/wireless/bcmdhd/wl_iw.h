@@ -83,6 +83,7 @@ struct cntry_locales_custom {
 #define MAX_WX_STRING 80
 #define isprint(c) bcm_isprint(c)
 #define WL_IW_SET_ACTIVE_SCAN	(SIOCIWFIRSTPRIV+1)
+#define WL_IW_SET_SUSPEND	(SIOCIWFIRSTPRIV+2)
 #define WL_IW_GET_RSSI			(SIOCIWFIRSTPRIV+3)
 #define WL_IW_SET_PASSIVE_SCAN	(SIOCIWFIRSTPRIV+5)
 #define WL_IW_GET_LINK_SPEED	(SIOCIWFIRSTPRIV+7)

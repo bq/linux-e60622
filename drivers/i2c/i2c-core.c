@@ -218,6 +218,26 @@ static int i2c_device_pm_resume(struct device *dev)
 	return ret;
 }
 
+static int i2c_device_pm_suspend_noirq(struct device *dev)
+{
+	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+
+	if (pm)
+		return pm->suspend_noirq ? pm->suspend_noirq(dev) : 0;
+
+	return 0;
+}
+
+static int i2c_device_pm_resume_noirq(struct device *dev)
+{
+	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+
+	if (pm)
+		return pm->resume_noirq ? pm->resume_noirq(dev) : 0;
+
+	return 0;
+}
+
 static int i2c_device_pm_freeze(struct device *dev)
 {
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
@@ -278,6 +298,8 @@ static int i2c_device_pm_restore(struct device *dev)
 #else /* !CONFIG_PM_SLEEP */
 #define i2c_device_pm_suspend	NULL
 #define i2c_device_pm_resume	NULL
+#define i2c_device_pm_suspend_noirq	NULL
+#define i2c_device_pm_resume_noirq	NULL
 #define i2c_device_pm_freeze	NULL
 #define i2c_device_pm_thaw	NULL
 #define i2c_device_pm_poweroff	NULL
@@ -325,6 +347,8 @@ static const struct attribute_group *i2c_dev_attr_groups[] = {
 static const struct dev_pm_ops i2c_device_pm_ops = {
 	.suspend = i2c_device_pm_suspend,
 	.resume = i2c_device_pm_resume,
+	.suspend_noirq = i2c_device_pm_suspend_noirq,
+	.resume_noirq = i2c_device_pm_resume_noirq,
 	.freeze = i2c_device_pm_freeze,
 	.thaw = i2c_device_pm_thaw,
 	.poweroff = i2c_device_pm_poweroff,

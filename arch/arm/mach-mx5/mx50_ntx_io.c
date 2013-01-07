@@ -169,6 +169,7 @@
 #define	CM_SET_ALARM_WAKEUP	 	207	
 #define	CM_WIFI_CTRL	 		208	
 #define	CM_ROTARY_ENABLE 		209	
+#define	CM_WIFI_GET_STATUS	 	210	
 
 #define CM_GET_UP_VERSION 		215
 
@@ -215,6 +216,7 @@ EXPORT_SYMBOL(__USB_ADAPTOR__);
 static int Driver_Count = -1;
 unsigned char __TOUCH_LOCK__= 0;
 int gSleep_Mode_Suspend;
+EXPORT_SYMBOL(gSleep_Mode_Suspend);
 
 extern volatile NTX_HWCONFIG *gptHWCFG;
 
@@ -514,17 +516,17 @@ void ntx_wifi_power_ctrl (int isWifiEnable)
 		gpio_direction_input(GPIO_WIFI_3V3);	// turn off Wifi_3V3_on
 		gpio_set_value(GPIO_WIFI_RST, 0);		// turn on wifi_RST
 		wifi_sdio_enable (0);
-#ifdef _WIFI_ALWAYS_ON_
+/*#ifdef _WIFI_ALWAYS_ON_
 		disable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
-#endif
+#endif*/
 	}else{
 		gpio_direction_output(GPIO_WIFI_3V3, 0);	// turn on Wifi_3V3_on
     	sleep_on_timeout(&Reset_WaitQueue,HZ/50);			
 		gpio_set_value(GPIO_WIFI_RST, 1);		// turn on wifi_RST
 		wifi_sdio_enable (1);
-#ifdef _WIFI_ALWAYS_ON_
+/*#ifdef _WIFI_ALWAYS_ON_
 		enable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
-#endif
+#endif*/
 	}
 	sleep_on_timeout(&Reset_WaitQueue,HZ/10);
 
@@ -969,6 +971,10 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 		case CM_WIFI_CTRL:		
 			ntx_wifi_power_ctrl (p);
 			break;	
+		case CM_WIFI_GET_STATUS:		
+			i = gWifiEnabled;	
+			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
+			break;
 					
 		case CM_3G_GET_WAKE_STATUS:	
 			i = 0;	
@@ -1631,6 +1637,16 @@ static struct platform_device ntx_gpio_key_device = {
 
 #endif//] NTX_GPIO_KEYS
 
+long ntx_panic_blink(long time)
+{
+	gpio_set_value(GPIO_LED_ON, 1);
+	gpio_set_value(GPIO_CHG_LED, 1);
+	mdelay(100);
+	gpio_set_value(GPIO_LED_ON, 0);
+	gpio_set_value(GPIO_CHG_LED, 0);
+
+	return 100;
+}
 
 
 #define IR_TOUCH_RST		(4*32 + 26)	/*GPIO_5_26 */
@@ -1677,6 +1693,8 @@ static int gpio_initials(void)
 	gpio_request(GPIO_LED_ON, "led_on");
 	gpio_direction_output(GPIO_LED_ON, 1);
 	
+	panic_blink = ntx_panic_blink;
+
 	mxc_iomux_v3_setup_pad(MX50_PAD_PWM1__GPIO_6_24);
 	gpio_request(GPIO_ACT_ON, "action_on");
 	gpio_direction_output(GPIO_ACT_ON, 1);
@@ -2086,6 +2104,12 @@ void ntx_gpio_suspend (void)
 		gpio_direction_output(TOUCH_PWR, 1);
 #endif
 	}
+
+#ifdef _WIFI_ALWAYS_ON_
+	if (!gSleep_Mode_Suspend && gWifiEnabled)
+		enable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
+#endif
+
 	
 	// turn off wifi power 
 #ifndef _WIFI_ALWAYS_ON_
@@ -2114,7 +2138,10 @@ void ntx_gpio_suspend (void)
 	gpio_set_value (GPIO_LED_ON, 1);
 	gpio_set_value (GPIO_ACT_ON, 1);
 
-	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_SET);	// Powers down the bandgap reference
+/* Needs to be disabled to prevent hangs with Freescale patch
+ * ENGR00223524 MX508-Fix the incorrect reset by SRTC
+ *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_SET);	// Powers down the bandgap reference
+ */
 	gUart2_ucr1 = __raw_readl(ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
 	__raw_writel(0, ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
 	
@@ -2123,7 +2150,10 @@ void ntx_gpio_suspend (void)
 void ntx_gpio_resume (void)
 {
 	__raw_writel(gUart2_ucr1, ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
-	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
+/* Needs to be disabled to prevent hangs with Freescale patch
+ * ENGR00223524 MX508-Fix the incorrect reset by SRTC
+ *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
+ */
 	
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
 	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {
@@ -2148,7 +2178,12 @@ void ntx_gpio_resume (void)
 			enable_irq(gpio_to_irq(G_SENSOR_INT));
 		}
 	}
-	
+
+#ifdef _WIFI_ALWAYS_ON_
+	if (!gSleep_Mode_Suspend && gWifiEnabled)
+		disable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
+#endif
+
 #if 1	
 	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 		g_power_key_pressed = (gpio_get_value (GPIO_PWR_SW))?1:0;	// POWER key

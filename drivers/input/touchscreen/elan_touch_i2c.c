@@ -293,6 +293,8 @@ static void elan_touch_report_data(struct i2c_client *client, uint8_t *buf)
 
 static void elan_touch_work_func(struct work_struct *work)
 {
+	pm_stay_awake(&elan_touch_data.client->dev);
+
 	elan_touch_enqueue ();	
 	while (gQueueRear != gQueueFront){
 		elan_touch_report_data(elan_touch_data.client, gElanBuffer[gQueueFront]);
@@ -306,10 +308,14 @@ static void elan_touch_work_func(struct work_struct *work)
 #else
 	g_touch_triggered = 0;
 #endif			
+
+	pm_relax(&elan_touch_data.client->dev);
 }
 
 static irqreturn_t elan_touch_ts_interrupt(int irq, void *dev_id)
 {
+	pm_wakeup_event(&elan_touch_data.client->dev, 100);
+
 	g_touch_triggered = 1;
 #ifdef	_WITH_DELAY_WORK_
 	schedule_delayed_work(&elan_touch_data.work, 0);
@@ -325,6 +331,8 @@ static irqreturn_t elan_touch_ts_interrupt(int irq, void *dev_id)
 
 void elan_touch_ts_triggered(void)
 {
+	pm_stay_awake(&elan_touch_data.client->dev);
+
 	g_touch_triggered = 1;
 	elan_touch_enqueue ();	
 #ifdef	_WITH_DELAY_WORK_
@@ -332,6 +340,8 @@ void elan_touch_ts_triggered(void)
 #else
 	queue_work(elan_wq, &elan_touch_data.work);
 #endif			
+
+	pm_relax(&elan_touch_data.client->dev);
 }
 
 static enum hrtimer_restart elan_touch_timer_func(struct hrtimer *timer)
@@ -371,32 +381,68 @@ static int elan_touch_register_interrupt(struct i2c_client *client)
 
 extern int gSleep_Mode_Suspend;
 static int gTouchDisabled;
-static int elan_touch_suspend(struct platform_device *pdev, pm_message_t state)
+static int elan_touch_suspend(struct device *dev)
 {
-	if (g_touch_pressed || g_touch_triggered || !elan_touch_detect_int_level ()) 
+	/* return immediatly if the driver is still handling touch data */
+	if (g_touch_pressed || g_touch_triggered) {
+		printk("[%s-%d] zForce still handling touch data\n");
+		return -EBUSY;
+	}
+
+	if (!gSleep_Mode_Suspend && !elan_touch_detect_int_level())
 	{
 		elan_touch_ts_triggered ();
 		printk ("[%s-%d] elan touch event not processed.\n",__func__,__LINE__);
-		return -1;
+		return -EBUSY;
 	}
 	if (gSleep_Mode_Suspend) {
 		disable_irq_wake (elan_touch_data.client->irq);
+		disable_irq(elan_touch_data.client->irq);
 		gTouchDisabled = 1;
 	}
 	return 0;
 }
 
-static int elan_touch_resume(struct platform_device *pdev)
+static int elan_touch_suspend_noirq(struct device *dev)
 {
-	if (!elan_touch_detect_int_level ()) {
-		elan_touch_ts_triggered ();
+	if (!gSleep_Mode_Suspend && !elan_touch_detect_int_level()) {
+		dev_warn(dev, "touch during late suspend detected\n");
+		return -EBUSY;
 	}
-	if (gSleep_Mode_Suspend && gTouchDisabled)
-		enable_irq_wake (elan_touch_data.client->irq);
-	gTouchDisabled = 0;
-	
+
 	return 0;
 }
+
+static int elan_touch_resume(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	int err;
+
+	if (gSleep_Mode_Suspend && gTouchDisabled) {
+		err = __hello_packet_handler(client);
+		if (err < 0)
+			dev_err(dev, "Read Hello Packet Fail\n");
+
+		enable_irq (elan_touch_data.client->irq);
+		enable_irq_wake (elan_touch_data.client->irq);
+	}
+	gTouchDisabled = 0;
+
+	/* Only check int level when we return from a light sleep
+	 * Otherwise wait for the next falling edge triggering the real interrupt
+	 */
+	if (!elan_touch_detect_int_level () && !gSleep_Mode_Suspend) {
+		elan_touch_ts_triggered ();
+	}
+
+	return 0;
+}
+
+static struct dev_pm_ops elan_touch_pm = {
+	SET_SYSTEM_SLEEP_PM_OPS(elan_touch_suspend, elan_touch_resume)
+	.suspend_noirq = elan_touch_suspend_noirq,
+	.freeze_noirq = elan_touch_suspend_noirq,
+};
 
 static int elan_touch_probe(
 	struct i2c_client *client, const struct i2c_device_id *id)
@@ -493,12 +539,11 @@ static const struct i2c_device_id elan_touch_id[] = {
 static struct i2c_driver elan_touch_driver = {
 	.probe		= elan_touch_probe,
 	.remove		= elan_touch_remove,
-	.suspend	= elan_touch_suspend,
-	.resume		= elan_touch_resume,
 	.id_table	= elan_touch_id,
 	.driver		= {
 		.name = "elan-touch",
 		.owner = THIS_MODULE,
+		.pm = &elan_touch_pm,
 	},
 };
 

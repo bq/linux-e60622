@@ -219,6 +219,8 @@ struct keypad_priv {
 	 * The base address
 	 */
 	void __iomem *base;
+
+	struct device *dev;
 };
 /*!
  * This structure holds the keypad private data structure.
@@ -713,6 +715,8 @@ static void mxc_kpp_handle_timer(unsigned long data)
 	unsigned short reg_val;
 	int i;
 
+	pm_wakeup_event(kpp_dev.dev, 100);
+
 	if (key_pad_enabled == 0) {
 		return;
 	}
@@ -773,6 +777,8 @@ static void mxc_kpp_handle_timer(unsigned long data)
 static irqreturn_t mxc_kpp_interrupt(int irq, void *dev_id)
 {
 	unsigned short reg_val;
+
+	pm_wakeup_event(kpp_dev.dev, 100);
 
 	/* Delete the polling timer */
 	del_timer(&kpp_dev.poll_timer);
@@ -935,6 +941,8 @@ static int mxc_kpp_probe(struct platform_device *pdev)
 	struct resource *res;
 
 	keypad = (struct keypad_data *)pdev->dev.platform_data;
+
+	kpp_dev.dev = &pdev->dev;
 
 	kpp_dev.kpp_cols = keypad->colmax;
 	kpp_dev.kpp_rows = keypad->rowmax;

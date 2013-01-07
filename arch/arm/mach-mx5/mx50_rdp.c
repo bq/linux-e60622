@@ -67,6 +67,8 @@
 #include <linux/usbplugevent.h>
 #include <linux/pwm.h>
 
+#include <linux/input/zforce_ts.h>
+
 #include "devices.h"
 #include "usb.h"
 #include "crm_regs.h"
@@ -805,7 +807,7 @@ static u16 E50602_keymapping[] = {
 };
 
 static u16 E60672_keymapping[] = {
-	90, 62, 29, -1, 	// FrontLight, , ,     
+	61, 62, 29, -1, 	// FrontLight, , ,     
 	-1, -1, -1, -1, 	// , , ,
 	-1, -1, -1, -1, 	// , , , 
 	-1, -1, -1, 116,     // , , ,KEY_POWER 
@@ -819,7 +821,7 @@ static u16 E60682_keymapping[] = {
 };
 
 static u16 E606A2_keymapping[] = {
-	61, 62, 29, -1, 	// Home, Menu, Back,    // Use 29 as BACK , 28 remains as ENTER 
+	61, 62, 28, -1, 	// Home, Menu, Back,    // Use 29 as BACK , 28 remains as ENTER !!! no we keep using 28!
 	-1, -1, -1, -1, 	// , , ,
 	-1, -1, -1, -1, 	// , , , 
 	-1, -1, -1, 116,     // , , ,KEY_POWER 
@@ -1780,13 +1782,18 @@ static struct imxi2c_platform_data mxci2c_100K_data = {
        .bitrate = 100000,
 };
 
+static struct zforce_ts_platdata zforce_ts_data = {
+	.x_max = 600,
+	.y_max = 800,
+	.gpio_int = TOUCH_INT,
+};
+
 static struct i2c_board_info mxc_i2c0_E60612_board_info[] __initdata = {
 	 {
-	 .type = "zforce-ir-touch",
-	 .addr = 0x50,
-	 .platform_data = TOUCH_INT,
-	 .irq = gpio_to_irq(TOUCH_INT),
-	 },
+		I2C_BOARD_INFO("zforce-ts", 0x50),
+		.platform_data = &zforce_ts_data,
+		.irq = gpio_to_irq(TOUCH_INT)
+	}
 };
 
 static struct i2c_board_info mxc_i2c0_E60622_board_info[] __initdata = {
@@ -2250,21 +2257,11 @@ static void mx50_suspend_enter()
 	int i;
 	int iHWID;
 
-	/* Clear the SELF_BIAS bit and power down
-	*  the band-gap.
-	*/
-
 	__raw_writel(MXC_ANADIG_PFD_DIS_MASK<<MXC_ANADIG_PFD_DIS_OFFSET,
 		apll_base + MXC_ANADIG_PLLCTRL_SET);
 
 	__raw_writel(MXC_ANADIG_PLL_POWERUP,
 		apll_base + MXC_ANADIG_MISC_CLR);
-
-	__raw_writel(MXC_ANADIG_REF_SELFBIAS_OFF,
-		apll_base + MXC_ANADIG_MISC_CLR);
-	__raw_writel(MXC_ANADIG_REF_PWD,       
-		apll_base + MXC_ANADIG_MISC_SET);
-
 
 	/* Set PADCTRL to 0 for all IOMUX. */
 	for (i = 0; i < ARRAY_SIZE(suspend_enter_pads); i++) {
@@ -2297,13 +2294,6 @@ static void mx50_suspend_exit()
 {
 	int iHWID;
 
-  /* Power Up the band-gap and set the SELFBIAS bit. */
-  __raw_writel(MXC_ANADIG_REF_PWD,
-      apll_base + MXC_ANADIG_MISC_CLR);
-  udelay(100);
-  __raw_writel(MXC_ANADIG_REF_SELFBIAS_OFF,
-      apll_base + MXC_ANADIG_MISC_SET);
-	
 	__raw_writel(MXC_ANADIG_PFD_DIS_MASK<<MXC_ANADIG_PFD_DIS_OFFSET,
 		apll_base + MXC_ANADIG_PLLCTRL_CLR);
 
@@ -2677,7 +2667,27 @@ static void __init mxc_board_init(void)
 	mxc_register_device(&mxc_pxp_v4l2, NULL);
 	mxc_register_device(&pm_device, &mx50_pm_data);
 //	if (enable_keypad)
-	
+
+	if(1==gptHWCFG->m_val.bDisplayResolution) {
+		// 1024x758 .
+		zforce_ts_data.x_max = 758;
+		zforce_ts_data.y_max = 1024;
+	}
+	else if(2==gptHWCFG->m_val.bDisplayResolution) {
+		// 1024x768
+		zforce_ts_data.x_max = 768;
+		zforce_ts_data.y_max = 1024;
+	}
+	else if(3==gptHWCFG->m_val.bDisplayResolution) {
+		// 1440x1080
+		zforce_ts_data.x_max = 1080;
+		zforce_ts_data.y_max = 1440;
+	}
+	else {
+		// 800x600 
+		zforce_ts_data.x_max = 600;
+		zforce_ts_data.y_max = 800;
+	}
 
 	iHWID = check_hardware_name();
 

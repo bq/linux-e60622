@@ -579,6 +579,11 @@ KBUILD_CFLAGS += $(call cc-option,-Wno-pointer-sign,)
 # disable invalid "can't wrap" optimizations for signed / pointers
 KBUILD_CFLAGS	+= $(call cc-option,-fno-strict-overflow)
 
+# gcc-4.4 defaults to generating .eh_frame sections, but we aren't
+# interested in those currently. additionally, it causes issues on some
+# architectures.
+KBUILD_CFLAGS += $(call cc-option,-fno-dwarf2-cfi-asm)
+
 # conserve stack if available
 KBUILD_CFLAGS   += $(call cc-option,-fconserve-stack)
 
