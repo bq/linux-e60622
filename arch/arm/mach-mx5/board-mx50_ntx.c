@@ -47,15 +47,17 @@
 #include "crm_regs.h"
 
 
-#define GPIO_TPS65185_VIN		(0*32 + 27) /* GPIO_1_27 */
-#define GPIO_TPS65185_PWRGOOD		(2*32 + 28) /* GPIO_3_28 */
-#define GPIO_TPS65185_WAKEUP		(2*32 + 29) /* GPIO_3_29 */
-#define GPIO_TPS65185_PWRUP		(2*32 + 30) /* GPIO_3_30 */
-#define GPIO_TPS65185_INT		(3*32 + 15) /* GPIO_4_15 */
-#define GPIO_TPS65185_VCOMCTRL		(3*32 + 21) /* GPIO_4_21 */
+#define GPIO_TPS65185_VIN		IMX_GPIO_NR(1, 27)
+#define GPIO_TPS65185_PWRGOOD		IMX_GPIO_NR(3, 28)
+#define GPIO_TPS65185_WAKEUP		IMX_GPIO_NR(3, 29)
+#define GPIO_TPS65185_PWRUP		IMX_GPIO_NR(3, 30)
+#define GPIO_TPS65185_INT		IMX_GPIO_NR(4, 15)
+#define GPIO_TPS65185_VCOMCTRL		IMX_GPIO_NR(4, 21)
 
-#define GPIO_NTXEC_INT			(3*32 + 11) /* GPIO_4_11 */
+#define GPIO_NTXEC_INT			IMX_GPIO_NR(4, 11)
 
+#define GPIO_SD2_WP			IMX_GPIO_NR(5, 16) /* is this present? */
+#define GPIO_SD2_CD			IMX_GPIO_NR(5, 17)
 
 
 
@@ -102,8 +104,6 @@
 #define MX50_RDP_EPDC_VCOM      IMX_GPIO_NR(4, 21)
 #define MX50_RDP_SD1_WP		IMX_GPIO_NR(4, 19)	/*GPIO_4_19 */
 #define MX50_RDP_SD1_CD		IMX_GPIO_NR(1, 27)	/*GPIO_1_27 */
-#define MX50_RDP_SD2_WP		IMX_GPIO_NR(5, 16)	/*GPIO_5_16 */
-#define MX50_RDP_SD2_CD		IMX_GPIO_NR(5, 17) 	/*GPIO_5_17 */
 #define MX50_RDP_SD3_WP		IMX_GPIO_NR(5, 28) 	/*GPIO_5_28 */
 #define MX50_RDP_USB_OTG_PWR	IMX_GPIO_NR(6, 25)	/*GPIO_6_25*/
 
@@ -125,13 +125,9 @@ static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
 	/* NTXEC */
 	MX50_PAD_CSPI_SS0__GPIO_4_11,
 
-/* FIXME: check below muxes */
-
 	/* SD1 */
-	MX50_PAD_ECSPI2_SS0__GPIO_4_19,
-	MX50_PAD_EIM_CRE__GPIO_1_27,
-	MX50_PAD_SD1_CMD__SD1_CMD,
 	MX50_PAD_SD1_CLK__SD1_CLK,
+	MX50_PAD_SD1_CMD__SD1_CMD,
 	MX50_PAD_SD1_D0__SD1_D0,
 	MX50_PAD_SD1_D1__SD1_D1,
 	MX50_PAD_SD1_D2__SD1_D2,
@@ -146,10 +142,6 @@ static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
 	MX50_PAD_SD2_D1__SD2_D1,
 	MX50_PAD_SD2_D2__SD2_D2,
 	MX50_PAD_SD2_D3__SD2_D3,
-	MX50_PAD_SD2_D4__SD2_D4,
-	MX50_PAD_SD2_D5__SD2_D5,
-	MX50_PAD_SD2_D6__SD2_D6,
-	MX50_PAD_SD2_D7__SD2_D7,
 
 	/* SD3 */
 	MX50_PAD_SD3_CMD__SD3_CMD,
@@ -158,10 +150,8 @@ static iomux_v3_cfg_t mx50_rdp_pads[] __initdata = {
 	MX50_PAD_SD3_D1__SD3_D1,
 	MX50_PAD_SD3_D2__SD3_D2,
 	MX50_PAD_SD3_D3__SD3_D3,
-	MX50_PAD_SD3_D4__SD3_D4,
-	MX50_PAD_SD3_D5__SD3_D5,
-	MX50_PAD_SD3_D6__SD3_D6,
-	MX50_PAD_SD3_D7__SD3_D7,
+
+/* FIXME: check below muxes */
 
 	/* PWR_INT */
 //	MX50_PAD_ECSPI2_MISO__GPIO_4_18,
@@ -821,16 +811,26 @@ static struct mxc_regulator_platform_data rdp_regulator_data = {
 };
 
 static const struct esdhc_platform_data mx50_rdp_sd1_data __initconst = {
+	.wp_gpio = -EINVAL,
+	.cd_gpio = -EINVAL,
+	.cd_type = ESDHC_CD_PERMANENT,
 	.always_present = 1,
-//	.cd_gpio = MX50_RDP_SD1_CD,
+	.support_8bit = 0,
 };
 
 static const struct esdhc_platform_data mx50_rdp_sd2_data __initconst = {
-	.cd_gpio = MX50_RDP_SD2_CD,
+	.wp_gpio = -EINVAL,
+	.cd_gpio = GPIO_SD2_CD,
+	.cd_type = ESDHC_CD_GPIO,
+	.support_8bit = 0,
 };
 
 static const struct esdhc_platform_data mx50_rdp_sd3_data __initconst = {
+	.wp_gpio = -EINVAL,
+	.cd_gpio = -EINVAL,
+	.cd_type = ESDHC_CD_PERMANENT,
 	.always_present = 1,
+	.support_8bit = 0,
 };
 
 static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
