@@ -67,6 +67,8 @@
 #include <linux/usbplugevent.h>
 #include <linux/pwm.h>
 
+#include <linux/input/zforce_ts.h>
+
 #include "devices.h"
 #include "usb.h"
 #include "crm_regs.h"
@@ -1780,13 +1782,18 @@ static struct imxi2c_platform_data mxci2c_100K_data = {
        .bitrate = 100000,
 };
 
+static struct zforce_ts_platdata zforce_ts_data = {
+	.x_max = 600,
+	.y_max = 800,
+	.gpio_int = TOUCH_INT,
+};
+
 static struct i2c_board_info mxc_i2c0_E60612_board_info[] __initdata = {
 	 {
-	 .type = "zforce-ir-touch",
-	 .addr = 0x50,
-	 .platform_data = TOUCH_INT,
-	 .irq = gpio_to_irq(TOUCH_INT),
-	 },
+		I2C_BOARD_INFO("zforce-ts", 0x50),
+		.platform_data = &zforce_ts_data,
+		.irq = gpio_to_irq(TOUCH_INT)
+	}
 };
 
 static struct i2c_board_info mxc_i2c0_E60622_board_info[] __initdata = {
@@ -2660,7 +2667,27 @@ static void __init mxc_board_init(void)
 	mxc_register_device(&mxc_pxp_v4l2, NULL);
 	mxc_register_device(&pm_device, &mx50_pm_data);
 //	if (enable_keypad)
-	
+
+	if(1==gptHWCFG->m_val.bDisplayResolution) {
+		// 1024x758 .
+		zforce_ts_data.x_max = 758;
+		zforce_ts_data.y_max = 1024;
+	}
+	else if(2==gptHWCFG->m_val.bDisplayResolution) {
+		// 1024x768
+		zforce_ts_data.x_max = 768;
+		zforce_ts_data.y_max = 1024;
+	}
+	else if(3==gptHWCFG->m_val.bDisplayResolution) {
+		// 1440x1080
+		zforce_ts_data.x_max = 1080;
+		zforce_ts_data.y_max = 1440;
+	}
+	else {
+		// 800x600 
+		zforce_ts_data.x_max = 600;
+		zforce_ts_data.y_max = 800;
+	}
 
 	iHWID = check_hardware_name();
 
