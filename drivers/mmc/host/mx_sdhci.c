@@ -1217,10 +1217,21 @@ static void sdhci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 	spin_unlock_irqrestore(&host->lock, flags);
 }
 
+static int sdhci_get_cd(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+
+	if (!host->plat_data || !host->plat_data->status)
+		return -ENOSYS;
+
+	return !host->plat_data->status(host->mmc->parent);
+}
+
 static const struct mmc_host_ops sdhci_ops = {
 	.request = sdhci_request,
 	.set_ios = sdhci_set_ios,
 	.get_ro = sdhci_get_ro,
+	.get_cd = sdhci_get_cd,
 	.enable_sdio_irq = sdhci_enable_sdio_irq,
 };
 
