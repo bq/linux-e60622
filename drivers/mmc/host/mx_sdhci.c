@@ -1831,6 +1831,14 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 	DBG("Suspending...\n");
 	iHWID = check_hardware_name();
 
+	/* Ugly hack to circumvent a hw bug on e60672
+	 * Preserve the information of the card detection before suspend.
+	 * This is a double of the code of the pm-notifier, because the
+	 * current kernel skips the suspending of the external card altogether.
+	 */
+	for (i = 0; i < chip->num_slots; i++)
+		chip->hosts[i]->mmc->was_present = chip->hosts[i]->mmc->ops->get_cd(chip->hosts[i]->mmc);
+
 	if (9==iHWID) {
 	}
 	else {

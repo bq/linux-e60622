@@ -184,6 +184,9 @@ struct mmc_host {
 	unsigned int		removed:1;	/* host is being removed */
 #endif
 
+	/* ugly hack to circumvent a hw bug on e60672 */
+	int			was_present;
+
 	/* Only used with MMC_CAP_DISABLE */
 	int			enabled;	/* host is enabled */
 	int			rescan_disable;	/* disable card detection */

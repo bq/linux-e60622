@@ -1349,15 +1349,31 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		mmc_detach_bus(host);
 		mmc_release_host(host);
 		host->pm_flags = 0;
+
+		/* Ugly hack to circumvent a hw bug on e60672
+		 * Preserve the information of the card detection before suspend.
+		 */
+		host->was_present = host->ops->get_cd(host);
+
 		break;
 
 	case PM_POST_SUSPEND:
 	case PM_POST_HIBERNATION:
-
 		spin_lock_irqsave(&host->lock, flags);
 		host->rescan_disable = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
-		mmc_detect_change(host, 0);
+
+		/* Ugly hack to circumvent a hw bug on e60672
+		 * Only rescan the host if the card was present before suspend
+		 * or is present now.
+		 * The hw-bug only triggers a wrong zforce read when done on an
+		 * empty card slot. For the case where the card was removed during
+		 * suspend the user has to live with an occasional touch error.
+		 */
+		if (host->was_present || host->ops->get_cd(host))
+			mmc_detect_change(host, 0);
+		else
+			printk(KERN_INFO "skipping rescan\n");
 
 	}
 
