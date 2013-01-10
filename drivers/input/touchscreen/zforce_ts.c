@@ -118,6 +118,8 @@ struct zforce_ts {
 	u16			version_build;
 	u16			version_rev;
 
+	struct mutex		access_mutex;
+
 	struct completion	command_done;
 	struct mutex		command_mutex;
 	int			command_waiting;
@@ -139,11 +141,15 @@ static int zforce_command(struct zforce_ts *ts, u8 cmd)
 	buf[1] = 1; /* data size, command only */
 	buf[2] = cmd;
 
+	mutex_lock(&ts->access_mutex);
+
 	ret = i2c_master_send(client, &buf[0], ARRAY_SIZE(buf));
 	if (ret < 0) {
 		dev_err(&client->dev, "i2c send data request error: %d\n", ret);
 		return ret;
 	}
+
+	mutex_unlock(&ts->access_mutex);
 
 	return 0;
 }
@@ -165,11 +171,15 @@ static int zforce_send_wait(struct zforce_ts *ts, const char *buf, const int len
 
 	ts->command_waiting = buf[2];
 
+	mutex_lock(&ts->access_mutex);
+
 	ret = i2c_master_send(client, buf, len);
 	if (ret < 0) {
 		dev_err(&client->dev, "i2c send data request error: %d\n", ret);
 		goto unlock;
 	}
+
+	mutex_unlock(&ts->access_mutex);
 
 	dev_dbg(&client->dev, "waiting for result for command 0x%x\n", buf[2]);
 
@@ -443,6 +453,8 @@ static int zforce_read_packet(struct zforce_ts *ts, u8 *buf)
 	struct i2c_client *client = ts->client;
 	int ret;
 
+	mutex_lock(&ts->access_mutex);
+
 	/* read 2 byte message header */
 	ret = i2c_master_recv(client, buf, 2);
 	if (ret < 0) {
@@ -467,6 +479,8 @@ static int zforce_read_packet(struct zforce_ts *ts, u8 *buf)
 		dev_err(&client->dev, "error reading payload: %d\n", ret);
 		return ret;
 	}
+
+	mutex_unlock(&ts->access_mutex);
 
 	dev_dbg(&client->dev, "read %d bytes for response command 0x%x\n",
 		buf[PAYLOAD_LENGTH], buf[PAYLOAD_BODY]);
@@ -731,6 +745,7 @@ static int zforce_probe(struct i2c_client *client,
 	if (pdata->init_hw)
 		pdata->init_hw(client);
 
+	mutex_init(&ts->access_mutex);
 	mutex_init(&ts->command_mutex);
 	ts->client = client;
 
