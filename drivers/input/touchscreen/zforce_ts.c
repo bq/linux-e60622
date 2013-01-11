@@ -626,13 +626,13 @@ static int zforce_suspend(struct device *dev)
 	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
 	int ret = 0;
 
-	mutex_lock(&input->mutex);
-	ts->suspending = true;
-
 	if (!gpio_get_value(pdata->gpio_int)) {
 		dev_err(&client->dev, "data request pending during suspend, this should not happen\n");
 		return -EBUSY;
 	}
+
+	mutex_lock(&input->mutex);
+	ts->suspending = true;
 
 	/* when configured as wakeup source, device should always wake system
 	 * therefore start device if necessary
