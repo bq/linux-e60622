@@ -409,6 +409,9 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 #endif
 		}
 
+		if (mmc_card_removed(card))
+			goto cmd_abort;
+
 		if (brq.cmd.error || brq.stop.error || brq.data.error) {
 			if (rq_data_dir(req) == READ) {
 				/*
@@ -460,6 +463,9 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		spin_unlock_irq(&md->lock);
 	}
 
+cmd_abort:
+	if (mmc_card_removed(card))
+		req->cmd_flags |= REQ_QUIET;
 	mmc_release_host(card->host);
 
 	spin_lock_irq(&md->lock);
