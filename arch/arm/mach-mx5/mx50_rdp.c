@@ -1789,10 +1789,14 @@ static struct zforce_ts_platdata zforce_ts_data = {
 };
 
 static struct i2c_board_info mxc_i2c0_E60612_board_info[] __initdata = {
-	 {
-		I2C_BOARD_INFO("zforce-ts", 0x50),
+	{
+	 .type = "zforce-ir-touch",
+	 .addr = 0x50,
+	 .platform_data = TOUCH_INT,
+	 .irq = gpio_to_irq(TOUCH_INT),
+/*		I2C_BOARD_INFO("zforce-ts", 0x50),
 		.platform_data = &zforce_ts_data,
-		.irq = gpio_to_irq(TOUCH_INT)
+		.irq = gpio_to_irq(TOUCH_INT)*/
 	}
 };
 
