@@ -108,7 +108,6 @@ struct zforce_ts {
 
 	bool			stopped;
 	bool			suspending;
-	bool			suspended;
 	bool			boot_complete;
 
 	/* Firmware version information */
@@ -512,16 +511,6 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	if (!ts->suspending)
 		pm_stay_awake(&client->dev);
 
-	/* As we're triggering on the low level, and the data is still sitting
-	 * in the controller, the interrupt will just retrigger later,
-	 * hopefully after the device is resumed.
-	 */
-	if (ts->suspended) {
-		dev_dbg(&client->dev, "device is suspended, not handling interrupt at this point\n");
-		msleep(20);
-		goto out;
-	}
-
 	while(!gpio_get_value(pdata->gpio_int)) {
 		ret = zforce_read_packet(ts, payload_buffer);
 		if (ret < 0) {
@@ -577,7 +566,6 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 		}
 	}
 
-out:
 	if (!ts->suspending)
 		pm_relax(&client->dev);
 
@@ -660,7 +648,7 @@ static int zforce_suspend(struct device *dev)
 			goto unlock;
 	}
 
-	ts->suspended = true;
+	mutex_lock(&ts->access_mutex);
 
 unlock:
 	ts->suspending = false;
@@ -678,7 +666,7 @@ static int zforce_resume(struct device *dev)
 
 	mutex_lock(&input->mutex);
 
-	ts->suspended = false;
+	mutex_unlock(&ts->access_mutex);
 
 	/* FIXME: remove gSleep_Mode_Suspend condition */
 	if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend) {
