@@ -18,7 +18,6 @@
  *
  */
 
-#define DEBUG 1
 #include <linux/module.h>
 #include <linux/hrtimer.h>
 #include <linux/slab.h>
