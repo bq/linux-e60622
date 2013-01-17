@@ -527,6 +527,11 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 
 		switch (payload[RESPONSE_ID]) {
 		case NOTIFICATION_TOUCH:
+			/* FIXME: remove gSleep_Mode_Suspend condition */
+			/* Case for touch-events received when suspending.
+			 * We want to always report them. */
+			if (ts->suspending && (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend))
+				pm_wakeup_event(&client->dev, 500);
 			zforce_touch_event(ts, &payload[RESPONSE_DATA]);
 			break;
 		case NOTIFICATION_BOOTCOMPLETE:
