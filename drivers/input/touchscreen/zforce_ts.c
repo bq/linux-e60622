@@ -499,6 +499,9 @@ static void zforce_complete(struct zforce_ts *ts, int cmd, int result)
 	}
 }
 
+/* FIXME: not for upstream */
+extern int gSleep_Mode_Suspend;
+
 static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 {
 	struct zforce_ts *ts = dev_id;
@@ -508,7 +511,9 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	u8 payload_buffer[512];
 	u8 *payload;
 
-	if (!ts->suspending)
+	/* FIXME: remove gSleep_Mode_Suspend condition */
+	/* Don't emit wakeup events from commands running during suspend */
+	if (!ts->suspending && (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend))
 		pm_stay_awake(&client->dev);
 
 	while(!gpio_get_value(pdata->gpio_int)) {
@@ -566,7 +571,8 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 		}
 	}
 
-	if (!ts->suspending)
+	/* FIXME: remove gSleep_Mode_Suspend condition */
+	if (!ts->suspending && (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend))
 		pm_relax(&client->dev);
 
 	return IRQ_HANDLED;
@@ -601,9 +607,6 @@ static void zforce_input_close(struct input_dev *dev)
 
 	return;
 }
-
-/* FIXME: not for upstream */
-extern int gSleep_Mode_Suspend;
 
 static int zforce_suspend(struct device *dev)
 {
