@@ -560,7 +560,13 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 			 */
 			if (payload[RESPONSE_DATA + 8] == 255) {
 				printk("[%s-%d] zforce got confused, doing reset\n", __func__, __LINE__);
-				zforce_stop(ts);
+				ret = zforce_stop(ts);
+				if (ret) {
+					msleep(300);
+					ret = zforce_stop(ts);
+					if (ret)
+						break;
+				}
 				msleep(100);
 				zforce_start(ts);
 			}
