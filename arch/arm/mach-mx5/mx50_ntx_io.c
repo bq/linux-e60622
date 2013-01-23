@@ -1465,13 +1465,13 @@ static irqreturn_t power_key_int(int irq, void *dev_id)
 	return 0;
 }
 
-static struct timer_list acin_pg_timer;
+static struct delayed_work acin_work;
 static int g_acin_pg_debounce;
 typedef void (*usb_insert_handler) (char inserted);
 extern usb_insert_handler mxc_misc_report_usb;
 extern void ntx_charger_online_event_callback(void);
 
-static void acin_pg_chk(unsigned long v)
+static void acin_pg_chk(struct work_struct *work)
 {
 	int i;
 
@@ -1483,7 +1483,7 @@ static void acin_pg_chk(unsigned long v)
 				ntx_charger_online_event_callback ();
 			}
 		}
-		mod_timer(&acin_pg_timer, jiffies + 1);
+		schedule_delayed_work(&acin_work, jiffies + 1);
 	}
 	else {
 		//if (gLastBatValue)
@@ -1592,8 +1592,8 @@ static irqreturn_t ac_in_int(int irq, void *dev_id)
 	}
 	
 	g_acin_pg_debounce = 0;
-	mod_timer(&acin_pg_timer, jiffies + 1);
-	return 0;
+	schedule_delayed_work(&acin_work, jiffies + 1);
+	return IRQ_HANDLED;
 }
 
 /*!
@@ -1681,8 +1681,7 @@ static int gpio_initials(void)
 			pr_info("register ACIN_PG interrupt failed\n");
 		else
 			enable_irq_wake(irq);
-		acin_pg_timer.function = acin_pg_chk;
-		init_timer(&acin_pg_timer);
+		INIT_DELAYED_WORK(&acin_work, acin_pg_chk);
 	}
 	mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI2_MISO__GPIO_4_18);
 	gpio_request(GPIO_CHG, "charge_det");
