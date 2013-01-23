@@ -44,7 +44,6 @@ int mxc_epdc_fb_check_update_complete(u32 update_marker, struct fb_info *info)
 		(struct mxc_epdc_fb_data *)info:g_fb_data;
 	struct update_marker_data *next_marker;
 	struct update_marker_data *temp;
-	unsigned long flags;
 	bool marker_found = false;
 	int ret = 0;
 	
@@ -63,7 +62,7 @@ int mxc_epdc_fb_check_update_complete(u32 update_marker, struct fb_info *info)
 	 */
 
 	/* Grab queue lock to protect access to marker list */
-	spin_lock_irqsave(&fb_data->queue_lock, flags);
+	mutex_lock(&fb_data->queue_mutex);
 
 	list_for_each_entry_safe(next_marker, temp,
 		&fb_data->full_marker_list, full_list) {
@@ -78,7 +77,7 @@ int mxc_epdc_fb_check_update_complete(u32 update_marker, struct fb_info *info)
 		}
 	}
 
-	spin_unlock_irqrestore(&fb_data->queue_lock, flags);
+	mutex_unlock(&fb_data->queue_mutex);
 
 	/*
 	 * If marker not found, it has either been signalled already
