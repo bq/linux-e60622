@@ -2685,10 +2685,16 @@ static int do_scsi_command(struct fsg_dev *fsg)
 static int received_cbw(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 {
 	struct usb_request		*req = bh->outreq;
-	struct fsg_bulk_cb_wrap	*cbw = req->buf;
+	struct fsg_bulk_cb_wrap	*cbw;
+
+	/* Basic check */
+	if (!req || !fsg)
+		return -EINVAL;
+
+	cbw = req->buf;
 
 	/* Was this a real packet?  Should it be ignored? */
-	if (!req || req->status || !fsg || test_bit(IGNORE_BULK_OUT, &fsg->atomic_bitflags))
+	if (req->status || test_bit(IGNORE_BULK_OUT, &fsg->atomic_bitflags))
 		return -EINVAL;
 
 	/* Is the CBW valid? */
