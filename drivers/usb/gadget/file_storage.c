@@ -2766,6 +2766,10 @@ static int get_next_command(struct fsg_dev *fsg)
 				return rc;
 		}
 
+		/* Basic check */
+		if (!fsg || !bh || !bh->outreq)
+			return -EINVAL;
+
 		/* Queue a request to read a Bulk-only CBW */
 		set_bulk_out_req_length(fsg, bh, USB_BULK_CB_WRAP_LEN);
 		bh->outreq->short_not_ok = 1;
