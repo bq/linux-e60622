@@ -1475,21 +1475,26 @@ static void acin_pg_chk(struct work_struct *work)
 {
 	int i;
 
+	printk("acin_pg_chk\n");
 	if (!gpio_get_value (GPIO_ACIN_PG)) {
 		++g_acin_pg_debounce;
-		if (10 == g_acin_pg_debounce) {
+		if (10 <= g_acin_pg_debounce) {
 			if (gIsCustomerUi) {
+				printk("reporing usb plugged in\n");
 				mxc_misc_report_usb(1);
 				ntx_charger_online_event_callback ();
 			}
+			g_acin_pg_debounce = 0;
+		} else {
+			schedule_delayed_work(&acin_work, jiffies + 1);
 		}
-		schedule_delayed_work(&acin_work, jiffies + 1);
 	}
 	else {
 		//if (gLastBatValue)
 		//	gLastBatValue += 50;
 
 		if (gIsCustomerUi) {
+			printk("reporting usb removed\n");
 			mxc_misc_report_usb(0);
 			ntx_charger_online_event_callback ();
 		}
@@ -1585,6 +1590,7 @@ int ntx_get_battery_vol (void)
 static irqreturn_t ac_in_int(int irq, void *dev_id)
 {
 	gUSB_Change_Tick = jiffies;	// do not check battery value in 6 seconds
+	printk("usb-int %d\n", gpio_get_value(GPIO_ACIN_PG));
 	if (gpio_get_value (GPIO_ACIN_PG)) 
 		set_irq_type(irq, IRQF_TRIGGER_FALLING);
 	else {
