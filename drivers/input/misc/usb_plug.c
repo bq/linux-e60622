@@ -20,12 +20,16 @@ struct usb_plug_priv {
 	int (*get_status) (void);
 };
 
+static unsigned long last_event = 0;
 static struct usb_plug_priv *mxc_usbplug;
 extern void set_pmic_dc_charger_state(int dccharger);
 
 static void usb_plug_handler(void *dummy)
 {
 	int plugged = mxc_usbplug->get_status();
+
+	last_event = jiffies;
+
 	if (plugged) {
 		int charger;
 		int ret;
@@ -69,6 +73,20 @@ static void single_shot_worker(struct work_struct *work)
 }
 static DECLARE_DELAYED_WORK(single_shot_work, single_shot_worker);
 
+static int usb_plug_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+
+	if (last_event > 0 && time_before(jiffies, last_event + 10 * HZ)) {
+		dev_warn(&pdev->dev, "processing an usb event, not suspending\n");
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(usb_plug_pm_ops, usb_plug_suspend, NULL);
+
 static int __devinit usb_plug_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -107,6 +125,7 @@ static struct platform_driver usb_plug_driver = {
 	.driver		= {
 		.name	= "usb_plug",
 		.owner	= THIS_MODULE,
+		.pm	= &usb_plug_pm_ops,
 	},
 };
 
