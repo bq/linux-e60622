@@ -1490,7 +1490,7 @@ static void acin_pg_chk(struct work_struct *work)
 			g_acin_pg_debounce = 0;
 		} else {
 			printk("scheduling new acin_pg_chk\n");
-			schedule_delayed_work(&acin_work, jiffies + 1);
+			schedule_delayed_work(&acin_work, 2);
 		}
 	}
 	else {
@@ -1506,7 +1506,7 @@ static void acin_pg_chk(struct work_struct *work)
 			g_acin_pg_debounce = 0;
 		} else {
 			printk("scheduling new acin_pg_chk\n");
-			schedule_delayed_work(&acin_work, jiffies + 1);
+			schedule_delayed_work(&acin_work, 2);
 		}
 	}
 }
