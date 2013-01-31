@@ -1470,6 +1470,7 @@ static int g_acin_pg_debounce;
 typedef void (*usb_insert_handler) (char inserted);
 extern usb_insert_handler mxc_misc_report_usb;
 extern void ntx_charger_online_event_callback(void);
+extern struct platform_device mxc_usb_plug_device;
 
 static void acin_pg_chk(struct work_struct *work)
 {
@@ -1482,21 +1483,30 @@ static void acin_pg_chk(struct work_struct *work)
 			if (gIsCustomerUi) {
 				printk("reporing usb plugged in\n");
 				mxc_misc_report_usb(1);
+				printk("usb report done\n");
 				ntx_charger_online_event_callback ();
+				printk("charger report done\n");
 			}
 			g_acin_pg_debounce = 0;
 		} else {
+			printk("scheduling new acin_pg_chk\n");
 			schedule_delayed_work(&acin_work, jiffies + 1);
 		}
 	}
 	else {
-		//if (gLastBatValue)
-		//	gLastBatValue += 50;
-
-		if (gIsCustomerUi) {
-			printk("reporting usb removed\n");
-			mxc_misc_report_usb(0);
-			ntx_charger_online_event_callback ();
+		++g_acin_pg_debounce;
+		if (10 <= g_acin_pg_debounce) {
+			if (gIsCustomerUi) {
+				printk("reporting usb removed\n");
+				mxc_misc_report_usb(0);
+				printk("usb report done\n");
+				ntx_charger_online_event_callback ();
+				printk("charger report done\n");
+			}
+			g_acin_pg_debounce = 0;
+		} else {
+			printk("scheduling new acin_pg_chk\n");
+			schedule_delayed_work(&acin_work, jiffies + 1);
 		}
 	}
 }
