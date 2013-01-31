@@ -1591,11 +1591,11 @@ static irqreturn_t ac_in_int(int irq, void *dev_id)
 {
 	gUSB_Change_Tick = jiffies;	// do not check battery value in 6 seconds
 	printk("usb-int %d\n", gpio_get_value(GPIO_ACIN_PG));
-	if (gpio_get_value (GPIO_ACIN_PG)) 
+/*	if (gpio_get_value (GPIO_ACIN_PG)) 
 		set_irq_type(irq, IRQF_TRIGGER_FALLING);
 	else {
 		set_irq_type(irq, IRQF_TRIGGER_RISING);
-	}
+	}*/
 	
 	g_acin_pg_debounce = 0;
 	schedule_delayed_work(&acin_work, jiffies + 1);
@@ -1678,16 +1678,17 @@ static int gpio_initials(void)
 		/* Set AC in as wakeup resource */
 		irq = gpio_to_irq(GPIO_ACIN_PG);
 		
-		if (gpio_get_value (GPIO_ACIN_PG))
+		/*if (gpio_get_value (GPIO_ACIN_PG))
 			set_irq_type(irq, IRQF_TRIGGER_FALLING);
 		else
-			set_irq_type(irq, IRQF_TRIGGER_RISING);
+			set_irq_type(irq, IRQF_TRIGGER_RISING);*/
+		INIT_DELAYED_WORK(&acin_work, acin_pg_chk);
+		set_irq_type(irq, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING);
 		ret = request_irq(irq, ac_in_int, 0, "acin_pg", 0);
 		if (ret)
 			pr_info("register ACIN_PG interrupt failed\n");
 		else
 			enable_irq_wake(irq);
-		INIT_DELAYED_WORK(&acin_work, acin_pg_chk);
 	}
 	mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI2_MISO__GPIO_4_18);
 	gpio_request(GPIO_CHG, "charge_det");
