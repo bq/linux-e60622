@@ -1465,6 +1465,7 @@ static irqreturn_t power_key_int(int irq, void *dev_id)
 	return 0;
 }
 
+static struct workqueue_struct *acin_wq;
 static struct delayed_work acin_work;
 static int g_acin_pg_debounce;
 typedef void (*usb_insert_handler) (char inserted);
@@ -1490,7 +1491,7 @@ static void acin_pg_chk(struct work_struct *work)
 			g_acin_pg_debounce = 0;
 		} else {
 			printk("scheduling new acin_pg_chk\n");
-			schedule_delayed_work(&acin_work, 2);
+			queue_delayed_work(acin_wq, &acin_work, 1);
 		}
 	}
 	else {
@@ -1506,7 +1507,7 @@ static void acin_pg_chk(struct work_struct *work)
 			g_acin_pg_debounce = 0;
 		} else {
 			printk("scheduling new acin_pg_chk\n");
-			schedule_delayed_work(&acin_work, 2);
+			queue_delayed_work(acin_wq, &acin_work, 1);
 		}
 	}
 }
@@ -1608,7 +1609,7 @@ static irqreturn_t ac_in_int(int irq, void *dev_id)
 	}*/
 	
 	g_acin_pg_debounce = 0;
-	schedule_delayed_work(&acin_work, jiffies + 1);
+	queue_delayed_work(acin_wq, &acin_work, 4);
 	return IRQ_HANDLED;
 }
 
@@ -1692,6 +1693,7 @@ static int gpio_initials(void)
 			set_irq_type(irq, IRQF_TRIGGER_FALLING);
 		else
 			set_irq_type(irq, IRQF_TRIGGER_RISING);*/
+		acin_wq = create_freezeable_workqueue("usb plugin");
 		INIT_DELAYED_WORK(&acin_work, acin_pg_chk);
 		set_irq_type(irq, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING);
 		ret = request_irq(irq, ac_in_int, 0, "acin_pg", 0);
