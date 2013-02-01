@@ -38,7 +38,6 @@
 #include <linux/delay.h>
 #include <linux/uaccess.h>
 #include <mach/hardware.h>
-#include <linux/gpio.h>
 
 #include "pmic.h"
 
@@ -432,8 +431,6 @@ static void add_crc16(unsigned char *data, int len) {
 
 }
 
-#define GPIO_PWR_SW		(3*32 + 10)	/*GPIO_4_10 */
-
 static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int nread, int crc) {
 
 	struct i2c_client *client = msp430_client;
@@ -441,13 +438,6 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 	u8 buffer[32];
 	u16 addr = client->addr;
 	u16 flags = client->flags;
-	int ret;
-
-	ret = gpio_get_value (GPIO_PWR_SW);
-	if (!ret) {
-		printk(KERN_INFO "msp430_cmd blocked by pressed power key\n");
-		return -EINVAL;
-	}
 
 	struct i2c_msg msg[2] = {
 		{addr, flags, 2+nwrite, buffer},
@@ -494,7 +484,6 @@ unsigned int msp430_read(unsigned int reg)
 	int i2c_ret;
 	int retry_count = 5;
 	int value = -1;
-	int ret;
 	u8 buf0[2], buf1[2]={0,0};
 	u16 addr;
 	u16 flags;
@@ -506,12 +495,6 @@ unsigned int msp430_read(unsigned int reg)
 	if (!msp430_client) {
 		printk("[%s-%d] MSP430 not probed...\n",__FUNCTION__,__LINE__);
 		return 0;
-	}
-
-	ret = gpio_get_value (GPIO_PWR_SW);
-	if (!ret) {
-		printk(KERN_INFO "msp430_read blocked by pressed power key\n");
-		return -EINVAL;
 	}
 	
 	if ((0x60 == reg) && (NEWMSP))
@@ -544,20 +527,12 @@ int msp430_write(unsigned int reg, unsigned int value)
 	u16 flags;
 	u8 buf[4];
 	int i2c_ret;
-	int ret;
 	struct i2c_msg msg = { 0, 0, 3, buf };
 
 	if (!msp430_client) {
 		printk("[%s-%d] MSP430 not probed...\n",__FUNCTION__,__LINE__);
 		return 0;
 	}
-
-	ret = gpio_get_value (GPIO_PWR_SW);
-	if (!ret) {
-		printk(KERN_INFO "msp430_write blocked by pressed power key\n");
-		return -EINVAL;
-	}
-
 	msg.addr = client->addr;
 	msg.flags = client->flags;
 	
