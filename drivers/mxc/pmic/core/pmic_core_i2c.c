@@ -431,6 +431,8 @@ static void add_crc16(unsigned char *data, int len) {
 
 }
 
+extern struct mutex power_key_mutex;
+
 static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int nread, int crc) {
 
 	struct i2c_client *client = msp430_client;
@@ -444,6 +446,8 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 		{addr, flags | I2C_M_RD, nread, outdata},
 	};
 	int nmsg = (nread > 0) ? 2 : 1;
+
+	mutex_lock(&power_key_mutex);
 
 	buffer[0] = cmd;
 	buffer[1] = arg;
@@ -463,7 +467,10 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 		i2c_ret = i2c_transfer(client->adapter, msg, nmsg);
 		if (i2c_ret >= 0) break;
 		pr_err("%s: error: cmd 0x%02x (nwrite=%d nread=%d)\n", __func__, cmd, nwrite, nread);
-		if (i == 5) return -EIO;
+		if (i == 5) {
+			mutex_unlock(&power_key_mutex);
+			return -EIO;
+		}
 		mdelay(50);
 	}
 
@@ -471,6 +478,7 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 	//if (nread > 0) for (i=0; i<msg[1].len; i++) printk(" %02x", msg[1].buf[i]);
 	//printk("\n");
 
+	mutex_unlock(&power_key_mutex);
 	return 0;
 
 
@@ -500,6 +508,8 @@ unsigned int msp430_read(unsigned int reg)
 	if ((0x60 == reg) && (NEWMSP))
 		return 0;
 	
+	mutex_lock(&power_key_mutex);
+
 	msg[0].addr = client->addr;
 	msg[0].flags = client->flags;
 	msg[1].addr = client->addr;
@@ -517,6 +527,7 @@ unsigned int msp430_read(unsigned int reg)
 		schedule_timeout (50);
 	}
 //	printk("[%s-%d] reg:0x%02x, value:0x%04x\n",__FUNCTION__,__LINE__, reg, value);
+	mutex_unlock(&power_key_mutex);
 	return value;
 }
 
@@ -535,7 +546,9 @@ int msp430_write(unsigned int reg, unsigned int value)
 	}
 	msg.addr = client->addr;
 	msg.flags = client->flags;
-	
+
+	mutex_lock(&power_key_mutex);
+
 //	printk ("[%s-%d] 0x%02X 0x%04X\n",__FUNCTION__,__LINE__,reg,value);
 	pr_debug("w r:%02x,v:%04x\n", reg, value);
 	buf[0] = reg & 0xff;
@@ -548,9 +561,11 @@ int msp430_write(unsigned int reg, unsigned int value)
 		       __func__, reg, value);
 		ntx_msp430_i2c_force_release ();
 		schedule_timeout (50);
+		mutex_unlock(&power_key_mutex);
 		return -EIO;
 	}
 
+	mutex_unlock(&power_key_mutex);
 	return i2c_ret;
 }
 
