@@ -1430,10 +1430,11 @@ int pxa168_chechk_suspend (void)
 	return 1;
 }
 
-static struct timer_list power_key_timer;
+static struct workqueue_struct *power_key_wq;
+static struct delayed_work power_key_work;
 extern void mxc_kpp_report_power(int isDown);
 
-static void power_key_chk(unsigned long v)
+static void power_key_chk(struct work_struct *work)
 {
 	int pwr_key;
 	
@@ -1441,28 +1442,40 @@ static void power_key_chk(unsigned long v)
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?1:0;
 	else
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?0:1;
-	
+
 	if (pwr_key) {
 		++g_power_key_debounce;
-		if ((2 == g_power_key_debounce) && gIsCustomerUi)
-			mxc_kpp_report_power(1);
-		mod_timer(&power_key_timer, jiffies + 1);
+		if (4 <= g_power_key_debounce) {
+			if (gIsCustomerUi) {
+				printk("reporting power key down\n");
+				mxc_kpp_report_power(1);
+			}
+			g_power_key_debounce = 0;
+		} else {
+			printk("scheduling new power_key_chk\n");
+			queue_delayed_work(power_key_wq, &power_key_work, 1);
+		}
+	} else {
+		++g_power_key_debounce;
+		if (4 <= g_power_key_debounce) {
+			if (gIsCustomerUi) {
+				printk("reporting power key up\n");
+				mxc_kpp_report_power(0);
+			}
+			g_power_key_debounce = 0;
+		} else {
+			printk("scheduling new power_key_chk\n");
+			queue_delayed_work(power_key_wq, &power_key_work, 1);
+		}
 	}
-	else if (gIsCustomerUi)
-		mxc_kpp_report_power(0);
-}
-
-void power_key_int_function(void)
-{
-	gMxcPowerKeyIrqTriggered = 1;
-	g_power_key_debounce = 0;
-	mod_timer(&power_key_timer, jiffies + 1);
 }
 
 static irqreturn_t power_key_int(int irq, void *dev_id)
 {
-	power_key_int_function();
-	return 0;
+	gMxcPowerKeyIrqTriggered = 1;
+	g_power_key_debounce = 0;
+	queue_delayed_work(power_key_wq, &power_key_work, 1);
+	return IRQ_HANDLED;
 }
 
 static struct workqueue_struct *acin_wq;
@@ -1740,10 +1753,13 @@ static int gpio_initials(void)
 		/* Set power key as wakeup resource */
 		irq = gpio_to_irq(GPIO_PWR_SW);
 	
-		if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
+/*		if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 			set_irq_type(irq, IRQF_TRIGGER_RISING);
 		else
-			set_irq_type(irq, IRQF_TRIGGER_FALLING);
+			set_irq_type(irq, IRQF_TRIGGER_FALLING);*/
+		power_key_wq = create_freezeable_workqueue("power key");
+		INIT_DELAYED_WORK(&power_key_work, power_key_chk);
+		set_irq_type(irq, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING);
 		ret = request_irq(irq, power_key_int, 0, "power_key", 0);
 		if (ret)
 			pr_info("register on-off key interrupt failed\n");
@@ -1751,8 +1767,6 @@ static int gpio_initials(void)
 			enable_irq_wake(irq);
 	}
 	#endif //]GPIOFN_PWRKEY
-	power_key_timer.function = power_key_chk;
-	init_timer(&power_key_timer);
 	
 	tle4913_init();
 	
