@@ -1430,6 +1430,8 @@ int pxa168_chechk_suspend (void)
 	return 1;
 }
 
+struct mutex power_key_mutex;
+bool power_key_pressed = 0;
 static struct workqueue_struct *power_key_wq;
 static struct delayed_work power_key_work;
 extern void mxc_kpp_report_power(int isDown);
@@ -1447,7 +1449,15 @@ static void power_key_chk(struct work_struct *work)
 		++g_power_key_debounce;
 		if (4 <= g_power_key_debounce) {
 			if (gIsCustomerUi) {
+				if (!power_key_pressed) {
+					pr_info("locking power_key_mutex\n");
+					mutex_lock(&power_key_mutex);
+				} else {
+					pr_warn("double power key down\n");
+				}
+
 				printk("reporting power key down\n");
+				power_key_pressed = 1;
 				mxc_kpp_report_power(1);
 			}
 			g_power_key_debounce = 0;
@@ -1459,7 +1469,15 @@ static void power_key_chk(struct work_struct *work)
 		++g_power_key_debounce;
 		if (4 <= g_power_key_debounce) {
 			if (gIsCustomerUi) {
+				if (power_key_pressed) {
+					pr_info("unlocking power_key_mutex\n");
+					mutex_unlock(&power_key_mutex);
+				} else {
+					pr_warn("double power key up\n");
+				}
+
 				printk("reporting power key up\n");
+				power_key_pressed = 0;
 				mxc_kpp_report_power(0);
 			}
 			g_power_key_debounce = 0;
@@ -1757,6 +1775,7 @@ static int gpio_initials(void)
 			set_irq_type(irq, IRQF_TRIGGER_RISING);
 		else
 			set_irq_type(irq, IRQF_TRIGGER_FALLING);*/
+		mutex_init(&power_key_mutex);
 		power_key_wq = create_freezeable_workqueue("power key");
 		INIT_DELAYED_WORK(&power_key_work, power_key_chk);
 		set_irq_type(irq, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING);
