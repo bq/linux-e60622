@@ -1432,6 +1432,7 @@ int pxa168_chechk_suspend (void)
 
 struct mutex power_key_mutex;
 bool power_key_pressed = 0;
+bool power_key_before_sleep = 0;
 static struct workqueue_struct *power_key_wq;
 static struct delayed_work power_key_work;
 extern void mxc_kpp_report_power(int isDown);
@@ -2086,6 +2087,9 @@ unsigned long gUart2_ucr1;
 
 void ntx_gpio_suspend (void)
 {
+	/* track the state of the power button before sleep */
+	power_key_before_sleep = power_key_pressed;
+
 #if 0
 	printk ("[%s-%d] %s ()\n",__FILE__,__LINE__,__func__);
 	printk ("\t MXC_CCM_CCGR0	0x%08X\n",__raw_readl(MXC_CCM_CCGR0));
@@ -2200,12 +2204,23 @@ void ntx_gpio_suspend (void)
 
 void ntx_gpio_resume (void)
 {
+	int pwr_key;
+	
 	__raw_writel(gUart2_ucr1, ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
 /* Needs to be disabled to prevent hangs with Freescale patch
  * ENGR00223524 MX508-Fix the incorrect reset by SRTC
  *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
  */
 	
+	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
+		pwr_key = gpio_get_value (GPIO_PWR_SW)?1:0;
+	else
+		pwr_key = gpio_get_value (GPIO_PWR_SW)?0:1;
+
+	if (pwr_key != power_key_before_sleep) {
+		pr_warn("power key state changed during suspend!\n");
+	}
+
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
 	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {
 #ifndef DIGITIZER_TEST
