@@ -2219,6 +2219,19 @@ void ntx_gpio_resume (void)
 
 	if (pwr_key != power_key_before_sleep) {
 		pr_warn("power key state changed during suspend!\n");
+
+		/* the badest state would be, we went to suspend with the mutex locked
+		 * but the key was released after, so we wakeup without the key being down.
+		 * This would result in the mutex only being unlocked after the next power-key
+		 * press and release cycle. So we unlock the mutex here in this case.
+		 * The g_power_key_debounce check is a hackish way to make sure we're not currently
+		 * debouncing a power button release.
+		 */
+		if (!pwr_key && mutex_is_locked(&power_key_mutex) && g_power_key_debounce == 0) {
+			pr_warn("forcefully unlocking power_key_mutex\n");
+			power_key_pressed = 0;
+			mutex_unlock(&power_key_mutex);
+		}
 	}
 
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
