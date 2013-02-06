@@ -1792,6 +1792,7 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 	struct sdhci_chip *chip;
 	int i, ret;
 	int iHWID;
+	int skip_dev_id;
 
 	chip = dev_get_drvdata(&pdev->dev);
 	if (!chip)
@@ -1800,13 +1801,23 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 	DBG("Suspending...\n");
 	iHWID = check_hardware_name();
 
-	if ( (9!=iHWID) && (1 == pdev->id)) {
-		// skip external SD suspend .
+	if (9==iHWID) {
+	}
+	else {
+		if(11==iHWID) {
+			skip_dev_id=0 ;//SD1 .
+		}
+		else {
+			skip_dev_id=1 ;//SD2 .
+		}
+		if (skip_dev_id == pdev->id) {
+			// skip external SD suspend .
 		 
-		printk ("[%s-%d] skip suspend for mmc%d\n",__func__,__LINE__,pdev->id);
-		if (!gSleep_Mode_Suspend)
-			enable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
-		return 0;	// Joseph 100323 test
+			printk ("[%s-%d] skip suspend for mmc%d\n",__func__,__LINE__,pdev->id);
+			if (!gSleep_Mode_Suspend)
+				enable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
+			return 0;	// Joseph 100323 test
+		}
 	}
 	
 	if(gptHWCFG->m_val.bCustomer != 5) {
@@ -1835,7 +1846,7 @@ static int sdhci_resume(struct platform_device *pdev)
 	struct sdhci_chip *chip;
 	int i, ret;
 	int iHWID;
-
+	int skip_dev_id;
 
 	chip = dev_get_drvdata(&pdev->dev);
 	if (!chip)
@@ -1844,14 +1855,25 @@ static int sdhci_resume(struct platform_device *pdev)
 	DBG("Resuming...\n");
 	iHWID = check_hardware_name();
 
-	if ( (9!=iHWID) && (1 == pdev->id) ) {
-		// external SD .
-		
-		printk ("[%s-%d] skip resume for mmc%d\n",__func__,__LINE__,pdev->id);
-		if (!gSleep_Mode_Suspend)
-			disable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
-		return 0;	// Joseph 100323 test
+	if (9==iHWID) {
 	}
+	else { 
+		if(11==iHWID) {
+			skip_dev_id=0;
+		}
+		else {
+			skip_dev_id=1;
+		}
+
+		if(skip_dev_id == pdev->id)  {
+			// external SD .
+			printk ("[%s-%d] skip resume for mmc%d\n",__func__,__LINE__,pdev->id);
+			if (!gSleep_Mode_Suspend)
+				disable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
+			return 0;	// Joseph 100323 test
+		}
+	}
+	
 	if(gptHWCFG->m_val.bCustomer != 5) {
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])

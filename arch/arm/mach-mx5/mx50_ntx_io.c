@@ -22,7 +22,7 @@
 #include <linux/freezer.h>
 
 
-#define NTX_GPIO_KEYS		0
+//#define NTX_GPIO_KEYS		0
 #ifdef NTX_GPIO_KEYS //[
 
 #include <mach/common.h>
@@ -69,6 +69,7 @@
 #define G_SENSOR_INT	(4*32 + 25)	/*GPIO_5_25 */
 #define E50602_G_SENSOR_INT	(3*32 + 15)	/*GPIO_4_15 */
 #define FL_EN			(3*32 + 14) /*GPIO_4_14 */
+#define FL_R_EN			(3*32 + 22)	/*GPIO_4_22 */
 
 #define GPIO_KEY_COL_0		(3*32 + 0)	/*GPIO_4_0 */
 #define GPIO_KEY_ROW_0		(3*32 + 1)	/*GPIO_4_1 */
@@ -135,6 +136,7 @@
 #define	CM_SIGUSR1				104
 //kay 20081110 for detecting SD write protect
 #define	CM_SD_PROTECT			120
+#define	SYS_AUTO_POWER_ON 		0xC4	// 196 Joseph 120620
                             	
 //20090216 for detecting controller
 #define	CM_CONTROLLER			121
@@ -175,7 +177,9 @@
 #define CM_AUDIO_GET_VOLUME		230
 #define CM_AUDIO_SET_VOLUME		240
 #define CM_FRONT_LIGHT_SET		241
-#define CM_FRONT_LIGHT_AVAILABLE		242
+#define CM_FRONT_LIGHT_AVAILABLE	242
+#define CM_FRONT_LIGHT_DUTY		243
+#define CM_FRONT_LIGHT_FREQUENCY	244
 
 #define CM_GET_KEYS				107
 
@@ -255,6 +259,36 @@ struct ebook_device_info {
     char wifi;
     char bluetooth;
 };
+/* original table , new one = this /164
+static unsigned int FL_table0[100]={
+0x0100,0x0400,0x0500,0x0600,0x0800,0x0880,0x0900,0x0A00,0x0B00,0x0C00,
+0x0D00,0x0E00,0x0F00,0x1000,0x1100,0x11D0,0x1280,0x1300,0x1400,0x1500,
+0x1600,0x1700,0x1800,0x1900,0x1A00,0x1B00,0x1C00,0x1D00,0x1E00,0x1F00,
+0x2000,0x2100,0x2200,0x2300,0x2400,0x2500,0x2600,0x2700,0x2800,0x2900,
+0x2A00,0x2B00,0x2C00,0x2D00,0x2E00,0x2F00,0x3000,0x3400,0x3800,0x3C00,
+0x4000,0x4400,0x4800,0x4C00,0x5000,0x5400,0x5800,0x5C00,0x6000,0x6400,
+0x6800,0x6C00,0x7000,0x7400,0x76C0,0x7840,0x7C00,0x8000,0x8400,0x8800,
+0x8C00,0x9000,0x9400,0x9800,0x9C00,0xA000,0xA400,0xA800,0xAC00,0xB000,
+0xB400,0xB800,0xBC00,0xC000,0xC400,0xC800,0xCC00,0xD000,0xD400,0xD800,
+0xDC00,0xE000,0xE400,0xE800,0xEC00,0xF000,0xF400,0xF800,0xFC00,0xFFFF
+};
+*/	
+static unsigned short FL_table0[100]={
+0x0001,0x0006,0x0007,0x0009,0x000C,0x000D,0x000E,0x000F,0x0011,0x0012,
+0x0014,0x0015,0x0017,0x0018,0x001A,0x001B,0x001C,0x001D,0x001F,0x0020,
+0x0022,0x0023,0x0025,0x0027,0x0028,0x002A,0x002B,0x002D,0x002E,0x0030,
+0x0031,0x0033,0x0035,0x0036,0x0038,0x0039,0x003B,0x003C,0x003E,0x0040,
+0x0041,0x0043,0x0044,0x0046,0x0047,0x0049,0x004A,0x0051,0x0057,0x005D,
+0x0063,0x006A,0x0070,0x0076,0x007C,0x0083,0x0089,0x008F,0x0095,0x009C,
+0x00A2,0x00A8,0x00AE,0x00B5,0x00B9,0x00BB,0x00C1,0x00C7,0x00CE,0x00D4,
+0x00DA,0x00E0,0x00E7,0x00ED,0x00F3,0x00F9,0x0100,0x0106,0x010C,0x0112,
+0x0118,0x011F,0x0125,0x012B,0x0131,0x0138,0x013E,0x0144,0x014A,0x0151,
+0x0157,0x015D,0x0163,0x016A,0x0170,0x0176,0x017C,0x0183,0x0189,0x018F
+};
+
+struct delayed_work FL_off;
+void FL_off_func(struct work_struct *work);
+int FL_suspend(void);
 
 //kay for LED thread
 //static unsigned char LED_conitnuous=0;
@@ -327,7 +361,7 @@ int check_hardware_name(void)
 		gpio_direction_input (GPIO_HWID_3);
 		gpio_request(GPIO_HWID_4, "hwid_4");
 		gpio_direction_input (GPIO_HWID_4);
-		
+#if 0	//READ HW ID		
 		/*
 		 *  Note:
 		 *  Comparing to the schematic diagram
@@ -342,6 +376,46 @@ int check_hardware_name(void)
 		pcb_id |= (gpio_get_value (GPIO_HWID_4)?0:8);  
 		if (7 == pcb_id) 
 			pcb_id = 4;
+#else   //READ HWCONFIG
+		switch(gptHWCFG->m_val.bPCB)
+		{
+			case 12: //E60610
+			case 20: //E60610C
+			case 21: //E60610D
+				pcb_id = 1;
+				break;
+			case 15: //E60620
+				pcb_id = 4;
+				break;
+			case 16: //E60630
+				pcb_id = 6;
+				break;
+			case 18: //E50600
+				pcb_id = 2;
+				break;
+			case 19: //E60680
+				pcb_id = 3;
+				break;
+			case 22: //E606A0
+				pcb_id = 10;
+				break;
+			case 23: //E60670
+				pcb_id = 5;
+				break;
+			case 24: //E606B0
+				pcb_id = 14;
+				break;
+			case 27: //E50610
+				pcb_id = 9;
+				break;
+			case 28: //E606C0
+				pcb_id = 11;
+				break;
+			default:
+				printk ("[%s-%d] undefined PCBA ID\n",__func__,__LINE__);
+				break;	
+		}
+#endif
 #endif			
 		printk ("[%s-%d] PCBA ID is %d\n",__func__,__LINE__,pcb_id);
 	}
@@ -388,15 +462,18 @@ static void bluetooth_pwr(int i)
 #define SD2_CLK		(4*32 + 6)	/*GPIO_5_6 */
 static void wifi_sdio_enable (int isEnable)
 {
+	int iHWID;
 	extern iomux_v3_cfg_t mx50_sd3_disable_pads[];
 	extern unsigned long gdw_mx50_sd3_disable_pads;
 
 	extern iomux_v3_cfg_t mx50_sd2_disable_pads[];
 	extern unsigned long gdw_mx50_sd2_disable_pads;
 
+	iHWID=check_hardware_name();
 
-	if(9==check_hardware_name()) {
-		// E50612 .
+	if(9==iHWID || 11==iHWID) {
+		// E5061X/E606CX .
+		//
 		//printk("E50612=> %s(%d)\n",__FUNCTION__,isEnable);
 		if (isEnable) {
 			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_WIFI);
@@ -429,6 +506,8 @@ static void wifi_sdio_enable (int isEnable)
 
 void ntx_wifi_power_ctrl (int isWifiEnable)
 {
+	int iHWID;
+
 	gWifiEnabled=isWifiEnable;
 	printk("Wifi / BT power control %d\n", isWifiEnable);
     if(isWifiEnable == 0){
@@ -447,9 +526,12 @@ void ntx_wifi_power_ctrl (int isWifiEnable)
 		enable_irq_wake(gpio_to_irq(GPIO_WIFI_INT));
 #endif
 	}
-	sleep_on_timeout(&Reset_WaitQueue,HZ/10);			
-	if(9==check_hardware_name()) {
-		// E50612 .
+	sleep_on_timeout(&Reset_WaitQueue,HZ/10);
+
+	iHWID=check_hardware_name();
+
+	if(9==iHWID||11==iHWID) {
+		// E5061X/E606CX .
 		mxc_mmc_force_detect (1);
 	}
 	else {
@@ -461,6 +543,7 @@ void ntx_wifi_power_ctrl (int isWifiEnable)
 EXPORT_SYMBOL(ntx_wifi_power_ctrl);
 
 extern u16 msp430_deviceid(void);
+extern void msp430_auto_power(int minutes);
 extern void msp430_poweroff(void);
 extern void msp430_reset(void);
 extern void msp430_powerkeep(int n);
@@ -503,6 +586,8 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 {
 	unsigned long i = 0, temp;
 	unsigned int p = arg;//*(unsigned int *)arg;
+	static unsigned int  last_FL_duty = 0;
+	static unsigned int  current_FL_freq = 0xFFFF;
   struct ebook_device_info info;  
   	
 	if(!Driver_Count){
@@ -531,6 +616,16 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 				printk("Kernel---System reset ---\n");
 				gKeepPowerAlive = 0;
 				msp430_reset();
+			    sleep_on_timeout(&Reset_WaitQueue, 14*HZ/10);
+			}
+			break;
+			
+		case SYS_AUTO_POWER_ON:
+			msp430_auto_power(p);
+		    while (1) {
+				printk("Kernel---System reset ---\n");
+				gKeepPowerAlive = 0;
+				msp430_poweroff();
 			    sleep_on_timeout(&Reset_WaitQueue, 14*HZ/10);
 			}
 			break;
@@ -656,10 +751,17 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			break;
 		case CM_nLED:
 			//printk("CM_nLED %d\n",p);
-			if (1 == check_hardware_name())
-	        	gpio_set_value (GPIO_LED_ON,p);
-	        else
-	        	gpio_set_value (GPIO_ACT_ON,p);
+			switch (check_hardware_name())
+			{
+				case 4:  //E60622
+				case 2:	 //E50602
+				case 6:  //E60632
+					gpio_set_value (GPIO_ACT_ON,p);
+	        	break;
+				default:	
+					gpio_set_value (GPIO_LED_ON,p);
+				break;
+			}
 			break;			
 			
 		case CM_nLED_CPU:
@@ -908,20 +1010,65 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 		case CM_FRONT_LIGHT_SET:
 			if(0!=gptHWCFG->m_val.bFrontLight)
 			{
-				static int last_FL_duty;
 				if (p) {
-					printk ("set front light %d\n",p);
-					
-					if (0 == last_FL_duty){
-						gpio_direction_output(FL_EN,0);
-						msleep(200);
+					if(delayed_work_pending(&FL_off)){
+						cancel_delayed_work_sync(&FL_off);
+						printk("FL_off delayed work canceled");
 					}
-					
-					msp430_write (0xA0, (p<<8));
-//					msp430_write (0xA1, 0x02);
-//					msp430_write (0xA2, 0x58);
-					if (0 == last_FL_duty)
+					printk ("\nset front light level : %d\n",p);
+					if(p>0 && p<=100)
+					{
+						msp430_write (0xA7, FL_table0[p-1]&0xFF00);
+						msp430_write (0xA6, FL_table0[p-1]<<8);
+						printk("PWMCNT : 0x%04x\n", FL_table0[p-1]);
+					}else{
+						printk("Wrong number! level range from 0 to 100\n");
+					}
+					if (0 == last_FL_duty){
+						msp430_write (0xA1, 0xFF00);
+						msp430_write (0xA2, 0xFF00);
+						msp430_write (0xA5, 0x0100);   
+						msp430_write (0xA4, 0x9000);
 						msp430_write (0xA3, 0x0100);
+
+						msleep(100);
+						gpio_direction_output(FL_EN,0);
+					}
+				}
+				else if(last_FL_duty != 0){
+					printk ("FL PWM off command\n");
+					msp430_write(0xA3, 0); 
+					schedule_delayed_work(&FL_off, 120);
+				}
+				last_FL_duty = p;
+			}
+			break;
+
+		case CM_FRONT_LIGHT_AVAILABLE:
+			{
+      	i = (unsigned long) (gptHWCFG->m_val.bFrontLight?1:0) ;
+				copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
+			}
+			break;
+
+		case CM_FRONT_LIGHT_DUTY:
+			if(0!=gptHWCFG->m_val.bFrontLight)
+			{
+				if (p) {			
+					printk ("\nSet front light PWMCNT : 0x%4X\n",p);
+					printk ("Current front light Frequency : (8MHz/0x%4X)\n",current_FL_freq);		
+					msp430_write (0xA7, p&0xFF00);
+					msp430_write (0xA6, p<<8);
+					if (0 == last_FL_duty){
+						msp430_write (0xA1, 0xFF00);
+						msp430_write (0xA2, 0xFF00);
+//						msp430_write (0xA5, 0xFF00);   
+//						msp430_write (0xA4, 0xFF00);
+						msp430_write (0xA3, 0x0100);
+
+						msleep(100);
+						gpio_direction_output(FL_EN,0);
+					}
 				}
 				else {
 					printk ("turn off front light\n");
@@ -933,10 +1080,16 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			}
 			break;
 
-		case CM_FRONT_LIGHT_AVAILABLE:
+		case CM_FRONT_LIGHT_FREQUENCY:
+			if(0!=gptHWCFG->m_val.bFrontLight)
 			{
-      	i = (unsigned long) (gptHWCFG->m_val.bFrontLight?1:0) ;
-				copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
+				if (p) {
+					printk ("set front light Frequency : (8MHz/0x%4X)\n",p);		
+//					msp430_write (0xA4, (p<<8));
+					msp430_write (0xA5, p&0xFF00);   
+					msp430_write (0xA4, (p<<8));
+					current_FL_freq = p;
+				}
 			}
 			break;
 
@@ -1095,18 +1248,36 @@ void led_red (int isOn) {
 
 static void LED(int on)
 {
-	if (1 == check_hardware_name()) {
-		if(on) 
-			gpio_set_value (GPIO_LED_ON,0);
-		else
-	    	gpio_set_value (GPIO_LED_ON,1);
-    }
-    else {
+	switch (check_hardware_name())
+	{
+	case 4:	// E60622
+	case 2:	// E50602 (UPG)
+	case 6:	// E60632 (UPG)
 		if(on) 
 			gpio_set_value (GPIO_ACT_ON,0);
 		else
 	    	gpio_set_value (GPIO_ACT_ON,1);
+    	break;
+    default:
+		if(on) 
+			gpio_set_value (GPIO_LED_ON,0);
+		else
+	    	gpio_set_value (GPIO_LED_ON,1);
+    	break;
     }
+}
+
+void FL_off_func(struct work_struct *work)
+{
+	printk("[%s-%d]FL PWR off\n",__FUNCTION__,__LINE__);
+	gpio_direction_input(FL_EN);
+}
+
+int FL_suspend(void){
+	if(delayed_work_pending(&FL_off)){
+		return -1;
+	}	
+	return 0;
 }
 
 static int sleep_thread(void)
@@ -1346,20 +1517,22 @@ int ntx_get_battery_vol (void)
 			gLastBatTick = jiffies;
 			if (gpio_get_value (GPIO_ACIN_PG)) {// not charging
 				temp = msp430_read (0x60);
-				if (0x8000 & temp) {
-					printk ("[%s-%d] =================> Micro P MSP430 alarm triggered <===================\n", __func__, __LINE__);
-					g_wakeup_by_alarm = 1;
+				if (-1 != temp ) {
+					if (0x8000 & temp) {
+						printk ("[%s-%d] =================> Micro P MSP430 alarm triggered <===================\n", __func__, __LINE__);
+						g_wakeup_by_alarm = 1;
+					}
+					if (0x01 & temp) {
+						printk ("[%s-%d] =================> Micro P MSP430 Critical_Battery_Low <===================\n", __func__, __LINE__);
+						return 0;
+					}
+					else if (!gLastBatValue) 
+						gLastBatValue = battValue;
+					else if (gLastBatValue > battValue)
+						gLastBatValue = battValue;
+					else
+						battValue = gLastBatValue;
 				}
-				if (0x01 & temp) {
-					printk ("[%s-%d] =================> Micro P MSP430 Critical_Battery_Low <===================\n", __func__, __LINE__);
-					return 0;
-				}
-				else if (!gLastBatValue) 
-					gLastBatValue = battValue;
-				else if (gLastBatValue > battValue)
-					gLastBatValue = battValue;
-				else
-					battValue = gLastBatValue;
 			}
 			else {
 				if (gLastBatValue < battValue)
@@ -1560,6 +1733,8 @@ static int gpio_initials(void)
 	    // Touch reset
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D6__GPIO_5_26);
 		gpio_request(IR_TOUCH_RST, "ir_touch_rst");	
+		gpio_direction_output(IR_TOUCH_RST, 0);
+		msleep(20);
 		gpio_direction_input(IR_TOUCH_RST);
 	}
 	else {		// C touch.
@@ -1643,22 +1818,51 @@ static int gpio_initials(void)
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D3__SD2_D3_DSL);
 	}
 
-	if(21==gptHWCFG->m_val.bPCB) {
-		// E60610D 
-		printk("ESD DSM for E60610D\n");
-		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_DSM);
-		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CMD__SD2_CMD_DSM);
-		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D0__SD2_D0_DSM);
-		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D1__SD2_D1_DSM);
-		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D2__SD2_D2_DSM);
-		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D3__SD2_D3_DSM);
+	switch (gptHWCFG->m_val.bPCB) {
+		case 21: // E60610D
+		case 22: // E606AX 
+		{
+			// E60610D 
+			printk("ESD DSM\n");
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CLK__SD2_CLK_DSM);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_CMD__SD2_CMD_DSM);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D0__SD2_D0_DSM);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D1__SD2_D1_DSM);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D2__SD2_D2_DSM);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D3__SD2_D3_DSM);
+		}
+		break;
+		
+		case 28:
+		{
+			// E606CX 
+			printk("E606CX,ESD DSL\n");
+			// External SD .
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_CLK__SD1_CLK_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_CMD__SD1_CMD_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_D0__SD1_D0_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_D1__SD1_D1_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_D2__SD1_D2_DSL);
+			mxc_iomux_v3_setup_pad(MX50_PAD_SD1_D3__SD1_D3_DSL);
+		}
+		break;
+
+		default :
+		break;
 	}
+	
 	
 	// FL_EN
 	if(0!=gptHWCFG->m_val.bFrontLight) {	
 		mxc_iomux_v3_setup_pad(MX50_PAD_ECSPI1_MISO__GPIO_4_14);
 		gpio_request(FL_EN, "fl_en");
-		gpio_direction_input(FL_EN);
+		gpio_direction_output(FL_EN,0);
+		
+		mxc_iomux_v3_setup_pad(MX50_PAD_EPDC_VCOM1__GPIO_4_22);
+		gpio_request(FL_R_EN, "fl_r_en");
+		gpio_direction_output(FL_R_EN,0);
+
+		INIT_DELAYED_WORK(&FL_off, FL_off_func);
 	}
 	
 	// WIFI_3V3_ON 
@@ -1882,7 +2086,7 @@ void ntx_gpio_suspend (void)
 		gpio_direction_output(TOUCH_PWR, 1);
 #endif
 	}
-
+	
 	// turn off wifi power 
 #ifndef _WIFI_ALWAYS_ON_
 	gpio_direction_input(GPIO_WIFI_3V3);
@@ -2002,7 +2206,12 @@ void ntx_msp430_i2c_force_release (void)
 }
 
 void ntx_machine_restart(char mode, const char *cmd)
-{
+{	
+	if(0!=gptHWCFG->m_val.bFrontLight){
+		msp430_write (0xA3, 0); 
+		msleep (1200);		
+		gpio_direction_input(FL_EN);
+	}
 	while (1) {
 		printk("Kernel---System reset ---\n");
 		gKeepPowerAlive = 0;

@@ -69,10 +69,10 @@
  */
 /*#define DEFAULT_PANEL_HW_INIT*/
 
-#define NUM_SCREENS_MIN	1
+#define NUM_SCREENS_MIN	2
 #define EPDC_NUM_LUTS 16
 //#define EPDC_MAX_NUM_UPDATES 20
-#define EPDC_MAX_NUM_UPDATES 1
+#define EPDC_MAX_NUM_UPDATES giEPDC_MAX_NUM_UPDATES
 #define INVALID_LUT -1
 
 #define DEFAULT_TEMP_INDEX	0
@@ -93,6 +93,7 @@
 #define EPDC_VCOM	(3*32 + 21)	/*GPIO_4_21 */
 
 static unsigned long default_bpp = 16;
+static int giEPDC_MAX_NUM_UPDATES=2;
 
 struct update_marker_data {
 	struct list_head full_list;
@@ -249,6 +250,8 @@ struct mxcfb_waveform_data_file {
 #include "ntx_hwconfig.h"
 extern volatile NTX_HWCONFIG *gptHWCFG;
 
+extern volatile int giRootDevNum;
+extern volatile int giRootPartNum;
 
 void __iomem *epdc_base;
 
@@ -757,22 +760,64 @@ void epdc_init_settings(struct mxc_epdc_fb_data *fb_data)
 	/* EPDC_RES */
 	epdc_set_screen_res(epdc_mode->vmode->xres, epdc_mode->vmode->yres);
 
-	/*
-	 * EPDC_TCE_CTRL
-	 * VSCAN_HOLDOFF = 4
-	 * VCOM_MODE = MANUAL
-	 * VCOM_VAL = 0
-	 * DDR_MODE = DISABLED
-	 * LVDS_MODE_CE = DISABLED
-	 * LVDS_MODE = DISABLED
-	 * DUAL_SCAN = DISABLED
-	 * SDDO_WIDTH = 8bit
-	 * PIXELS_PER_SDCLK = 4
-	 */
-	reg_val =
-	    ((epdc_mode->vscan_holdoff << EPDC_TCE_CTRL_VSCAN_HOLDOFF_OFFSET) &
-	     EPDC_TCE_CTRL_VSCAN_HOLDOFF_MASK)
-	    | EPDC_TCE_CTRL_PIXELS_PER_SDCLK_4;
+
+
+#if 1
+
+	if(3==gptHWCFG->m_val.bDisplayResolution) {
+		/* 
+		* EPDC_TCE_CTRL
+		* VSCAN_HOLDOFF = 4
+		* VCOM_MODE = MANUAL
+		* VCOM_VAL = 0
+		* DDR_MODE = DISABLED
+		* LVDS_MODE_CE = DISABLED
+		* LVDS_MODE = DISABLED
+		* DUAL_SCAN = DISABLED
+		* SDDO_WIDTH = 16bit
+		* PIXELS_PER_SDCLK = 8
+		*/
+
+/*
+			reg_val =
+				((epdc_mode->vscan_holdoff << EPDC_TCE_CTRL_VSCAN_HOLDOFF_OFFSET) &
+				EPDC_TCE_CTRL_VSCAN_HOLDOFF_MASK)
+				| EPDC_TCE_CTRL_PIXELS_PER_SDCLK_8
+				| EPDC_TCE_CTRL_SDDO_WIDTH_16BIT ;
+*/
+
+			reg_val =
+				((epdc_mode->vscan_holdoff << EPDC_TCE_CTRL_VSCAN_HOLDOFF_OFFSET) &
+				EPDC_TCE_CTRL_VSCAN_HOLDOFF_MASK)
+				| EPDC_TCE_CTRL_SCAN_DIR_0_UP
+				| EPDC_TCE_CTRL_SCAN_DIR_1_UP
+				| EPDC_TCE_CTRL_PIXELS_PER_SDCLK_4
+				//| EPDC_TCE_CTRL_SDDO_WIDTH_8BIT 
+				;
+	}
+	else
+#endif 
+
+	{
+
+		/*
+		 * EPDC_TCE_CTRL
+		 * VSCAN_HOLDOFF = 4
+		 * VCOM_MODE = MANUAL
+		 * VCOM_VAL = 0
+		 * DDR_MODE = DISABLED
+		 * LVDS_MODE_CE = DISABLED
+		 * LVDS_MODE = DISABLED
+		 * DUAL_SCAN = DISABLED
+		 * SDDO_WIDTH = 8bit
+		 * PIXELS_PER_SDCLK = 4
+		 */
+		reg_val =
+				((epdc_mode->vscan_holdoff << EPDC_TCE_CTRL_VSCAN_HOLDOFF_OFFSET) &
+				 EPDC_TCE_CTRL_VSCAN_HOLDOFF_MASK)
+				| EPDC_TCE_CTRL_PIXELS_PER_SDCLK_4;
+	}
+
 	__raw_writel(reg_val, EPDC_TCE_CTRL);
 
 	/* EPDC_TCE_HSCAN */
@@ -895,33 +940,40 @@ static void epdc_powerup(struct mxc_epdc_fb_data *fb_data)
 
     fb_data->updates_active = true;
     
-	/* Enable pins used by EPDC */
-	if(6==gptHWCFG->m_val.bDisplayCtrl) {
-		// imx508 + tps16585 .
-		unsigned long dwTPS65185_mode = TPS65185_MODE_ACTIVE;
-		iChk = tps65185_chg_mode(&dwTPS65185_mode);
-		if(iChk<0) {
-			printk("%s(%d):[warning] change to power active fail,errno=%d !\n",
-				__FILE__,__LINE__,iChk);
-		}		
-		iChk = tps65185_wait_panel_poweron();
-		if(iChk<0) {
-			printk("%s(%d):[warning] wait power on fail,errno=%d !\n",
-				__FILE__,__LINE__,iChk);
-		}
-	}
-	else {
-		gpio_direction_output(GPIO_PWRALL, 1);msleep(50);
-	}
-	if (fb_data->pdata->enable_pins)
-		fb_data->pdata->enable_pins();
+
 
 	if(6==gptHWCFG->m_val.bDisplayCtrl) {
+#if 1
 		// imx508 + tps16585 .
+		unsigned long dwTPS65185_mode = TPS65185_MODE_ACTIVE;
+
+		iChk = tps65185_chg_mode(&dwTPS65185_mode,1);
+		if(iChk<0) {
+			printk(KERN_ERR "%s(%d):[warning] change to power active fail,errno=%d !\n",
+				__FILE__,__LINE__,iChk);
+		}
+		/*	
+		iChk = tps65185_wait_panel_poweron();
+		if(iChk<0) {
+			printk(KERN_ERR "%s(%d):[warning] wait power on fail,errno=%d !\n",
+				__FILE__,__LINE__,iChk);
+		}
+		*/
+
+		//gpio_direction_output(EPDC_VCOM, 1);
+		//msleep(10);
+		
+#endif
 	}
-	else {
+	else 
+	{
+		gpio_direction_output(GPIO_PWRALL, 1);msleep(50);
 		gpio_direction_output(EPDC_VCOM, 1);msleep(15);
 	}
+
+	/* Enable pins used by EPDC */
+	if (fb_data->pdata->enable_pins)
+		fb_data->pdata->enable_pins();
 
 	
 	/* Enable clocks to EPDC */
@@ -984,15 +1036,6 @@ static void epdc_powerdown(struct mxc_epdc_fb_data *fb_data)
 	__raw_writel(EPDC_CTRL_CLKGATE, EPDC_CTRL_SET);
 	clk_disable(fb_data->epdc_clk_pix);
 	clk_disable(fb_data->epdc_clk_axi);
-	if(6==gptHWCFG->m_val.bDisplayCtrl) {
-		// imx508 + tps16585 .
-	}
-	else {
-		msleep(5);
-		gpio_direction_output(EPDC_VCOM, 0);
-	
-		msleep(5);// gallen add 2011/06/17 .
-	}
 
 	/* Disable pins used by EPDC (to prevent leakage current) */
 	if (fb_data->pdata->disable_pins)
@@ -1000,27 +1043,49 @@ static void epdc_powerdown(struct mxc_epdc_fb_data *fb_data)
 		GALLEN_DBGLOCAL_RUNLOG(0);
 		fb_data->pdata->disable_pins();
 	}
-	
-	if(6==gptHWCFG->m_val.bDisplayCtrl) {
+
 #if 1
+	if(6==gptHWCFG->m_val.bDisplayCtrl) 
+	{
 		// imx508 + tps16585 .
-		//unsigned long dwTPS65185_mode = TPS65185_MODE_SLEEP;
-		unsigned long dwTPS65185_mode = TPS65185_MODE_STANDBY;
-		iChk = tps65185_chg_mode(&dwTPS65185_mode);
-		if(iChk<0) {
-			printk("%s(%d):[warning] change to power sleep fail ,errno=%d !\n",
-				__FILE__,__LINE__,iChk);
-		}		
-		iChk = tps65185_wait_panel_poweroff();
-		if(iChk<0) {
-			printk("%s(%d):[warning] wait power off fail ,errno=%d !\n",
-				__FILE__,__LINE__,iChk);
-		}	
-#endif
+		//msleep(10);
+		//gpio_direction_output(EPDC_VCOM, 0);
+		
+		//if(!(0==giRootDevNum&&2==giRootPartNum)) 
+		{
+			// imx508 + tps16585 .
+			//unsigned long dwTPS65185_mode = TPS65185_MODE_SLEEP;
+			unsigned long dwTPS65185_mode = TPS65185_MODE_STANDBY;
+			iChk = tps65185_chg_mode(&dwTPS65185_mode,1);
+			if(iChk<0) {
+				printk(KERN_ERR "%s(%d):[warning] change to power sleep fail ,errno=%d !\n",
+					__FILE__,__LINE__,iChk);
+			}	
+			/*	
+			iChk = tps65185_wait_panel_poweroff();
+			if(iChk<0) {
+				printk(KERN_ERR "%s(%d):[warning] wait power off fail ,errno=%d !\n",
+					__FILE__,__LINE__,iChk);
+			}	
+			*/
+		}
+		//else {
+			//printk(KERN_ERR "root=/dev/mmcblk0p2 skip PMIC power down !\n");
+		//}
+
 	}
-	else {
+	else 
+	{
+		msleep(5);
+		gpio_direction_output(EPDC_VCOM, 0);
+	
+		msleep(5);// gallen add 2011/06/17 .
 		gpio_direction_output(GPIO_PWRALL, 0);
 	}
+#endif
+
+
+	
 
 	fb_data->power_state = POWER_STATE_OFF;
 	fb_data->powering_down = false;
@@ -1403,7 +1468,9 @@ static int mxc_epdc_fb_set_par(struct fb_info *info)
 		}
 
 		/* Match videomode against epdc modes */
+		DBG_MSG("%s(%d):find epd modes ...\n",__FILE__,__LINE__);
 		for (i = 0; i < fb_data->pdata->num_modes; i++) {
+			DBG_MSG("mode[%d]=%s\n",i,epdc_modes[i].vmode->name);
 			GALLEN_DBGLOCAL_RUNLOG(8);
 			if (!fb_mode_is_equal(epdc_modes[i].vmode, &mode)) {
 				GALLEN_DBGLOCAL_RUNLOG(9);
@@ -1589,6 +1656,27 @@ static int mxc_epdc_fb_check_var(struct fb_var_screeninfo *var,
 		var->transp.offset = 24;
 		var->transp.msb_right = 0;
 		break;
+	}
+
+	if(3==gptHWCFG->m_val.bDisplayResolution) {
+		GALLEN_DBGLOCAL_RUNLOG(11);
+		// ED068OG1 @ 1440x1080 .
+		if(FB_ROTATE_UR==var->rotate) {
+			GALLEN_DBGLOCAL_RUNLOG(12);
+			var->rotate = FB_ROTATE_UD;
+		}
+		else if(FB_ROTATE_UD==var->rotate) {
+			GALLEN_DBGLOCAL_RUNLOG(13);
+			var->rotate = FB_ROTATE_UR;
+		}
+		else if(FB_ROTATE_CW==var->rotate) {
+			GALLEN_DBGLOCAL_RUNLOG(14);
+			var->rotate = FB_ROTATE_CCW;
+		}
+		else if(FB_ROTATE_CCW==var->rotate) {
+			GALLEN_DBGLOCAL_RUNLOG(15);
+			var->rotate = FB_ROTATE_CW;
+		}
 	}
 
 	switch (var->rotate) {
@@ -2688,14 +2776,24 @@ int mxc_epdc_fb_send_update(struct mxcfb_update_data *upd_data,
 	upd_desc->update_order = fb_data->order_cnt++;
 	list_add_tail(&upd_desc->list, &fb_data->upd_pending_list);
 
-	// LV panel & LV waveform test 
-	if(*(gpbWF_vaddr+0x10) == 0x4) {
-		DBG_MSG("Mode Ver=4\n");
-		if(2==upd_desc->upd_data.waveform_mode && 
-			upd_desc->upd_data.update_mode == UPDATE_MODE_PARTIAL) 
-		{
-			DBG_MSG("Mode 2 -> Mode 5\n");
-			upd_desc->upd_data.waveform_mode = 5;
+	// LV panel & LV waveform test
+	{ 
+		unsigned char bModeVersion = *(gpbWF_vaddr+0x10);
+		if( 0x4 == bModeVersion ) {
+			DBG_MSG("Mode Ver=4\n");
+			if(2==upd_desc->upd_data.waveform_mode && 
+				upd_desc->upd_data.update_mode == UPDATE_MODE_PARTIAL) 
+			{
+				DBG_MSG("WF Mode version=0x%02x,chg W.F Mode 2->5 @ partial\n",bModeVersion);
+				upd_desc->upd_data.waveform_mode = 5;
+			}
+		}
+		else if( 0x1==bModeVersion || 0x2==bModeVersion ) {
+			if(4==upd_desc->upd_data.waveform_mode) {
+				// there is no A2 mode in this waveform ...
+				DBG_MSG("WF Mode version=0x%02x,chg W.F Mode 4(A2)->1(DU)\n",bModeVersion);
+				upd_desc->upd_data.waveform_mode = 1;// DU mode .
+			}
 		}
 	}
 	
@@ -2938,6 +3036,7 @@ static int mxc_epdc_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	int ret = -EINVAL;
 	GALLEN_DBGLOCAL_BEGIN();
 	
+	fake_s1d13522_progress_stop();
 	
 
 	switch (cmd) {
@@ -3818,13 +3917,27 @@ static void mxc_epdc_fb_fw_handler(const struct firmware *fw,
 		printk("%s(%d):EPD 1024x758 \n",__FILE__,__LINE__);
 		fb_data->cur_mode = &fb_data->pdata->epdc_mode[2];//
 	}
+	else if(3==gptHWCFG->m_val.bDisplayResolution) {
+		printk("%s(%d):EPD 1440x1080 \n",__FILE__,__LINE__);
+		fb_data->cur_mode = &fb_data->pdata->epdc_mode[5];//
+	}
+	else if(2==gptHWCFG->m_val.bDisplayResolution) {
+		printk("%s(%d):EPD 1024x768 \n",__FILE__,__LINE__);
+		fb_data->cur_mode = &fb_data->pdata->epdc_mode[3];//
+	}
 	else
 	{
 		unsigned char *pbWFHdr = (unsigned char *)(fw->data);
 		switch (*(pbWFHdr+0x0d)) {// FPL platform detect .
 		case 0x06: // V220 .
-			printk("%s(%d):V220 FPL platform \n",__FILE__,__LINE__);
-			fb_data->cur_mode = &fb_data->pdata->epdc_mode[0];//v220 parameters
+			if(27==gptHWCFG->m_val.bPCB) {
+				printk("%s(%d):V220 for E50610 FPL platform \n",__FILE__,__LINE__);
+				fb_data->cur_mode = &fb_data->pdata->epdc_mode[4];//v220 parameters for E50612 .
+			}
+			else {
+				printk("%s(%d):V220 FPL platform \n",__FILE__,__LINE__);
+				fb_data->cur_mode = &fb_data->pdata->epdc_mode[0];//v220 parameters
+			}
 			break;
 		case 0x03: // V110 .
 		case 0x04: // V110A .
@@ -4066,6 +4179,14 @@ int __devinit mxc_epdc_fb_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	if(0==gptHWCFG->m_val.bRamSize||1==gptHWCFG->m_val.bRamSize) {
+		// RAM SIZE < 256MB
+		giEPDC_MAX_NUM_UPDATES = 1;
+	}
+	else {
+		giEPDC_MAX_NUM_UPDATES = 10;
+	}
+
 	fb_data = (struct mxc_epdc_fb_data *)framebuffer_alloc(
 			sizeof(struct mxc_epdc_fb_data), &pdev->dev);
 	if (fb_data == NULL) {
@@ -4136,7 +4257,15 @@ int __devinit mxc_epdc_fb_probe(struct platform_device *pdev)
 	if(1==gptHWCFG->m_val.bDisplayResolution) {
 		printk("%s(%d):EPD 1024x758 \n",__FILE__,__LINE__);
 		fb_data->cur_mode = &fb_data->pdata->epdc_mode[2];//
-	}	
+	}
+	else if(3==gptHWCFG->m_val.bDisplayResolution) {
+		printk("%s(%d):EPD 1440x1080 \n",__FILE__,__LINE__);
+		fb_data->cur_mode = &fb_data->pdata->epdc_mode[5];//
+	}
+	else if(2==gptHWCFG->m_val.bDisplayResolution) {
+		printk("%s(%d):EPD 1024x768 \n",__FILE__,__LINE__);
+		fb_data->cur_mode = &fb_data->pdata->epdc_mode[3];//
+	}
 	else {
 		fb_data->cur_mode = &fb_data->pdata->epdc_mode[0];
 	}
@@ -4798,6 +4927,16 @@ static int mxc_epdc_fb_suspend(struct platform_device *pdev, pm_message_t state)
 	
 	GALLEN_DBGLOCAL_BEGIN();
 	
+	if(0!=gptHWCFG->m_val.bFrontLight) {
+		extern int FL_suspend(void);
+
+		if(FL_suspend()<0) {
+			printk(KERN_WARNING"%s(%d) : F.L suspend fail !\n",__FILE__,__LINE__);
+			ret = -1;
+			goto out;
+		}
+	}
+	
 	mxc_epdc_fb_wait_update_complete(g_mxc_upd_data.update_marker++,&g_fb_data->info);
 	
 	ret = mxc_epdc_fb_blank(FB_BLANK_POWERDOWN, &data->info);
@@ -4805,7 +4944,12 @@ static int mxc_epdc_fb_suspend(struct platform_device *pdev, pm_message_t state)
 		goto out;
 
 	if(6==gptHWCFG->m_val.bDisplayCtrl) {
-		tps65185_suspend();
+		if(tps65185_suspend()>=0) {
+			ret = 0;
+		}
+		else {
+			ret = -1;
+		}
 	}
 	else {
 		lm75_suspend ();
@@ -5082,8 +5226,12 @@ static int __init mxc_epdc_fb_init(void)
 {
 	return platform_driver_register(&mxc_epdc_fb_driver);
 }
-late_initcall(mxc_epdc_fb_init);
 
+#ifndef FW_IN_RAM
+late_initcall(mxc_epdc_fb_init);
+#else
+module_init(mxc_epdc_fb_init);
+#endif
 
 static void __exit mxc_epdc_fb_exit(void)
 {
