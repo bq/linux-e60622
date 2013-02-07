@@ -1447,24 +1447,22 @@ static void power_key_chk(struct work_struct *work)
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?0:1;
 
 	if (pwr_key) {
+		if (!power_key_pressed) {
+			pr_info("locking power_key_mutex\n");
+			mutex_lock(&power_key_mutex);
+			power_key_pressed = 1;
+		}
+
 		++g_power_key_debounce;
 		if (4 <= g_power_key_debounce) {
 			if (gIsCustomerUi) {
-				if (!power_key_pressed) {
-					pr_info("locking power_key_mutex\n");
-					mutex_lock(&power_key_mutex);
-				} else {
-					pr_warn("double power key down\n");
-				}
-
 				printk("reporting power key down\n");
-				power_key_pressed = 1;
 				mxc_kpp_report_power(1);
 			}
 			g_power_key_debounce = 0;
 		} else {
 			printk("scheduling new power_key_chk\n");
-			queue_delayed_work(power_key_wq, &power_key_work, 1);
+			queue_delayed_work(power_key_wq, &power_key_work, 2);
 		}
 	} else {
 		++g_power_key_debounce;
@@ -1484,7 +1482,7 @@ static void power_key_chk(struct work_struct *work)
 			g_power_key_debounce = 0;
 		} else {
 			printk("scheduling new power_key_chk\n");
-			queue_delayed_work(power_key_wq, &power_key_work, 1);
+			queue_delayed_work(power_key_wq, &power_key_work, 2);
 		}
 	}
 }
