@@ -1434,8 +1434,23 @@ struct mutex power_key_mutex;
 bool power_key_pressed = 0;
 bool power_key_before_sleep = 0;
 static struct workqueue_struct *power_key_wq;
-static struct delayed_work power_key_work;
+static void manual_poweroff(struct work_struct *work);
+static void power_key_chk(struct work_struct *work);
+static DECLARE_DELAYED_WORK(power_key_work, power_key_chk);
+static DECLARE_DELAYED_WORK(manual_poweroff_work, manual_poweroff);
 extern void mxc_kpp_report_power(int isDown);
+
+static void manual_poweroff(struct work_struct *work)
+{
+	int i;
+	pr_warn("\n\ntrying to reset the system");
+	while (i < 10) {
+		printk(KERN_WARNING ".");
+		msp430_reset();
+		msleep(200);
+		i++;
+	}
+}
 
 static void power_key_chk(struct work_struct *work)
 {
@@ -1450,6 +1465,7 @@ static void power_key_chk(struct work_struct *work)
 		if (!power_key_pressed) {
 			pr_info("locking power_key_mutex\n");
 			mutex_lock(&power_key_mutex);
+			queue_delayed_work(power_key_wq, &manual_poweroff_work, msecs_to_jiffies(11000));
 			power_key_pressed = 1;
 		}
 
@@ -1470,6 +1486,7 @@ static void power_key_chk(struct work_struct *work)
 			if (gIsCustomerUi) {
 				if (power_key_pressed) {
 					pr_info("unlocking power_key_mutex\n");
+					cancel_delayed_work(&manual_poweroff_work);
 					mutex_unlock(&power_key_mutex);
 				} else {
 					pr_warn("double power key up\n");
@@ -1776,7 +1793,6 @@ static int gpio_initials(void)
 			set_irq_type(irq, IRQF_TRIGGER_FALLING);*/
 		mutex_init(&power_key_mutex);
 		power_key_wq = create_freezeable_workqueue("power key");
-		INIT_DELAYED_WORK(&power_key_work, power_key_chk);
 		set_irq_type(irq, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING);
 		ret = request_irq(irq, power_key_int, 0, "power_key", 0);
 		if (ret)
