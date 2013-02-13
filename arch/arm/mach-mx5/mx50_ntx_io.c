@@ -1430,10 +1430,29 @@ int pxa168_chechk_suspend (void)
 	return 1;
 }
 
-static struct timer_list power_key_timer;
+struct mutex power_key_mutex;
+bool power_key_pressed = 0;
+bool power_key_before_sleep = 0;
+static struct workqueue_struct *power_key_wq;
+static void manual_poweroff(struct work_struct *work);
+static void power_key_chk(struct work_struct *work);
+static DECLARE_DELAYED_WORK(power_key_work, power_key_chk);
+static DECLARE_DELAYED_WORK(manual_poweroff_work, manual_poweroff);
 extern void mxc_kpp_report_power(int isDown);
 
-static void power_key_chk(unsigned long v)
+static void manual_poweroff(struct work_struct *work)
+{
+	int i;
+	pr_warn("\n\ntrying to reset the system");
+	while (i < 10) {
+		printk(KERN_WARNING ".");
+		msp430_reset();
+		msleep(200);
+		i++;
+	}
+}
+
+static void power_key_chk(struct work_struct *work)
 {
 	int pwr_key;
 	
@@ -1441,28 +1460,56 @@ static void power_key_chk(unsigned long v)
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?1:0;
 	else
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?0:1;
-	
-	if (pwr_key) {
-		++g_power_key_debounce;
-		if ((2 == g_power_key_debounce) && gIsCustomerUi)
-			mxc_kpp_report_power(1);
-		mod_timer(&power_key_timer, jiffies + 1);
-	}
-	else if (gIsCustomerUi)
-		mxc_kpp_report_power(0);
-}
 
-void power_key_int_function(void)
-{
-	gMxcPowerKeyIrqTriggered = 1;
-	g_power_key_debounce = 0;
-	mod_timer(&power_key_timer, jiffies + 1);
+	if (pwr_key) {
+		if (!power_key_pressed) {
+			pr_info("locking power_key_mutex\n");
+			mutex_lock(&power_key_mutex);
+			queue_delayed_work(power_key_wq, &manual_poweroff_work, msecs_to_jiffies(11000));
+			power_key_pressed = 1;
+		}
+
+		++g_power_key_debounce;
+		if (4 <= g_power_key_debounce) {
+			if (gIsCustomerUi) {
+				printk("reporting power key down\n");
+				mxc_kpp_report_power(1);
+			}
+			g_power_key_debounce = 0;
+		} else {
+			printk("scheduling new power_key_chk\n");
+			queue_delayed_work(power_key_wq, &power_key_work, 2);
+		}
+	} else {
+		++g_power_key_debounce;
+		if (4 <= g_power_key_debounce) {
+			if (gIsCustomerUi) {
+				if (power_key_pressed) {
+					pr_info("unlocking power_key_mutex\n");
+					cancel_delayed_work(&manual_poweroff_work);
+					mutex_unlock(&power_key_mutex);
+				} else {
+					pr_warn("double power key up\n");
+				}
+
+				printk("reporting power key up\n");
+				power_key_pressed = 0;
+				mxc_kpp_report_power(0);
+			}
+			g_power_key_debounce = 0;
+		} else {
+			printk("scheduling new power_key_chk\n");
+			queue_delayed_work(power_key_wq, &power_key_work, 2);
+		}
+	}
 }
 
 static irqreturn_t power_key_int(int irq, void *dev_id)
 {
-	power_key_int_function();
-	return 0;
+	gMxcPowerKeyIrqTriggered = 1;
+	g_power_key_debounce = 0;
+	queue_delayed_work(power_key_wq, &power_key_work, 1);
+	return IRQ_HANDLED;
 }
 
 static struct workqueue_struct *acin_wq;
@@ -1740,10 +1787,13 @@ static int gpio_initials(void)
 		/* Set power key as wakeup resource */
 		irq = gpio_to_irq(GPIO_PWR_SW);
 	
-		if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
+/*		if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 			set_irq_type(irq, IRQF_TRIGGER_RISING);
 		else
-			set_irq_type(irq, IRQF_TRIGGER_FALLING);
+			set_irq_type(irq, IRQF_TRIGGER_FALLING);*/
+		mutex_init(&power_key_mutex);
+		power_key_wq = create_freezeable_workqueue("power key");
+		set_irq_type(irq, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING);
 		ret = request_irq(irq, power_key_int, 0, "power_key", 0);
 		if (ret)
 			pr_info("register on-off key interrupt failed\n");
@@ -1751,8 +1801,6 @@ static int gpio_initials(void)
 			enable_irq_wake(irq);
 	}
 	#endif //]GPIOFN_PWRKEY
-	power_key_timer.function = power_key_chk;
-	init_timer(&power_key_timer);
 	
 	tle4913_init();
 	
@@ -2053,6 +2101,9 @@ unsigned long gUart2_ucr1;
 
 void ntx_gpio_suspend (void)
 {
+	/* track the state of the power button before sleep */
+	power_key_before_sleep = power_key_pressed;
+
 #if 0
 	printk ("[%s-%d] %s ()\n",__FILE__,__LINE__,__func__);
 	printk ("\t MXC_CCM_CCGR0	0x%08X\n",__raw_readl(MXC_CCM_CCGR0));
@@ -2167,12 +2218,36 @@ void ntx_gpio_suspend (void)
 
 void ntx_gpio_resume (void)
 {
+	int pwr_key;
+	
 	__raw_writel(gUart2_ucr1, ioremap(MX53_BASE_ADDR(UART2_BASE_ADDR), SZ_4K)+0x80);
 /* Needs to be disabled to prevent hangs with Freescale patch
  * ENGR00223524 MX508-Fix the incorrect reset by SRTC
  *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
  */
 	
+	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
+		pwr_key = gpio_get_value (GPIO_PWR_SW)?1:0;
+	else
+		pwr_key = gpio_get_value (GPIO_PWR_SW)?0:1;
+
+	if (pwr_key != power_key_before_sleep) {
+		pr_warn("power key state changed during suspend!\n");
+
+		/* the badest state would be, we went to suspend with the mutex locked
+		 * but the key was released after, so we wakeup without the key being down.
+		 * This would result in the mutex only being unlocked after the next power-key
+		 * press and release cycle. So we unlock the mutex here in this case.
+		 * The g_power_key_debounce check is a hackish way to make sure we're not currently
+		 * debouncing a power button release.
+		 */
+		if (!pwr_key && mutex_is_locked(&power_key_mutex) && g_power_key_debounce == 0) {
+			pr_warn("forcefully unlocking power_key_mutex\n");
+			power_key_pressed = 0;
+			mutex_unlock(&power_key_mutex);
+		}
+	}
+
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
 	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {
 #ifndef DIGITIZER_TEST
