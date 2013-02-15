@@ -182,6 +182,8 @@
 #define CM_FRONT_LIGHT_DUTY		243
 #define CM_FRONT_LIGHT_FREQUENCY	244
 
+#define CM_POWER_KEY_RAW		250
+
 #define CM_GET_KEYS				107
 
 
@@ -953,7 +955,13 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
 			g_mxc_touch_triggered = 0;
       		break;	
-      		
+		case CM_POWER_KEY_RAW:
+			if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
+				i = (gpio_get_value (GPIO_PWR_SW))?1:0;	// POWER key
+			else
+				i = (gpio_get_value (GPIO_PWR_SW))?0:1;	// POWER key
+			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
+      		break;
 		case CM_GET_WHEEL_KEY_STATUS:
 			i=0;
 			copy_to_user((void __user *)arg, &i, sizeof(unsigned long));
