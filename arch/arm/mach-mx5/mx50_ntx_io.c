@@ -1444,7 +1444,6 @@ bool power_key_before_sleep = 0;
 static struct workqueue_struct *power_key_wq;
 static struct delayed_work power_key_work;
 extern void mxc_kpp_report_power(int isDown);
-void ntx_msp430_i2c_force_release(void);
 
 static void power_key_chk(struct work_struct *work)
 {
@@ -1459,7 +1458,6 @@ static void power_key_chk(struct work_struct *work)
 		if (!power_key_pressed) {
 			pr_info("locking power_key_mutex\n");
 			mutex_lock(&power_key_mutex);
-			ntx_msp430_i2c_force_release();
 			power_key_pressed = 1;
 		}
 
