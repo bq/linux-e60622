@@ -528,8 +528,9 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 		switch (payload[RESPONSE_ID]) {
 		case NOTIFICATION_TOUCH:
 			/* FIXME: remove gSleep_Mode_Suspend condition */
-			/* Case for touch-events received when suspending.
-			 * We want to always report them. */
+			/* Always report touch-events received when
+			 * suspending, when being a wakeup source
+			 */
 			if (ts->suspending && (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend))
 				pm_wakeup_event(&client->dev, 500);
 			zforce_touch_event(ts, &payload[RESPONSE_DATA]);
@@ -627,6 +628,9 @@ static int zforce_suspend(struct device *dev)
 	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
 	int ret = 0;
 
+	/* FIXME: should probably go away, as the irq-handler should trigger
+	 * a wakup event that would resume the driver directly again
+	 */
 	if (!gpio_get_value(pdata->gpio_int)) {
 		dev_err(&client->dev, "data request pending during suspend, this should not happen\n");
 		return -EBUSY;
