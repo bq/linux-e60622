@@ -141,14 +141,12 @@ static int zforce_command(struct zforce_ts *ts, u8 cmd)
 	buf[2] = cmd;
 
 	mutex_lock(&ts->access_mutex);
-
 	ret = i2c_master_send(client, &buf[0], ARRAY_SIZE(buf));
+	mutex_unlock(&ts->access_mutex);
 	if (ret < 0) {
 		dev_err(&client->dev, "i2c send data request error: %d\n", ret);
 		return ret;
 	}
-
-	mutex_unlock(&ts->access_mutex);
 
 	return 0;
 }
@@ -171,14 +169,12 @@ static int zforce_send_wait(struct zforce_ts *ts, const char *buf, const int len
 	ts->command_waiting = buf[2];
 
 	mutex_lock(&ts->access_mutex);
-
 	ret = i2c_master_send(client, buf, len);
+	mutex_unlock(&ts->access_mutex);
 	if (ret < 0) {
 		dev_err(&client->dev, "i2c send data request error: %d\n", ret);
 		goto unlock;
 	}
-
-	mutex_unlock(&ts->access_mutex);
 
 	dev_dbg(&client->dev, "waiting for result for command 0x%x\n", buf[2]);
 
@@ -458,33 +454,35 @@ static int zforce_read_packet(struct zforce_ts *ts, u8 *buf)
 	ret = i2c_master_recv(client, buf, 2);
 	if (ret < 0) {
 		dev_err(&client->dev, "error reading header: %d\n", ret);
-		return ret;
+		goto unlock;
 	}
 
 	if (buf[PAYLOAD_HEADER] != FRAME_START) {
 		dev_err(&client->dev, "invalid frame start: %d\n", buf[0]);
-		return -EINVAL;
+		ret = -EIO;
+		goto unlock;
 	}
 
 	if (buf[PAYLOAD_LENGTH] <= 0 || buf[PAYLOAD_LENGTH] > 255) {
 		dev_err(&client->dev, "invalid payload length: %d\n",
 			buf[PAYLOAD_LENGTH]);
-		return -EINVAL;
+		ret = -EIO;
+		goto unlock;
 	}
 
 	/* read the message */
 	ret = i2c_master_recv(client, &buf[PAYLOAD_BODY], buf[PAYLOAD_LENGTH]);
 	if (ret < 0) {
 		dev_err(&client->dev, "error reading payload: %d\n", ret);
-		return ret;
+		goto unlock;
 	}
-
-	mutex_unlock(&ts->access_mutex);
 
 	dev_dbg(&client->dev, "read %d bytes for response command 0x%x\n",
 		buf[PAYLOAD_LENGTH], buf[PAYLOAD_BODY]);
 
-	return 0;
+unlock:
+	mutex_unlock(&ts->access_mutex);
+	return ret;
 }
 
 static void zforce_complete(struct zforce_ts *ts, int cmd, int result)
