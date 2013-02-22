@@ -108,6 +108,7 @@ struct zforce_ts {
 
 	bool			stopped;
 	bool			suspending;
+	bool			suspended;
 	bool			boot_complete;
 
 	/* Firmware version information */
@@ -511,10 +512,23 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	u8 payload_buffer[512];
 	u8 *payload;
 
+	dev_dbg(&client->dev, "handling interrupt\n");
+
 	/* FIXME: remove gSleep_Mode_Suspend condition */
 	/* Don't emit wakeup events from commands running during suspend */
 	if (!ts->suspending && (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend))
 		pm_stay_awake(&client->dev);
+
+	/* when already suspended, we're holding the access_mutex, so emit
+	 * a wakeup signal if necessary and return
+	 */
+	if (ts->suspended) {
+		/* FIXME: remove gSleep_Mode_Suspend condition */
+		if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend)
+			pm_wakeup_event(&client->dev, 500);
+		msleep(10);
+		return IRQ_HANDLED;
+	}
 
 	while(!gpio_get_value(pdata->gpio_int)) {
 		ret = zforce_read_packet(ts, payload_buffer);
@@ -586,6 +600,8 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 	/* FIXME: remove gSleep_Mode_Suspend condition */
 	if (!ts->suspending && (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend))
 		pm_relax(&client->dev);
+
+	dev_dbg(&client->dev, "finished interrupt\n");
 
 	return IRQ_HANDLED;
 }
@@ -666,6 +682,7 @@ static int zforce_suspend(struct device *dev)
 			goto unlock;
 	}
 
+	ts->suspended = true;
 	mutex_lock(&ts->access_mutex);
 
 unlock:
@@ -685,6 +702,7 @@ static int zforce_resume(struct device *dev)
 	mutex_lock(&input->mutex);
 
 	mutex_unlock(&ts->access_mutex);
+	ts->suspended = false;
 
 	/* FIXME: remove gSleep_Mode_Suspend condition */
 	if (device_may_wakeup(&client->dev) || !gSleep_Mode_Suspend) {
