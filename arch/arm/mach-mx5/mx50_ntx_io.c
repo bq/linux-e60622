@@ -1534,9 +1534,9 @@ static int power_key_notifier_event(struct notifier_block *this,
 			mutex_unlock(&power_key_mutex);
 		}
 		break;
-	case PM_POST_SUSPEND:
+/*	case PM_POST_SUSPEND:
 		power_key_mutex_lock = 0;
-		break;
+		break;*/
 	}
 
 	mutex_unlock(&power_key_check_mutex);
@@ -2267,6 +2267,11 @@ void ntx_gpio_resume (void)
  * ENGR00223524 MX508-Fix the incorrect reset by SRTC
  *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
  */
+
+	/* unlock the powerkey handling early */
+	pr_info("enabling power button handling\n");
+	power_key_mutex_lock = 0;
+
 	
 	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?1:0;
