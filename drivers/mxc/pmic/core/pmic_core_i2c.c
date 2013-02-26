@@ -874,12 +874,25 @@ static const struct i2c_device_id msp430_id[] = {
 
 MODULE_DEVICE_TABLE(i2c, msp430_id);
 
+static int msp430_suspend(struct i2c_client *client, pm_message_t state)
+{
+	dev_info(&client->dev, "suspending\n");
+	if (mutex_is_locked(&power_key_mutex)) {
+		dev_warn(&client->dev, "forcefully unlocking powerkey mutex on suspend\n");
+		mutex_unlock(&power_key_mutex);
+	}
+
+	return 0;
+}
+
+
 static struct i2c_driver msp430_driver = {
 	.driver = {
 		   .name = "msp430",
 		   .bus = NULL,
 		   },
 	.probe = msp430_probe,
+	.suspend = msp430_suspend,
 	.id_table = msp430_id,
 };
 #endif

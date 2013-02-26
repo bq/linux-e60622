@@ -2096,6 +2096,9 @@ void ntx_gpio_suspend (void)
 	/* track the state of the power button before sleep */
 	power_key_before_sleep = power_key_pressed;
 
+	/* cancel any pending powerkey debounce */
+	cancel_delayed_work(&power_key_work);
+
 #if 0
 	printk ("[%s-%d] %s ()\n",__FILE__,__LINE__,__func__);
 	printk ("\t MXC_CCM_CCGR0	0x%08X\n",__raw_readl(MXC_CCM_CCGR0));
