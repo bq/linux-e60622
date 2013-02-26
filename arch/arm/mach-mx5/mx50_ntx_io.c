@@ -20,7 +20,7 @@
 #include <linux/miscdevice.h>
 #include <linux/irq.h>
 #include <linux/freezer.h>
-
+#include <linux/suspend.h>
 
 //#define NTX_GPIO_KEYS		0
 #ifdef NTX_GPIO_KEYS //[
@@ -1439,8 +1439,10 @@ int pxa168_chechk_suspend (void)
 }
 
 struct mutex power_key_mutex;
+struct mutex power_key_check_mutex;
 bool power_key_pressed = 0;
 bool power_key_before_sleep = 0;
+bool power_key_mutex_lock = 0;
 static struct workqueue_struct *power_key_wq;
 static struct delayed_work power_key_work;
 extern void mxc_kpp_report_power(int isDown);
@@ -1449,6 +1451,13 @@ static void power_key_chk(struct work_struct *work)
 {
 	int pwr_key;
 	
+	if (power_key_mutex_lock) {
+		pr_warn("we're suspending, don't check the powerkey now\n");
+		return;
+	}
+
+	mutex_lock(&power_key_check_mutex);
+
 	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?1:0;
 	else
@@ -1456,8 +1465,12 @@ static void power_key_chk(struct work_struct *work)
 
 	if (pwr_key) {
 		if (!power_key_pressed) {
-			pr_info("locking power_key_mutex\n");
-			mutex_lock(&power_key_mutex);
+			if (!power_key_mutex_lock) {
+				pr_info("locking power_key_mutex\n");
+				mutex_lock(&power_key_mutex);
+			} else {
+				pr_info("we're suspending, don't lock the mutex\n");
+			}
 			power_key_pressed = 1;
 		}
 
@@ -1477,8 +1490,10 @@ static void power_key_chk(struct work_struct *work)
 		if (4 <= g_power_key_debounce) {
 			if (gIsCustomerUi) {
 				if (power_key_pressed) {
-					pr_info("unlocking power_key_mutex\n");
-					mutex_unlock(&power_key_mutex);
+					if (mutex_is_locked(&power_key_mutex)) {
+						pr_info("unlocking power_key_mutex\n");
+						mutex_unlock(&power_key_mutex);
+					}
 				} else {
 					pr_warn("double power key up\n");
 				}
@@ -1493,6 +1508,8 @@ static void power_key_chk(struct work_struct *work)
 			queue_delayed_work(power_key_wq, &power_key_work, 2);
 		}
 	}
+
+	mutex_unlock(&power_key_check_mutex);
 }
 
 static irqreturn_t power_key_int(int irq, void *dev_id)
@@ -1502,6 +1519,34 @@ static irqreturn_t power_key_int(int irq, void *dev_id)
 	queue_delayed_work(power_key_wq, &power_key_work, 1);
 	return IRQ_HANDLED;
 }
+
+static int power_key_notifier_event(struct notifier_block *this,
+				    unsigned long event, void *ptr)
+{
+	pr_info("power_key_pm_notifier\n");
+	mutex_lock(&power_key_check_mutex);
+
+	switch(event) {
+	case PM_SUSPEND_PREPARE:
+		power_key_mutex_lock = 1;
+		if (power_key_pressed && mutex_is_locked(&power_key_mutex)) {
+			pr_warn("forcefully unlocking power_key_mutex\n");
+			mutex_unlock(&power_key_mutex);
+		}
+		break;
+	case PM_POST_SUSPEND:
+		power_key_mutex_lock = 0;
+		break;
+	}
+
+	mutex_unlock(&power_key_check_mutex);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block power_key_notifier = {
+	.notifier_call = power_key_notifier_event,
+};
+
 
 static struct workqueue_struct *acin_wq;
 static struct delayed_work acin_work;
@@ -1783,6 +1828,8 @@ static int gpio_initials(void)
 		else
 			set_irq_type(irq, IRQF_TRIGGER_FALLING);*/
 		mutex_init(&power_key_mutex);
+		mutex_init(&power_key_check_mutex);
+		register_pm_notifier(&power_key_notifier);
 		power_key_wq = create_freezeable_workqueue("power key");
 		INIT_DELAYED_WORK(&power_key_work, power_key_chk);
 		set_irq_type(irq, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING);
