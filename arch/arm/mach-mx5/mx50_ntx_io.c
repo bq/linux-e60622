@@ -1534,9 +1534,9 @@ static int power_key_notifier_event(struct notifier_block *this,
 			mutex_unlock(&power_key_mutex);
 		}
 		break;
-/*	case PM_POST_SUSPEND:
+	case PM_POST_SUSPEND:
 		power_key_mutex_lock = 0;
-		break;*/
+		break;
 	}
 
 	mutex_unlock(&power_key_check_mutex);
