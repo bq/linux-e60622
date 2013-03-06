@@ -178,17 +178,20 @@ static void elan_touch_report_data(struct i2c_client *client, uint8_t * buf)
 		if (finger_stat == 0) {
 			input_report_key(elan_touch_data.input, BTN_TOUCH, 0);
 			input_report_key(elan_touch_data.input, BTN_2, 0);
+			input_report_abs(elan_touch_data.input, ABS_PRESSURE, 0);
 		} else if (finger_stat == 1) {
 			elan_touch_parse_xy(&buf[1], &x1, &y1);
 			input_report_abs(elan_touch_data.input, ABS_X, x1);
 			input_report_abs(elan_touch_data.input, ABS_Y, y1);
 			input_report_key(elan_touch_data.input, BTN_TOUCH, 1);
 			input_report_key(elan_touch_data.input, BTN_2, 0);
+			input_report_abs(elan_touch_data.input, ABS_PRESSURE, 1);
 		} else if (finger_stat == 2) {
 			elan_touch_parse_xy(&buf[1], &x1, &y1);
 			input_report_abs(elan_touch_data.input, ABS_X, x1);
 			input_report_abs(elan_touch_data.input, ABS_Y, y1);
 			input_report_key(elan_touch_data.input, BTN_TOUCH, 1);
+			input_report_abs(elan_touch_data.input, ABS_PRESSURE, 1);
 			elan_touch_parse_xy(&buf[4], &x2, &y2);
 			input_report_abs(elan_touch_data.input, ABS_HAT0X, x2);
 			input_report_abs(elan_touch_data.input, ABS_HAT0Y, y2);
@@ -313,7 +316,10 @@ static int elan_touch_probe(struct i2c_client *client,
 	set_bit(ABS_Y, elan_touch_data.input->absbit);
 	set_bit(ABS_HAT0X, elan_touch_data.input->absbit);
 	set_bit(ABS_HAT0Y, elan_touch_data.input->absbit);
+	set_bit(ABS_PRESSURE, elan_touch_data.input->absbit);
 
+	input_set_abs_params(elan_touch_data.input, ABS_PRESSURE, 0, 1024,
+			     0, 0);
 	input_set_abs_params(elan_touch_data.input, ABS_X, 0, ELAN_USER_X_MAX,
 			     0, 0);
 	input_set_abs_params(elan_touch_data.input, ABS_Y, 0, ELAN_USER_Y_MAX,
