@@ -1839,7 +1839,7 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 	for (i = 0; i < chip->num_slots; i++)
 		chip->hosts[i]->mmc->was_present = chip->hosts[i]->mmc->ops->get_cd(chip->hosts[i]->mmc);
 
-	if (9==iHWID) {
+/*	if (9==iHWID) {
 	}
 	else {
 		if(11==iHWID) {
@@ -1856,8 +1856,10 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 				enable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
 			return 0;	// Joseph 100323 test
 		}
-	}
+	}*/
 	
+	skip_dev_id = (iHWID == 11) ? 0 : 1;
+
 //	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
 	if (gSleep_Mode_Suspend) {
 		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
@@ -1882,9 +1884,15 @@ static int sdhci_suspend(struct platform_device *pdev, pm_message_t state)
 		for (i = 0; i < chip->num_slots; i++) {
 			if (!chip->hosts[i])
 				continue;
+			if (chip->hosts[i]->detect_irq)
+				disable_irq(chip->hosts[i]->detect_irq);
 			free_irq(chip->hosts[i]->irq, chip->hosts[i]);
 		}
+	} else if (iHWID != 9 && !gSleep_Mode_Suspend && pdev->id == skip_dev_id) {
+		printk ("[%s-%d] skip suspend for mmc%d\n",__func__,__LINE__,pdev->id);
+		enable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
 	}
+
 	return 0;
 }
 
@@ -1902,7 +1910,7 @@ static int sdhci_resume(struct platform_device *pdev)
 	DBG("Resuming...\n");
 	iHWID = check_hardware_name();
 
-	if (9==iHWID) {
+/*	if (9==iHWID) {
 	}
 	else { 
 		if(11==iHWID) {
@@ -1919,8 +1927,10 @@ static int sdhci_resume(struct platform_device *pdev)
 				disable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
 			return 0;	// Joseph 100323 test
 		}
-	}
-	
+	}*/
+
+	skip_dev_id = (iHWID == 11) ? 0 : 1;
+
 //	if(gptHWCFG->m_val.bCustomer != 5 && pdev->id != 2) {
 	if (gSleep_Mode_Suspend) {
 		/* only suspend the non-wifi ports, as the bcmsdh_sdmmc driver does not provide suspend methods */
@@ -1933,6 +1943,10 @@ static int sdhci_resume(struct platform_device *pdev)
 					chip->hosts[i]);
 			if (ret)
 				return ret;
+
+			if (chip->hosts[i]->detect_irq)
+				enable_irq(chip->hosts[i]->detect_irq);
+
 			sdhci_init(chip->hosts[i]);
 			chip->hosts[i]->init_flag = 2;
 			mmiowb();
@@ -1940,6 +1954,9 @@ static int sdhci_resume(struct platform_device *pdev)
 			if (ret)
 				return ret;
 		}
+	} else if (iHWID != 9 && !gSleep_Mode_Suspend && pdev->id == skip_dev_id) {
+		printk ("[%s-%d] skip resume for mmc%d\n",__func__,__LINE__,pdev->id);
+		disable_irq_wake(chip->hosts[0]->detect_irq);	// Joseph 20110518
 	}
 	return 0;
 }
