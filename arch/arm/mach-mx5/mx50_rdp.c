@@ -1946,6 +1946,17 @@ static unsigned int sdhc_get_card_det_status(struct device *dev)
 		else if (iDevID == 1)
 		{
 			ret = gpio_get_value(SD2_CD);
+
+if (ret) { /* not present */
+printk("disabling pins\n");
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_disable_pads, \
+			ARRAY_SIZE(mx50_sd2_disable_pads));
+} else { /* card present */
+printk("enabling pins\n");
+		mxc_iomux_v3_setup_multiple_pads(mx50_sd2_enable_pads, \
+			ARRAY_SIZE(mx50_sd2_enable_pads));
+}
+
 		}
 		else if (iDevID == 2)
 		{
