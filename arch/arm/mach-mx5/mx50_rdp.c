@@ -143,6 +143,8 @@
 #define G_SENSOR_INT	(4*32 + 25)	/*GPIO_5_25 */
 #define E50602_G_SENSOR_INT	(3*32 + 15)	/*GPIO_4_15 */
 
+#define IR_TOUCH_RST		(4*32 + 26)	/*GPIO_5_26 */
+
 
 extern int __init mx50_rdp_init_mc13892(void);
 extern struct cpu_wp *(*get_cpu_wp)(int *wp);
@@ -1786,6 +1788,7 @@ static struct zforce_ts_platdata zforce_ts_data = {
 	.x_max = 600,
 	.y_max = 800,
 	.gpio_int = TOUCH_INT,
+	.gpio_rst = IR_TOUCH_RST,
 };
 
 static struct i2c_board_info mxc_i2c0_E60612_board_info[] __initdata = {

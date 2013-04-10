@@ -18,9 +18,7 @@
 
 struct zforce_ts_platdata {
 	int gpio_int;
-
-	void (*init_hw)(struct i2c_client *);
-	void (*exit_hw)(struct i2c_client *);
+	int gpio_rst;
 
 	unsigned int x_max;
 	unsigned int y_max;

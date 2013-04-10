@@ -575,12 +575,13 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 				printk("[%s-%d] zforce got confused, doing reset\n", __func__, __LINE__);
 				ret = zforce_stop(ts);
 				if (ret) {
-					msleep(300);
-					ret = zforce_stop(ts);
-					if (ret)
-						break;
+					ts->stopped = true;
+					disable_irq(client->irq);
+					gpio_set_value(pdata->gpio_rst, 0);
+					msleep(50);
+					gpio_set_value(pdata->gpio_rst, 1);
 				}
-				msleep(100);
+				msleep(200);
 				zforce_start(ts);
 			}
 
@@ -759,12 +760,29 @@ static int zforce_probe(struct i2c_client *client,
 	if (ret) {
 		dev_err("setting direction of gpio %d failed, %d\n",
 			pdata->gpio_int, ret);
-		goto err
+		goto err_gpio_int_dir;
 	}
 */
 
-	if (pdata->init_hw)
-		pdata->init_hw(client);
+	ret = gpio_request(pdata->gpio_rst, "zforce_ts_rst");
+	if (ret) {
+		dev_err(&client->dev, "request of gpio %d failed, %d\n",
+			pdata->gpio_rst, ret);
+		goto err_gpio_rst;
+	}
+
+	ret = gpio_direction_output(pdata->gpio_rst, 0);
+	if (ret) {
+		dev_err(&client->dev, "setting direction of gpio %d failed, %d\n",
+			pdata->gpio_int, ret);
+		goto err_gpio_rst_dir;
+	}
+
+	msleep(20);
+
+	gpio_set_value(pdata->gpio_rst, 1);
+
+	msleep(200);
 
 	mutex_init(&ts->access_mutex);
 	mutex_init(&ts->command_mutex);
@@ -874,10 +892,14 @@ err_input_register:
 err_irq_request:
 	input_free_device(input_dev);
 err_input_alloc:
-	if (pdata->exit_hw)
-		pdata->exit_hw(client);
+
+
+err_gpio_rst_dir:
+	gpio_free(pdata->gpio_rst);
+err_gpio_rst:
+
 /* FIXME; enable once we got rid of the ntx stuff
-err_gpio_direction:
+err_gpio_int_dir:
 	gpio_free(pdata->gpio_int);
 err_gpio_int:
 */
@@ -895,8 +917,7 @@ static int zforce_remove(struct i2c_client *client)
 
 	input_unregister_device(ts->input);
 
-	if (pdata->exit_hw)
-		pdata->exit_hw(client);
+	gpio_free(pdata->gpio_rst);
 
 /* FIXME; enable once we got rid of the ntx stuff
 	gpio_free(pdata->gpio_int);
