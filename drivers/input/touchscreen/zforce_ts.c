@@ -2,7 +2,7 @@
  * Copyright (C) 2012 MundoReader S.L.
  * Author: Heiko Stuebner <heiko@sntech.de>
  * 
- * based on
+ * based on Nook zforce driver
  * 
  * Copyright (C) 2010 Barnes & Noble, Inc.
  * Author: Pieter Truter<ptruter@intrinsyc.com>
@@ -764,34 +764,18 @@ static int zforce_probe(struct i2c_client *client,
 	if (!ts)
 		return -ENOMEM;
 
-/* FIXME; enable once we got rid of the ntx stuff
-	ret = gpio_request(pdata->gpio_int, "zforce_ts_int");
+	ret = gpio_request_one(pdata->gpio_int, GPIOF_IN, "zforce_ts_int");
 	if (ret) {
 		dev_err(&client->dev, "request of gpio %d failed, %d\n",
 			pdata->gpio_int, ret);
 		goto err_gpio_int;
 	}
 
-	ret = gpio_direction_input(pdata->gpio_int);
-	if (ret) {
-		dev_err("setting direction of gpio %d failed, %d\n",
-			pdata->gpio_int, ret);
-		goto err_gpio_int_dir;
-	}
-*/
-
-	ret = gpio_request(pdata->gpio_rst, "zforce_ts_rst");
+	ret = gpio_request_one(pdata->gpio_rst, GPIOF_OUT_INIT_LOW, "zforce_ts_rst");
 	if (ret) {
 		dev_err(&client->dev, "request of gpio %d failed, %d\n",
 			pdata->gpio_rst, ret);
 		goto err_gpio_rst;
-	}
-
-	ret = gpio_direction_output(pdata->gpio_rst, 0);
-	if (ret) {
-		dev_err(&client->dev, "setting direction of gpio %d failed, %d\n",
-			pdata->gpio_int, ret);
-		goto err_gpio_rst_dir;
 	}
 	msleep(20);
 
@@ -910,17 +894,10 @@ err_input_register:
 err_irq_request:
 	input_free_device(input_dev);
 err_input_alloc:
-
-
-err_gpio_rst_dir:
 	gpio_free(pdata->gpio_rst);
 err_gpio_rst:
-
-/* FIXME; enable once we got rid of the ntx stuff
-err_gpio_int_dir:
 	gpio_free(pdata->gpio_int);
 err_gpio_int:
-*/
 	kfree(ts);
 
 	return ret;
@@ -931,15 +908,10 @@ static int zforce_remove(struct i2c_client *client)
 	struct zforce_ts *ts = i2c_get_clientdata(client);
 	struct zforce_ts_platdata *pdata = client->dev.platform_data;
 
-	free_irq(client->irq, ts);
-
 	input_unregister_device(ts->input);
-
+	free_irq(client->irq, ts);
 	gpio_free(pdata->gpio_rst);
-
-/* FIXME; enable once we got rid of the ntx stuff
 	gpio_free(pdata->gpio_int);
-*/
 	kfree(ts);
 
 	return 0;

@@ -1850,10 +1850,10 @@ static int gpio_initials(void)
 
 		// Touch interrupt
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD2_D7__GPIO_5_15);
-		gpio_request(TOUCH_INT, "touch_int");
+/*		gpio_request(TOUCH_INT, "touch_int");
 		gpio_direction_input(TOUCH_INT);
 		irq = gpio_to_irq(TOUCH_INT);
-		set_irq_type(irq, IRQF_TRIGGER_FALLING);
+		set_irq_type(irq, IRQF_TRIGGER_FALLING);*/
 		
 	    // Touch reset
 		mxc_iomux_v3_setup_pad(MX50_PAD_SD3_D6__GPIO_5_26);
