@@ -760,7 +760,7 @@ static int zforce_probe(struct i2c_client *client,
 	if (!pdata)
 		return -EINVAL;
 
-	ts = kzalloc(sizeof(struct zforce_ts), GFP_KERNEL);
+	ts = devm_kzalloc(&client->dev, sizeof(struct zforce_ts), GFP_KERNEL);
 	if (!ts)
 		return -ENOMEM;
 
@@ -768,7 +768,7 @@ static int zforce_probe(struct i2c_client *client,
 	if (ret) {
 		dev_err(&client->dev, "request of gpio %d failed, %d\n",
 			pdata->gpio_int, ret);
-		goto err_gpio_int;
+		return ret;
 	}
 
 	ret = gpio_request_one(pdata->gpio_rst, GPIOF_OUT_INIT_LOW, "zforce_ts_rst");
@@ -897,8 +897,6 @@ err_input_alloc:
 	gpio_free(pdata->gpio_rst);
 err_gpio_rst:
 	gpio_free(pdata->gpio_int);
-err_gpio_int:
-	kfree(ts);
 
 	return ret;
 }
@@ -912,7 +910,6 @@ static int zforce_remove(struct i2c_client *client)
 	free_irq(client->irq, ts);
 	gpio_free(pdata->gpio_rst);
 	gpio_free(pdata->gpio_int);
-	kfree(ts);
 
 	return 0;
 }
