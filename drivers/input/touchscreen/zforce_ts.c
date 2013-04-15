@@ -126,6 +126,7 @@ struct zforce_ts {
 
 	/* FIXME: not for upstream */
 	struct delayed_work	check;
+	struct delayed_work	reset;
 };
 
 static int zforce_command(struct zforce_ts *ts, u8 cmd)
@@ -256,8 +257,6 @@ static int zforce_start(struct zforce_ts *ts)
 
 	dev_dbg(&client->dev, "starting device\n");
 
-	enable_irq(client->irq);
-
 	ts->stopped = false;
 
 	ret = zforce_command_wait(ts, COMMAND_INITIALIZE);
@@ -302,7 +301,6 @@ static int zforce_start(struct zforce_ts *ts)
 
 error:
 	zforce_command_wait(ts, COMMAND_DEACTIVATE);
-	disable_irq(client->irq);
 	ts->stopped = true;
 	return ret;
 }
@@ -327,8 +325,6 @@ static int zforce_stop(struct zforce_ts *ts)
 
 	ts->stopped = true;
 
-	disable_irq(client->irq);
-
 	return 0;
 }
 
@@ -340,13 +336,44 @@ static void zforce_check_work(struct work_struct *work)
 	int ret;
 
 	dev_dbg(&client->dev, "periodic hang check\n");
-	
+
+	if (ts->stopped) {
+		dev_warn(&client->dev, "zforce is stopped, doing nothing in check_work\n");
+		return;
+	}
+
 	ret = zforce_command_wait(ts, COMMAND_STATUS);
 	if (ret < 0) {
 		dev_err(&client->dev, "could not get device status, %d\n", ret);
 	}
 
 	schedule_delayed_work(&ts->check, HZ * 10);
+}
+
+static void zforce_reset_work(struct work_struct *work)
+{
+	struct zforce_ts *ts = container_of(work, struct zforce_ts, reset.work);
+	struct i2c_client *client = ts->client;
+	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
+	int ret;
+
+	dev_dbg(&client->dev, "resetting controller\n");
+
+	ts->stopped = true;
+	cancel_delayed_work_sync(&ts->check);
+
+	/* bring the ts into the reset state */
+	printk("zforce reset\n");
+	gpio_set_value(pdata->gpio_rst, 0);
+	msleep(200);
+	gpio_set_value(pdata->gpio_rst, 1);
+
+	ts->command_waiting = NOTIFICATION_BOOTCOMPLETE;
+	if (wait_for_completion_timeout(&ts->command_done, WAIT_TIMEOUT) == 0)
+		dev_warn(&client->dev, "bootcomplete timed out\n");
+
+	/* restart it */
+	zforce_start(ts);
 }
 
 static int zforce_touch_event(struct zforce_ts *ts, u8* payload)
@@ -549,6 +576,7 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 			break;
 		case NOTIFICATION_BOOTCOMPLETE:
 			ts->boot_complete = payload[RESPONSE_DATA];
+			zforce_complete(ts, payload[RESPONSE_ID], 0);
 			break;
 		case RESPONSE_INITIALIZE:
 		case RESPONSE_DEACTIVATE:
@@ -567,25 +595,16 @@ static irqreturn_t zforce_interrupt(int irq, void *dev_id)
 			ts->version_rev   = (payload[RESPONSE_DATA + 7] << 8) | payload[RESPONSE_DATA + 6];
 			dev_info(&ts->client->dev, "Firmware Version %04x:%04x %04x:%04x\n", ts->version_major, ts->version_minor, ts->version_build, ts->version_rev);
 
+			zforce_complete(ts, payload[RESPONSE_ID], 0);
+
 			/* 255 is the value contained in buf9 when the zforce
 			 * controller loses any valid state.
 			 * FIXME: probably not for upstream
 			 */
 			if (payload[RESPONSE_DATA + 8] == 255) {
-				printk("[%s-%d] zforce got confused, doing reset\n", __func__, __LINE__);
-				ret = zforce_stop(ts);
-				if (ret) {
-					ts->stopped = true;
-					disable_irq(client->irq);
-					gpio_set_value(pdata->gpio_rst, 0);
-					msleep(50);
-					gpio_set_value(pdata->gpio_rst, 1);
-				}
-				msleep(200);
-				zforce_start(ts);
+				printk("[%s-%d] zforce got confused, scheduling reset\n", __func__, __LINE__);
+				schedule_delayed_work(&ts->reset, HZ / 10);
 			}
-
-			zforce_complete(ts, payload[RESPONSE_ID], 0);
 			break;
 		case NOTIFICATION_INVALID_COMMAND:
 			dev_err(&ts->client->dev, "invalid command: 0x%x\n", payload[RESPONSE_DATA]);
@@ -627,10 +646,8 @@ static void zforce_input_close(struct input_dev *dev)
 	 * enable/disable mismatches
 	 */
 	ret = zforce_stop(ts);
-	if (ret) {
-		dev_warn(&client->dev, "stopping zforce failed, disabling irq manually\n");
-		disable_irq(client->irq);
-	}
+	if (ret)
+		dev_warn(&client->dev, "stopping zforce failed\n");
 
 	return;
 }
@@ -777,12 +794,7 @@ static int zforce_probe(struct i2c_client *client,
 			pdata->gpio_int, ret);
 		goto err_gpio_rst_dir;
 	}
-
 	msleep(20);
-
-	gpio_set_value(pdata->gpio_rst, 1);
-
-	msleep(200);
 
 	mutex_init(&ts->access_mutex);
 	mutex_init(&ts->command_mutex);
@@ -840,6 +852,7 @@ static int zforce_probe(struct i2c_client *client,
 
 	/* FIXME: not for upstream */
 	INIT_DELAYED_WORK(&ts->check, zforce_check_work);
+	INIT_DELAYED_WORK(&ts->reset, zforce_reset_work);
 
 	/* The zforce pulls the interrupt low when it has data ready.
 	 * After it is triggered the isr thread runs until all the available
@@ -857,6 +870,13 @@ static int zforce_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, ts);
 
+	/* let the controller boot */
+	gpio_set_value(pdata->gpio_rst, 1);
+
+	ts->command_waiting = NOTIFICATION_BOOTCOMPLETE;
+	if (wait_for_completion_timeout(&ts->command_done, WAIT_TIMEOUT) == 0)
+		dev_warn(&client->dev, "bootcomplete timed out\n");
+
 	/* need to start device to get version information */
 	ret = zforce_command_wait(ts, COMMAND_INITIALIZE);
 	if (ret) {
@@ -871,7 +891,6 @@ static int zforce_probe(struct i2c_client *client,
 		zforce_stop(ts);
 		goto err_input_register;
 	}
-
 
 	/* stop device and put it into sleep until it is opened */
 	ret = zforce_stop(ts);
