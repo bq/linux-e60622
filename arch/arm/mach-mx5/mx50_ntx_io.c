@@ -1443,6 +1443,7 @@ struct mutex power_key_check_mutex;
 bool power_key_pressed = 0;
 bool power_key_before_sleep = 0;
 bool power_key_mutex_lock = 0;
+bool power_key_resuming = 0;
 static struct workqueue_struct *power_key_wq;
 static struct delayed_work power_key_work;
 extern void mxc_kpp_report_power(int isDown);
@@ -1536,6 +1537,7 @@ static int power_key_notifier_event(struct notifier_block *this,
 		break;
 	case PM_POST_SUSPEND:
 		power_key_mutex_lock = 0;
+		power_key_resuming = 0;
 		break;
 	}
 
@@ -2273,6 +2275,7 @@ void ntx_gpio_resume (void)
 	/* unlock the powerkey handling early */
 	pr_info("enabling power button handling\n");
 	power_key_mutex_lock = 0;
+	power_key_resuming = 1;
 
 	
 	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602

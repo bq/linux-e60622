@@ -432,6 +432,7 @@ static void add_crc16(unsigned char *data, int len) {
 }
 
 extern struct mutex power_key_mutex;
+extern bool power_key_resuming;
 
 static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int nread, int crc) {
 
@@ -446,6 +447,12 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 		{addr, flags | I2C_M_RD, nread, outdata},
 	};
 	int nmsg = (nread > 0) ? 2 : 1;
+
+	/* Only wait for unlocking of mutex in resume situations
+	 * During normal operations skip conflicting accesses to the msp.
+	 */
+	if (!power_key_resuming && mutex_is_locked(&power_key_mutex))
+		return -EIO;
 
 	mutex_lock(&power_key_mutex);
 
@@ -507,6 +514,12 @@ unsigned int msp430_read(unsigned int reg)
 	
 	if ((0x60 == reg) && (NEWMSP))
 		return 0;
+
+	/* Only wait for unlocking of mutex in resume situations
+	 * During normal operations skip conflicting accesses to the msp.
+	 */
+	if (!power_key_resuming && mutex_is_locked(&power_key_mutex))
+		return -EIO;
 	
 	mutex_lock(&power_key_mutex);
 
@@ -546,6 +559,12 @@ int msp430_write(unsigned int reg, unsigned int value)
 	}
 	msg.addr = client->addr;
 	msg.flags = client->flags;
+
+	/* Only wait for unlocking of mutex in resume situations
+	 * During normal operations skip conflicting accesses to the msp.
+	 */
+	if (!power_key_resuming && mutex_is_locked(&power_key_mutex))
+		return -EIO;
 
 	mutex_lock(&power_key_mutex);
 
