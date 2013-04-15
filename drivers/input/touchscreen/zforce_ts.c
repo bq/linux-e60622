@@ -355,7 +355,6 @@ static void zforce_reset_work(struct work_struct *work)
 	struct zforce_ts *ts = container_of(work, struct zforce_ts, reset.work);
 	struct i2c_client *client = ts->client;
 	const struct zforce_ts_platdata *pdata = client->dev.platform_data;
-	int ret;
 
 	dev_dbg(&client->dev, "resetting controller\n");
 
