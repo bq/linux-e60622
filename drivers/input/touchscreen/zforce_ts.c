@@ -695,6 +695,8 @@ static int zforce_suspend(struct device *dev)
 		ret = zforce_stop(ts);
 		if (ret)
 			goto unlock;
+
+		disable_irq(client->irq);
 	}
 
 	ts->suspended = true;
@@ -737,6 +739,8 @@ static int zforce_resume(struct device *dev)
 			schedule_delayed_work(&ts->check, HZ * 10);
 	} else if (input->users) {
 		dev_dbg(&client->dev, "resume without being a wakeup source\n");
+
+		enable_irq(client->irq);
 
 		ret = zforce_start(ts);
 	}
