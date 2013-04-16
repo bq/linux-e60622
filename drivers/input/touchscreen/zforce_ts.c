@@ -670,6 +670,10 @@ static int zforce_suspend(struct device *dev)
 	mutex_lock(&input->mutex);
 	ts->suspending = true;
 
+	/* FIXME: not for upstream */
+	if (input->users)
+		cancel_delayed_work_sync(&ts->check);
+
 	/* when configured as wakeup source, device should always wake system
 	 * therefore start device if necessary
 	 */
@@ -685,10 +689,6 @@ static int zforce_suspend(struct device *dev)
 		}
 
 		enable_irq_wake(client->irq);
-
-		/* FIXME: not for upstream */
-		if (input->users)
-			cancel_delayed_work_sync(&ts->check);
 	} else if (input->users) {
 		dev_dbg(&client->dev, "suspend without being a wakeup source\n");
 
@@ -733,10 +733,6 @@ static int zforce_resume(struct device *dev)
 			if (ret)
 				goto unlock;
 		}
-
-		/* FIXME: not for upstream */
-		if (input->users)
-			schedule_delayed_work(&ts->check, HZ * 10);
 	} else if (input->users) {
 		dev_dbg(&client->dev, "resume without being a wakeup source\n");
 
@@ -744,6 +740,13 @@ static int zforce_resume(struct device *dev)
 
 		ret = zforce_start(ts);
 	}
+
+	/* FIXME: not for upstream
+	 * We schedule a nearly immediate (100ms) check to make sure,
+	 * the zforce is ok after waking up.
+	 */
+	if (input->users)
+		schedule_delayed_work(&ts->check, HZ / 10);
 
 unlock:
 	mutex_unlock(&input->mutex);
