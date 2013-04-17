@@ -3367,8 +3367,18 @@ static int mxc_epdc_fb_pan_display(struct fb_var_screeninfo *var,
 	return 0;
 }
 
+static int mxc_epdc_fb_open(struct fb_info *info, int user)
+{
+	/* don't allow framebuffer console */
+	if (user == 0)
+		return -ENODEV;
+
+	return 0;
+}
+
 static struct fb_ops mxc_epdc_fb_ops = {
 	.owner = THIS_MODULE,
+	.fb_open = mxc_epdc_fb_open,
 	.fb_check_var = mxc_epdc_fb_check_var,
 	.fb_set_par = mxc_epdc_fb_set_par,
 	.fb_setcolreg = mxc_epdc_fb_setcolreg,
