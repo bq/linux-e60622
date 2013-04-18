@@ -1442,6 +1442,7 @@ struct mutex power_key_mutex;
 struct mutex power_key_check_mutex;
 bool power_key_pressed = 0;
 bool power_key_before_sleep = 0;
+bool power_key_after_sleep = 0;
 bool power_key_mutex_lock = 0;
 bool power_key_resuming = 0;
 static struct workqueue_struct *power_key_wq;
@@ -1538,6 +1539,10 @@ static int power_key_notifier_event(struct notifier_block *this,
 	case PM_POST_SUSPEND:
 		power_key_mutex_lock = 0;
 		power_key_resuming = 0;
+
+		if (power_key_after_sleep && !gSleep_Mode_Suspend)
+			mxc_kpp_report_power(1);
+
 		break;
 	}
 
@@ -2282,6 +2287,9 @@ void ntx_gpio_resume (void)
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?1:0;
 	else
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?0:1;
+
+	/* if the powerkey is pressed now, report it directly */
+	power_key_after_sleep = pwr_key;
 
 	if (pwr_key != power_key_before_sleep) {
 		pr_warn("power key state changed during suspend!\n");
