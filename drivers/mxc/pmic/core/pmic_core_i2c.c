@@ -454,7 +454,9 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 	if (!power_key_resuming && mutex_is_locked(&power_key_mutex))
 		return -EIO;
 
+	/* the i2c adapter also checks for a locked mutex, so unlock immediately again */
 	mutex_lock(&power_key_mutex);
+	mutex_unlock(&power_key_mutex);
 
 	buffer[0] = cmd;
 	buffer[1] = arg;
@@ -474,8 +476,7 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 		i2c_ret = i2c_transfer(client->adapter, msg, nmsg);
 		if (i2c_ret >= 0) break;
 		pr_err("%s: error: cmd 0x%02x (nwrite=%d nread=%d)\n", __func__, cmd, nwrite, nread);
-		if (i == 5) {
-			mutex_unlock(&power_key_mutex);
+		if (i == 5 || mutex_is_locked(&power_key_mutex)) {
 			return -EIO;
 		}
 		mdelay(50);
@@ -485,7 +486,6 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 	//if (nread > 0) for (i=0; i<msg[1].len; i++) printk(" %02x", msg[1].buf[i]);
 	//printk("\n");
 
-	mutex_unlock(&power_key_mutex);
 	return 0;
 
 
@@ -521,14 +521,16 @@ unsigned int msp430_read(unsigned int reg)
 	if (!power_key_resuming && mutex_is_locked(&power_key_mutex))
 		return -EIO;
 	
+	/* the i2c adapter also checks for a locked mutex, so unlock immediately again */
 	mutex_lock(&power_key_mutex);
+	mutex_unlock(&power_key_mutex);
 
 	msg[0].addr = client->addr;
 	msg[0].flags = client->flags;
 	msg[1].addr = client->addr;
 	msg[1].flags |= client->flags;
 	
-	while (retry_count--) {
+	while (retry_count-- && !mutex_is_locked(&power_key_mutex)) {
 		buf0[0] = reg & 0xff;
 		i2c_ret = i2c_transfer(client->adapter, msg, 2);
 		if (i2c_ret >= 0) {
@@ -540,7 +542,6 @@ unsigned int msp430_read(unsigned int reg)
 		schedule_timeout (50);
 	}
 //	printk("[%s-%d] reg:0x%02x, value:0x%04x\n",__FUNCTION__,__LINE__, reg, value);
-	mutex_unlock(&power_key_mutex);
 	return value;
 }
 
@@ -566,7 +567,9 @@ int msp430_write(unsigned int reg, unsigned int value)
 	if (!power_key_resuming && mutex_is_locked(&power_key_mutex))
 		return -EIO;
 
+	/* the i2c adapter also checks for a locked mutex, so unlock immediately again */
 	mutex_lock(&power_key_mutex);
+	mutex_unlock(&power_key_mutex);
 
 //	printk ("[%s-%d] 0x%02X 0x%04X\n",__FUNCTION__,__LINE__,reg,value);
 	pr_debug("w r:%02x,v:%04x\n", reg, value);
@@ -580,11 +583,9 @@ int msp430_write(unsigned int reg, unsigned int value)
 		       __func__, reg, value);
 		ntx_msp430_i2c_force_release ();
 		schedule_timeout (50);
-		mutex_unlock(&power_key_mutex);
 		return -EIO;
 	}
 
-	mutex_unlock(&power_key_mutex);
 	return i2c_ret;
 }
 

@@ -291,12 +291,32 @@ static irqreturn_t i2c_imx_isr(int irq, void *dev_id)
 	return IRQ_NONE;
 }
 
+extern struct mutex power_key_mutex;
+static inline int pwr_mutex_locked(struct i2c_adapter *adapter)
+{
+	int ret;
+
+	/* only care about the msp i2c */
+	if (adapter->nr != 2)
+		return false;
+
+	ret = mutex_is_locked(&power_key_mutex);
+	if (ret)
+		dev_warn(&adapter->dev, "stopping running transfer due to pressed power button\n");
+printk("%d ", ret);
+
+	return ret;
+}
+
 static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 {
 	int i, result;
 
 	dev_dbg(&i2c_imx->adapter.dev, "<%s> write slave address: addr=0x%x\n",
 		__func__, msgs->addr << 1);
+
+	if (pwr_mutex_locked(&i2c_imx->adapter))
+		return -EIO;
 
 	/* write slave address */
 	writeb(msgs->addr << 1, i2c_imx->base + IMX_I2C_I2DR);
@@ -310,6 +330,9 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 
 	/* write data */
 	for (i = 0; i < msgs->len; i++) {
+		if (pwr_mutex_locked(&i2c_imx->adapter))
+			return -EIO;
+
 		dev_dbg(&i2c_imx->adapter.dev,
 			"<%s> write byte: B%d=0x%X\n",
 			__func__, i, msgs->buf[i]);
@@ -332,6 +355,9 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 	dev_dbg(&i2c_imx->adapter.dev,
 		"<%s> write slave address: addr=0x%x\n",
 		__func__, (msgs->addr << 1) | 0x01);
+
+	if (pwr_mutex_locked(&i2c_imx->adapter))
+		return -EIO;
 
 	/* write slave address */
 	writeb((msgs->addr << 1) | 0x01, i2c_imx->base + IMX_I2C_I2DR);
@@ -356,6 +382,9 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 
 	/* read data */
 	for (i = 0; i < msgs->len; i++) {
+		if (pwr_mutex_locked(&i2c_imx->adapter))
+			return -EIO;
+
 		result = i2c_imx_trx_complete(i2c_imx);
 		if (result)
 			return result;
@@ -392,6 +421,8 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 	struct imx_i2c_struct *i2c_imx = i2c_get_adapdata(adapter);
 
 	dev_dbg(&i2c_imx->adapter.dev, "<%s>\n", __func__);
+if (i2c_imx->adapter.nr == 2)
+dev_warn(&i2c_imx->adapter.dev, "<%s>\n", __func__);
 
 	/* Start I2C transfer */
 	result = i2c_imx_start(i2c_imx);
@@ -400,6 +431,11 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 
 	/* read/write data */
 	for (i = 0; i < num; i++) {
+		if (pwr_mutex_locked(adapter)) {
+			result = -EIO;
+			goto fail0;
+		}
+
 		if (i) {
 			dev_dbg(&i2c_imx->adapter.dev,
 				"<%s> repeated start\n", __func__);
@@ -441,6 +477,10 @@ fail0:
 	/* Stop I2C transfer */
 	i2c_imx_stop(i2c_imx);
 
+if (i2c_imx->adapter.nr == 2)
+dev_warn(&i2c_imx->adapter.dev, "<%s> exit with: %s: %d\n", __func__,
+		(result < 0) ? "error" : "success msg",
+			(result < 0) ? result : num);
 	dev_dbg(&i2c_imx->adapter.dev, "<%s> exit with: %s: %d\n", __func__,
 		(result < 0) ? "error" : "success msg",
 			(result < 0) ? result : num);
