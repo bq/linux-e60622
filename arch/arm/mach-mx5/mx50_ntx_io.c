@@ -1449,14 +1449,33 @@ static struct workqueue_struct *power_key_wq;
 static struct delayed_work power_key_work;
 extern void mxc_kpp_report_power(int isDown);
 
+static void kill_msp_i2c()
+{
+	mxc_iomux_v3_setup_pad(MX50_PAD_I2C3_SDA__GPIO_6_23);
+	gpio_request(GPIO_I2C3_SDA, "i2c3_sda");
+	gpio_direction_output (GPIO_I2C3_SDA, 1);
+	mxc_iomux_v3_setup_pad(MX50_PAD_I2C3_SCL__GPIO_6_22);
+	gpio_request(GPIO_I2C3_SCL, "i2c3_scl");
+	gpio_direction_output (GPIO_I2C3_SCL, 1);
+}
+
+static void start_msp_i2c()
+{
+	gpio_free(GPIO_I2C3_SCL);
+	mxc_iomux_v3_setup_pad(MX50_PAD_I2C3_SCL__I2C3_SCL);
+	udelay (2);
+	gpio_free(GPIO_I2C3_SDA);
+	mxc_iomux_v3_setup_pad(MX50_PAD_I2C3_SDA__I2C3_SDA);
+}
+
 static void power_key_chk(struct work_struct *work)
 {
 	int pwr_key;
-	
-	if (power_key_mutex_lock) {
+
+/*	if (power_key_mutex_lock) {
 		pr_warn("we're suspending, don't check the powerkey now\n");
 		return;
-	}
+	}*/
 
 	mutex_lock(&power_key_check_mutex);
 
@@ -1466,13 +1485,11 @@ static void power_key_chk(struct work_struct *work)
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?0:1;
 
 	if (pwr_key) {
+		/* lock the mutex on initial down event */
 		if (!power_key_pressed) {
-			if (!power_key_mutex_lock) {
-				pr_info("locking power_key_mutex\n");
-				mutex_lock(&power_key_mutex);
-			} else {
-				pr_info("we're suspending, don't lock the mutex\n");
-			}
+			pr_info("locking power_key_mutex\n");
+			mutex_lock(&power_key_mutex);
+			kill_msp_i2c();
 			power_key_pressed = 1;
 		}
 
@@ -1494,6 +1511,7 @@ static void power_key_chk(struct work_struct *work)
 				if (power_key_pressed) {
 					if (mutex_is_locked(&power_key_mutex)) {
 						pr_info("unlocking power_key_mutex\n");
+						start_msp_i2c();
 						mutex_unlock(&power_key_mutex);
 					}
 				} else {
@@ -1531,10 +1549,6 @@ static int power_key_notifier_event(struct notifier_block *this,
 	switch(event) {
 	case PM_SUSPEND_PREPARE:
 		power_key_mutex_lock = 1;
-		if (power_key_pressed && mutex_is_locked(&power_key_mutex)) {
-			pr_warn("forcefully unlocking power_key_mutex\n");
-			mutex_unlock(&power_key_mutex);
-		}
 		break;
 	case PM_POST_SUSPEND:
 		power_key_mutex_lock = 0;
@@ -2277,6 +2291,8 @@ void ntx_gpio_resume (void)
  *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
  */
 
+	mutex_lock(&power_key_check_mutex);
+
 	/* unlock the powerkey handling early */
 	pr_info("enabling power button handling\n");
 	power_key_mutex_lock = 0;
@@ -2304,9 +2320,12 @@ void ntx_gpio_resume (void)
 		if (!pwr_key && mutex_is_locked(&power_key_mutex) && g_power_key_debounce == 0) {
 			pr_warn("forcefully unlocking power_key_mutex\n");
 			power_key_pressed = 0;
+			start_msp_i2c();
 			mutex_unlock(&power_key_mutex);
 		}
 	}
+
+	mutex_unlock(&power_key_check_mutex);
 
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
 	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {
