@@ -303,7 +303,6 @@ static inline int pwr_mutex_locked(struct i2c_adapter *adapter)
 	ret = mutex_is_locked(&power_key_mutex);
 	if (ret)
 		dev_warn(&adapter->dev, "stopping running transfer due to pressed power button\n");
-printk("%d ", ret);
 
 	return ret;
 }
@@ -423,6 +422,9 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 	dev_dbg(&i2c_imx->adapter.dev, "<%s>\n", __func__);
 if (i2c_imx->adapter.nr == 2)
 dev_warn(&i2c_imx->adapter.dev, "<%s>\n", __func__);
+
+	if (pwr_mutex_locked(adapter))
+		return -EIO;
 
 	/* Start I2C transfer */
 	result = i2c_imx_start(i2c_imx);
