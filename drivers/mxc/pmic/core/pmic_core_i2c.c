@@ -451,7 +451,7 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 	/* Only wait for unlocking of mutex in resume situations
 	 * During normal operations skip conflicting accesses to the msp.
 	 */
-	if (!power_key_resuming && mutex_is_locked(&power_key_mutex))
+	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex))
 		return -EIO;
 
 	/* the i2c adapter also checks for a locked mutex, so unlock immediately again */
@@ -518,7 +518,7 @@ unsigned int msp430_read(unsigned int reg)
 	/* Only wait for unlocking of mutex in resume situations
 	 * During normal operations skip conflicting accesses to the msp.
 	 */
-	if (!power_key_resuming && mutex_is_locked(&power_key_mutex))
+	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex))
 		return -EIO;
 	
 	/* the i2c adapter also checks for a locked mutex, so unlock immediately again */
@@ -564,7 +564,7 @@ int msp430_write(unsigned int reg, unsigned int value)
 	/* Only wait for unlocking of mutex in resume situations
 	 * During normal operations skip conflicting accesses to the msp.
 	 */
-	if (!power_key_resuming && mutex_is_locked(&power_key_mutex))
+	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex))
 		return -EIO;
 
 	/* the i2c adapter also checks for a locked mutex, so unlock immediately again */
@@ -897,10 +897,10 @@ MODULE_DEVICE_TABLE(i2c, msp430_id);
 static int msp430_suspend(struct i2c_client *client, pm_message_t state)
 {
 	dev_info(&client->dev, "suspending\n");
-	if (mutex_is_locked(&power_key_mutex)) {
+/*	if (mutex_is_locked(&power_key_mutex)) {
 		dev_warn(&client->dev, "forcefully unlocking powerkey mutex on suspend\n");
 		mutex_unlock(&power_key_mutex);
-	}
+	}*/
 
 	return 0;
 }
