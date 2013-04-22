@@ -2388,14 +2388,22 @@ void ntx_gpio_touch_reset (void)
 
 void ntx_msp430_i2c_force_release (void)
 {
+	int ret1, ret2;
+
+	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex)) {
+		pr_warn("%s: mutex is locked\n", __func__);
+		return;
+	}
+
 	int retryCnt=20;
 	mxc_iomux_v3_setup_pad(MX50_PAD_I2C3_SDA__GPIO_6_23);
-	gpio_request(GPIO_I2C3_SDA, "i2c3_sda");
+	ret1 = gpio_request(GPIO_I2C3_SDA, "i2c3_sda");
 	gpio_direction_input (GPIO_I2C3_SDA);
 	mxc_iomux_v3_setup_pad(MX50_PAD_I2C3_SCL__GPIO_6_22);
-	gpio_request(GPIO_I2C3_SCL, "i2c3_scl");
+	ret2 = gpio_request(GPIO_I2C3_SCL, "i2c3_scl");
 	gpio_direction_output (GPIO_I2C3_SCL, 1);
 	// send clock out until i2c SDA released.
+if(!ret1 && !ret2) {
 	while (retryCnt-- && !gpio_get_value (GPIO_I2C3_SDA)) {
 		gpio_set_value (GPIO_I2C3_SCL,1);
 		udelay (5);
@@ -2403,6 +2411,9 @@ void ntx_msp430_i2c_force_release (void)
 		schedule_timeout (1);
 //		udelay (5);
 	}
+} else {
+	pr_warn("%s: could not request gpios\n", __func__);
+}
 	// simulate i2c stop signal
 	gpio_direction_output (GPIO_I2C3_SDA,0);
 	gpio_free(GPIO_I2C3_SCL);
