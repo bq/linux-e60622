@@ -123,6 +123,7 @@ struct imx_i2c_struct {
 	unsigned int 		disable_delay;
 	int			stopped;
 	unsigned int		ifdr; /* IMX_I2C_IFDR */
+	unsigned int		suspended:1;
 };
 
 /** Functions for IMX I2C adapter driver ***************************************
@@ -315,7 +316,7 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 		__func__, msgs->addr << 1);
 
 	if (pwr_mutex_locked(&i2c_imx->adapter))
-		return -EIO;
+		return -EBUSY;
 
 	/* write slave address */
 	writeb(msgs->addr << 1, i2c_imx->base + IMX_I2C_I2DR);
@@ -330,7 +331,7 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 	/* write data */
 	for (i = 0; i < msgs->len; i++) {
 		if (pwr_mutex_locked(&i2c_imx->adapter))
-			return -EIO;
+			return -EBUSY;
 
 		dev_dbg(&i2c_imx->adapter.dev,
 			"<%s> write byte: B%d=0x%X\n",
@@ -356,7 +357,7 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 		__func__, (msgs->addr << 1) | 0x01);
 
 	if (pwr_mutex_locked(&i2c_imx->adapter))
-		return -EIO;
+		return -EBUSY;
 
 	/* write slave address */
 	writeb((msgs->addr << 1) | 0x01, i2c_imx->base + IMX_I2C_I2DR);
@@ -382,7 +383,7 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 	/* read data */
 	for (i = 0; i < msgs->len; i++) {
 		if (pwr_mutex_locked(&i2c_imx->adapter))
-			return -EIO;
+			return -EBUSY;
 
 		result = i2c_imx_trx_complete(i2c_imx);
 		if (result)
@@ -419,12 +420,15 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 	int result;
 	struct imx_i2c_struct *i2c_imx = i2c_get_adapdata(adapter);
 
+	if (i2c_imx->suspended)
+		return -EBUSY;
+
 	dev_dbg(&i2c_imx->adapter.dev, "<%s>\n", __func__);
 if (i2c_imx->adapter.nr == 2)
 dev_warn(&i2c_imx->adapter.dev, "<%s>\n", __func__);
 
 	if (pwr_mutex_locked(adapter))
-		return -EIO;
+		return -EBUSY;
 
 	/* Start I2C transfer */
 	result = i2c_imx_start(i2c_imx);
@@ -434,7 +438,7 @@ dev_warn(&i2c_imx->adapter.dev, "<%s>\n", __func__);
 	/* read/write data */
 	for (i = 0; i < num; i++) {
 		if (pwr_mutex_locked(adapter)) {
-			result = -EIO;
+			result = -EBUSY;
 			goto fail0;
 		}
 
@@ -660,10 +664,42 @@ static int __exit i2c_imx_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_PM
+static int imx_i2c_suspend_noirq(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct imx_i2c_struct *i2c_imx = platform_get_drvdata(pdev);
+
+	i2c_imx->suspended = 1;
+
+	return 0;
+}
+
+static int imx_i2c_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct imx_i2c_struct *i2c_imx = platform_get_drvdata(pdev);
+
+	i2c_imx->suspended = 0;
+
+	return 0;
+}
+
+static const struct dev_pm_ops imx_i2c_dev_pm_ops = {
+	.suspend_noirq = imx_i2c_suspend_noirq,
+	.resume = imx_i2c_resume,
+};
+
+#define IMX_DEV_PM_OPS (&imx_i2c_dev_pm_ops)
+#else
+#define IMX_DEV_PM_OPS NULL
+#endif
+
 static struct platform_driver i2c_imx_driver = {
 	.remove		= __exit_p(i2c_imx_remove),
 	.driver	= {
 		.name	= DRIVER_NAME,
+		.pm	= IMX_DEV_PM_OPS,
 		.owner	= THIS_MODULE,
 	}
 };
