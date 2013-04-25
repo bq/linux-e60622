@@ -96,6 +96,10 @@ struct zforce_point {
 /*
  * @client		the i2c_client
  * @input		the input device
+ * @suspending		in the process of going to suspend (don't emit wakeup
+ *			events for commands executed to suspend the device)
+ * @suspended		device suspended
+ * @access_mutex	serialize i2c-access, to keep multipart reads together
  * @command_done	completion to wait for the command result
  * @command_mutex	serialize commands send to the ic
  * @command_waiting	the id of the command that that is currently waiting
@@ -106,7 +110,7 @@ struct zforce_ts {
 	struct input_dev	*input;
 	char			phys[32];
 
-	bool			stopped;
+	bool			stopped; /* FIXME: not for upstream */
 	bool			suspending;
 	bool			suspended;
 	bool			boot_complete;
