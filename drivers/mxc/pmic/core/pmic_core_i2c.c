@@ -493,7 +493,7 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 }
 
 
-unsigned int msp430_read(unsigned int reg)
+int msp430_read(unsigned int reg)
 {
 	struct i2c_client *client = msp430_client;
 	int i2c_ret;
@@ -537,6 +537,8 @@ unsigned int msp430_read(unsigned int reg)
 			value = buf1[0] << 8 | buf1[1];
 			break;
 		}
+		if (i2c_ret == -EBUSY)
+			break;
 		pr_err("%s: read reg error : Reg 0x%02x\n", __func__, reg);
 		ntx_msp430_i2c_force_release ();
 		schedule_timeout (50);
@@ -578,7 +580,7 @@ int msp430_write(unsigned int reg, unsigned int value)
 	buf[2] = value & 0xff;
 
 	i2c_ret = i2c_transfer(client->adapter, &msg, 1);
-	if (i2c_ret < 0) {
+	if (i2c_ret < 0 && i2c_ret != -EBUSY) {
 		pr_err("%s: write reg error : Reg 0x%02x = 0x%04x\n",
 		       __func__, reg, value);
 		ntx_msp430_i2c_force_release ();
@@ -741,36 +743,51 @@ int msp430_battery(void) {
 }
 EXPORT_SYMBOL_GPL(msp430_battery);
 
-void msp430_gettime(struct rtc_time *tm) {
+int msp430_gettime(struct rtc_time *tm) {
 
 	unsigned long t;
-        unsigned int tmp;
+        int tmp;
 
 	if (NEWMSP) {
-		msp430_cmd(4, -1, NULL, 0, (u8 *) &t, 4, 0);
+		tmp = msp430_cmd(4, -1, NULL, 0, (u8 *) &t, 4, 0);
+		if (tmp < 0)
+			goto fail;
 		rtc_time_to_tm(t, tm);
 	} else {
         	tmp = msp430_read (0x20);
-			tm->tm_year = ((tmp >> 8) & 0x0FF)+100;
-			tm->tm_mon = (tmp & 0x0FF)-1;
+		if (tmp < 0)
+			goto fail;
+		tm->tm_year = ((tmp >> 8) & 0x0FF)+100;
+		tm->tm_mon = (tmp & 0x0FF)-1;
 	        tmp = msp430_read (0x21);
+		if (tmp < 0)
+			goto fail;
 	        tm->tm_mday = (tmp >> 8) & 0x0FF;
 	        tm->tm_hour = tmp & 0x0FF;
 	        tmp = msp430_read (0x23);
+		if (tmp < 0)
+			goto fail;
 	        tm->tm_min = (tmp >> 8) & 0x0FF;
 	        tm->tm_sec = tmp & 0x0FF;
 	}
 
+	return 0;
+
+fail:
+	pr_warn("%s: msp read failed\n", __func__);
+	return tmp;
 }
 EXPORT_SYMBOL_GPL(msp430_gettime);
 
-void msp430_getalarm(struct rtc_wkalrm *alrm) {
+int msp430_getalarm(struct rtc_wkalrm *alrm) {
 
 	unsigned long t[2];
-        unsigned int tmp;
+        int tmp;
 
 	if (NEWMSP) {
-		msp430_cmd(4, -1, NULL, 0, (u8 *) t, 8, 0);
+		tmp = msp430_cmd(4, -1, NULL, 0, (u8 *) t, 8, 0);
+		if (tmp < 0)
+			goto fail;
 		alrm->enabled = (t[1] != 0) ? 1 : 0;
 		rtc_time_to_tm(t[1], &(alrm->time));
 	}
@@ -779,6 +796,11 @@ void msp430_getalarm(struct rtc_wkalrm *alrm) {
 		rtc_time_to_tm(gAlarmTime, &(alrm->time));
 	}
 
+	return 0;
+
+fail:
+	pr_warn("%s: msp read failed\n", __func__);
+	return tmp;
 }
 EXPORT_SYMBOL_GPL(msp430_getalarm);
 

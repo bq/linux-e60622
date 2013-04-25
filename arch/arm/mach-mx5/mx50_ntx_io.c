@@ -793,7 +793,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 		case CM_RTC_WAKEUP_FLAG:
 			if (!g_wakeup_by_alarm) {
 				int tmp = msp430_read (0x60);
-				if (0x8000 & tmp) {
+				if (tmp > 0 && (0x8000 & tmp)) {
 					printk ("[%s-%d] =================> Micro P MSP430 alarm triggered <===================\n", __func__, __LINE__);
 					g_wakeup_by_alarm = 1;
 				}
@@ -1443,8 +1443,9 @@ struct mutex power_key_check_mutex;
 bool power_key_pressed = 0;
 bool power_key_before_sleep = 0;
 bool power_key_after_sleep = 0;
-bool power_key_mutex_lock = 0;
 bool power_key_resuming = 0;
+bool power_key_ignore_next = 0;
+bool last_sleep_state = 0;
 static struct workqueue_struct *power_key_wq;
 static struct delayed_work power_key_work;
 extern void mxc_kpp_report_power(int isDown);
@@ -1471,11 +1472,6 @@ static void start_msp_i2c()
 static void power_key_chk(struct work_struct *work)
 {
 	int pwr_key;
-
-/*	if (power_key_mutex_lock) {
-		pr_warn("we're suspending, don't check the powerkey now\n");
-		return;
-	}*/
 
 	mutex_lock(&power_key_check_mutex);
 
@@ -1518,10 +1514,13 @@ static void power_key_chk(struct work_struct *work)
 					pr_warn("double power key up\n");
 				}
 
-				printk("reporting power key up\n");
+				if ((!power_key_ignore_next || !last_sleep_state) && power_key_pressed) {
+					printk("reporting power key up\n");
+					mxc_kpp_report_power(0);
+				}
 				power_key_pressed = 0;
-				mxc_kpp_report_power(0);
 			}
+			power_key_ignore_next = 0;
 			g_power_key_debounce = 0;
 		} else {
 			printk("scheduling new power_key_chk\n");
@@ -1548,14 +1547,14 @@ static int power_key_notifier_event(struct notifier_block *this,
 
 	switch(event) {
 	case PM_SUSPEND_PREPARE:
-		power_key_mutex_lock = 1;
+		if(power_key_pressed) {
+			pr_warn("%s: power_key_pressed\n", __func__);
+			mutex_unlock(&power_key_check_mutex);
+			return NOTIFY_BAD;
+		}
 		break;
 	case PM_POST_SUSPEND:
-		power_key_mutex_lock = 0;
 		power_key_resuming = 0;
-
-		if (power_key_after_sleep && !gSleep_Mode_Suspend)
-			mxc_kpp_report_power(1);
 
 		break;
 	}
@@ -2291,14 +2290,14 @@ void ntx_gpio_resume (void)
  *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
  */
 
-	mutex_lock(&power_key_check_mutex);
+	//mutex_lock(&power_key_check_mutex);
 
 	/* unlock the powerkey handling early */
 	pr_info("enabling power button handling\n");
-	power_key_mutex_lock = 0;
+	last_sleep_state = gSleep_Mode_Suspend;
 	power_key_resuming = 1;
+	power_key_ignore_next = 1;
 
-	
 	if ((6 == check_hardware_name()) || (2 == check_hardware_name())) 		// E60632 || E50602
 		pwr_key = gpio_get_value (GPIO_PWR_SW)?1:0;
 	else
@@ -2307,8 +2306,14 @@ void ntx_gpio_resume (void)
 	/* if the powerkey is pressed now, report it directly */
 	power_key_after_sleep = pwr_key;
 
-	if (pwr_key != power_key_before_sleep) {
-		pr_warn("power key state changed during suspend!\n");
+	/* immediately start a power_key check, to see the current state
+	 * and if necessary block msp calls
+	 */
+	g_power_key_debounce = 0;
+	power_key_chk(&power_key_work);
+
+//	if (pwr_key != power_key_before_sleep) {
+//		pr_warn("power key state changed during suspend!\n");
 
 		/* the badest state would be, we went to suspend with the mutex locked
 		 * but the key was released after, so we wakeup without the key being down.
@@ -2317,15 +2322,15 @@ void ntx_gpio_resume (void)
 		 * The g_power_key_debounce check is a hackish way to make sure we're not currently
 		 * debouncing a power button release.
 		 */
-		if (!pwr_key && mutex_is_locked(&power_key_mutex) && g_power_key_debounce == 0) {
+/*		if (!pwr_key && mutex_is_locked(&power_key_mutex) && g_power_key_debounce == 0) {
 			pr_warn("forcefully unlocking power_key_mutex\n");
 			power_key_pressed = 0;
 			start_msp_i2c();
 			mutex_unlock(&power_key_mutex);
 		}
-	}
+	}*/
 
-	mutex_unlock(&power_key_check_mutex);
+	//mutex_unlock(&power_key_check_mutex);
 
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
 	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {

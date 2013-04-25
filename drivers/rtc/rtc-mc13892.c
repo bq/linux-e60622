@@ -36,9 +36,9 @@
 #define ISR1_1HZM_WID	1
 #define ISR1_TODAM_WID	1
 
-extern void msp430_gettime( struct rtc_time *tm);
+extern int msp430_gettime( struct rtc_time *tm);
 extern void msp430_settime( struct rtc_time *tm);
-extern void msp430_getalarm( struct rtc_wkalrm *alrm);
+extern int msp430_getalarm( struct rtc_wkalrm *alrm);
 extern void msp430_setalarm( struct rtc_wkalrm *alrm);
 extern void msp430_clearalarm(void);
 
@@ -48,7 +48,7 @@ static unsigned long rtc_status;
 static unsigned long rtc_flag = 0;
 
 extern int msp430_write(unsigned int reg, unsigned int value);
-extern unsigned int msp430_read(unsigned int reg);
+extern int msp430_read(unsigned int reg);
 extern int g_wakeup_by_alarm;
 extern int gIsCustomerUi;
 extern int gIsMSP430IntTriggered;
@@ -109,6 +109,8 @@ static int mxc_rtc_ioctl(struct device *dev, unsigned int cmd,
 		return -ENOIOCTLCMD;
 	case RTC_WAKEUP_FLAG:
 		tmp = msp430_read (0x60);
+		if (tmp < 0)
+			return tmp;
 		printk ("[%s-%d] Micro P MSP430 status 0x%04X ....\n", __func__, __LINE__,tmp);
 		put_user((0x8000 & tmp)?1:0, (unsigned long __user *)arg);
 		gIsMSP430IntTriggered = 0;
@@ -121,6 +123,7 @@ static int mxc_rtc_ioctl(struct device *dev, unsigned int cmd,
 
 static int mxc_rtc_read_time(struct device *dev, struct rtc_time *tm)
 {
+	int ret;
 #if 0
 	unsigned int tod_reg_val = 0;
 	unsigned int day_reg_val = 0, day_reg_val2;
@@ -148,7 +151,9 @@ static int mxc_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	rtc_time_to_tm(time, tm);
 #else
 	#if 1
-	msp430_gettime(tm);
+	ret = msp430_gettime(tm);
+	if (ret < 0)
+		return ret;
 //	printk ("read_time: %d/%d/%d %d:%d:%d\n",tm->tm_year,tm->tm_mon,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
 	#else
 	unsigned int tmp;
