@@ -1542,9 +1542,9 @@ static irqreturn_t power_key_int(int irq, void *dev_id)
 static int power_key_notifier_event(struct notifier_block *this,
 				    unsigned long event, void *ptr)
 {
-	pr_info("power_key_pm_notifier\n");
 	mutex_lock(&power_key_check_mutex);
 
+	pr_info("power_key_pm_notifier %d\n", event);
 	switch(event) {
 	case PM_SUSPEND_PREPARE:
 		if(power_key_pressed) {
@@ -2290,8 +2290,6 @@ void ntx_gpio_resume (void)
  *	__raw_writel(0x00058000, apll_base + MXC_ANADIG_MISC_CLR);
  */
 
-	//mutex_lock(&power_key_check_mutex);
-
 	/* unlock the powerkey handling early */
 	pr_info("enabling power button handling\n");
 	last_sleep_state = gSleep_Mode_Suspend;
@@ -2310,7 +2308,7 @@ void ntx_gpio_resume (void)
 	 * and if necessary block msp calls
 	 */
 	g_power_key_debounce = 0;
-	power_key_chk(&power_key_work);
+	power_key_chk(&power_key_work.work);
 
 //	if (pwr_key != power_key_before_sleep) {
 //		pr_warn("power key state changed during suspend!\n");
@@ -2329,8 +2327,6 @@ void ntx_gpio_resume (void)
 			mutex_unlock(&power_key_mutex);
 		}
 	}*/
-
-	//mutex_unlock(&power_key_check_mutex);
 
 //	if (gSleep_Mode_Suspend && (1 != check_hardware_name()) && (10 != check_hardware_name()) && (14 != check_hardware_name())) {
 	if (gSleep_Mode_Suspend && (4 != gptHWCFG->m_val.bTouchType)) {
@@ -2394,13 +2390,13 @@ void ntx_gpio_touch_reset (void)
 void ntx_msp430_i2c_force_release (void)
 {
 	int ret1, ret2;
+	int retryCnt=20;
 
 	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex)) {
 		pr_warn("%s: mutex is locked\n", __func__);
 		return;
 	}
 
-	int retryCnt=20;
 	mxc_iomux_v3_setup_pad(MX50_PAD_I2C3_SDA__GPIO_6_23);
 	ret1 = gpio_request(GPIO_I2C3_SDA, "i2c3_sda");
 	gpio_direction_input (GPIO_I2C3_SDA);

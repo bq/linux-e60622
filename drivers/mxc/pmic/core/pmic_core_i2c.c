@@ -432,7 +432,6 @@ static void add_crc16(unsigned char *data, int len) {
 }
 
 extern struct mutex power_key_mutex;
-extern bool power_key_resuming;
 
 static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int nread, int crc) {
 
@@ -451,12 +450,8 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 	/* Only wait for unlocking of mutex in resume situations
 	 * During normal operations skip conflicting accesses to the msp.
 	 */
-	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex))
+	if (mutex_is_locked(&power_key_mutex))
 		return -EIO;
-
-	/* the i2c adapter also checks for a locked mutex, so unlock immediately again */
-	mutex_lock(&power_key_mutex);
-	mutex_unlock(&power_key_mutex);
 
 	buffer[0] = cmd;
 	buffer[1] = arg;
@@ -476,7 +471,7 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 		i2c_ret = i2c_transfer(client->adapter, msg, nmsg);
 		if (i2c_ret >= 0) break;
 		pr_err("%s: error: cmd 0x%02x (nwrite=%d nread=%d)\n", __func__, cmd, nwrite, nread);
-		if (i == 5 || mutex_is_locked(&power_key_mutex)) {
+		if (i == 5 || mutex_is_locked(&power_key_mutex) || i2c_ret == -EBUSY) {
 			return -EIO;
 		}
 		mdelay(50);
@@ -518,13 +513,9 @@ int msp430_read(unsigned int reg)
 	/* Only wait for unlocking of mutex in resume situations
 	 * During normal operations skip conflicting accesses to the msp.
 	 */
-	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex))
+	if (mutex_is_locked(&power_key_mutex))
 		return -EIO;
 	
-	/* the i2c adapter also checks for a locked mutex, so unlock immediately again */
-	mutex_lock(&power_key_mutex);
-	mutex_unlock(&power_key_mutex);
-
 	msg[0].addr = client->addr;
 	msg[0].flags = client->flags;
 	msg[1].addr = client->addr;
@@ -566,12 +557,8 @@ int msp430_write(unsigned int reg, unsigned int value)
 	/* Only wait for unlocking of mutex in resume situations
 	 * During normal operations skip conflicting accesses to the msp.
 	 */
-	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex))
+	if (mutex_is_locked(&power_key_mutex))
 		return -EIO;
-
-	/* the i2c adapter also checks for a locked mutex, so unlock immediately again */
-	mutex_lock(&power_key_mutex);
-	mutex_unlock(&power_key_mutex);
 
 //	printk ("[%s-%d] 0x%02X 0x%04X\n",__FUNCTION__,__LINE__,reg,value);
 	pr_debug("w r:%02x,v:%04x\n", reg, value);

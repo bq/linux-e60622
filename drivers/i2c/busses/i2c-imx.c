@@ -424,8 +424,8 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 		return -EBUSY;
 
 	dev_dbg(&i2c_imx->adapter.dev, "<%s>\n", __func__);
-if (i2c_imx->adapter.nr == 2)
-dev_warn(&i2c_imx->adapter.dev, "<%s>\n", __func__);
+/*if (i2c_imx->adapter.nr == 2)
+dev_warn(&i2c_imx->adapter.dev, "<%s>\n", __func__);*/
 
 	if (pwr_mutex_locked(adapter))
 		return -EBUSY;
@@ -483,10 +483,10 @@ fail0:
 	/* Stop I2C transfer */
 	i2c_imx_stop(i2c_imx);
 
-if (i2c_imx->adapter.nr == 2)
+/*if (i2c_imx->adapter.nr == 2)
 dev_warn(&i2c_imx->adapter.dev, "<%s> exit with: %s: %d\n", __func__,
 		(result < 0) ? "error" : "success msg",
-			(result < 0) ? result : num);
+			(result < 0) ? result : num);*/
 	dev_dbg(&i2c_imx->adapter.dev, "<%s> exit with: %s: %d\n", __func__,
 		(result < 0) ? "error" : "success msg",
 			(result < 0) ? result : num);
