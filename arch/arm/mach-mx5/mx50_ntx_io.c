@@ -590,6 +590,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 {
 	unsigned long i = 0, temp;
 	unsigned int p = arg;//*(unsigned int *)arg;
+	int ret;
 	static unsigned int  last_FL_duty = 0;
 	static unsigned int  current_FL_freq = 0xFFFF;
   struct ebook_device_info info;  
@@ -1032,18 +1033,32 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 					printk ("\nset front light level : %d\n",p);
 					if(p>0 && p<=100)
 					{
-						msp430_write (0xA7, FL_table0[p-1]&0xFF00);
-						msp430_write (0xA6, FL_table0[p-1]<<8);
+						ret = msp430_write (0xA7, FL_table0[p-1]&0xFF00);
+						if (ret < 0)
+							return -EINVAL;
+						ret = msp430_write (0xA6, FL_table0[p-1]<<8);
+						if (ret < 0)
+							return -EINVAL;
 						printk("PWMCNT : 0x%04x\n", FL_table0[p-1]);
 					}else{
 						printk("Wrong number! level range from 0 to 100\n");
 					}
 					if (0 == last_FL_duty){
-						msp430_write (0xA1, 0xFF00);
-						msp430_write (0xA2, 0xFF00);
-						msp430_write (0xA5, 0x0100);   
-						msp430_write (0xA4, 0x9000);
-						msp430_write (0xA3, 0x0100);
+						ret = msp430_write (0xA1, 0xFF00);
+						if (ret < 0)
+							return -EINVAL;
+						ret = msp430_write (0xA2, 0xFF00);
+						if (ret < 0)
+							return -EINVAL;
+						ret = msp430_write (0xA5, 0x0100);   
+						if (ret < 0)
+							return -EINVAL;
+						ret = msp430_write (0xA4, 0x9000);
+						if (ret < 0)
+							return -EINVAL;
+						ret = msp430_write (0xA3, 0x0100);
+						if (ret < 0)
+							return -EINVAL;
 
 						msleep(100);
 						gpio_direction_output(FL_EN,0);
@@ -1051,7 +1066,9 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 				}
 				else if(last_FL_duty != 0){
 					printk ("FL PWM off command\n");
-					msp430_write(0xA3, 0); 
+					ret = msp430_write(0xA3, 0); 
+					if (ret < 0)
+						return -EINVAL;
 					schedule_delayed_work(&FL_off, 120);
 				}
 				last_FL_duty = p;
@@ -1071,14 +1088,24 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 				if (p) {			
 					printk ("\nSet front light PWMCNT : 0x%4X\n",p);
 					printk ("Current front light Frequency : (8MHz/0x%4X)\n",current_FL_freq);		
-					msp430_write (0xA7, p&0xFF00);
-					msp430_write (0xA6, p<<8);
+					ret = msp430_write (0xA7, p&0xFF00);
+					if (ret < 0)
+						return -EINVAL;
+					ret = msp430_write (0xA6, p<<8);
+					if (ret < 0)
+						return -EINVAL;
 					if (0 == last_FL_duty){
-						msp430_write (0xA1, 0xFF00);
-						msp430_write (0xA2, 0xFF00);
+						ret = msp430_write (0xA1, 0xFF00);
+						if (ret < 0)
+							return -EINVAL;
+						ret = msp430_write (0xA2, 0xFF00);
+						if (ret < 0)
+							return -EINVAL;
 //						msp430_write (0xA5, 0xFF00);   
 //						msp430_write (0xA4, 0xFF00);
-						msp430_write (0xA3, 0x0100);
+						ret = msp430_write (0xA3, 0x0100);
+						if (ret < 0)
+							return -EINVAL;
 
 						msleep(100);
 						gpio_direction_output(FL_EN,0);
@@ -1086,7 +1113,9 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 				}
 				else {
 					printk ("turn off front light\n");
-					msp430_write (0xA3, 0);
+					ret = msp430_write (0xA3, 0);
+					if (ret < 0)
+						return -EINVAL;
 
 					gpio_direction_input(FL_EN);
 				}
@@ -1100,8 +1129,12 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 				if (p) {
 					printk ("set front light Frequency : (8MHz/0x%4X)\n",p);		
 //					msp430_write (0xA4, (p<<8));
-					msp430_write (0xA5, p&0xFF00);   
-					msp430_write (0xA4, (p<<8));
+					ret = msp430_write (0xA5, p&0xFF00);   
+					if (ret < 0)
+						return -EINVAL;
+					ret = msp430_write (0xA4, (p<<8));
+					if (ret < 0)
+						return -EINVAL;
 					current_FL_freq = p;
 				}
 			}
