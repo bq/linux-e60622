@@ -4960,8 +4960,13 @@ static int mxc_epdc_fb_suspend(struct platform_device *pdev, pm_message_t state)
 	mxc_epdc_fb_wait_update_complete(g_mxc_upd_data.update_marker++,&g_fb_data->info);
 	
 	ret = mxc_epdc_fb_blank(FB_BLANK_POWERDOWN, &data->info);
-	if (ret)
+	if (ret == -ETIMEDOUT) {
+		dev_warn(&pdev->dev, "forcefully turning epdc off\n");
+		epdc_powerdown(data);
+		ret = 0;
+	} else if (ret) {
 		goto out;
+	}
 
 	if(6==gptHWCFG->m_val.bDisplayCtrl) {
 		if(tps65185_suspend()>=0) {
