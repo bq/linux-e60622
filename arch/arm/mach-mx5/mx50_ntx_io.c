@@ -2404,6 +2404,7 @@ void ntx_gpio_resume (void)
 	gpio_free(5*32+20);
 	gpio_free(5*32+21);
 
+/*
 	if (LED_conitnuous)
    		wake_up_interruptible(&LED_freeze_WaitQueue);
    	else {
@@ -2411,6 +2412,7 @@ void ntx_gpio_resume (void)
 		ntx_led_blink (4, green_led_period);
 		ntx_led_blink (5, blue_led_period);
 	}
+*/
 }
 
 void ntx_gpio_touch_reset (void)
