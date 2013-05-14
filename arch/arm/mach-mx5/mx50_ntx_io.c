@@ -1028,9 +1028,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 				if (p) {
 					if(delayed_work_pending(&FL_off)){
 						cancel_delayed_work_sync(&FL_off);
-						printk("FL_off delayed work canceled");
 					}
-					printk ("\nset front light level : %d\n",p);
 					if(p>0 && p<=100)
 					{
 						ret = msp430_write (0xA7, FL_table0[p-1]&0xFF00);
@@ -1039,9 +1037,8 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 						ret = msp430_write (0xA6, FL_table0[p-1]<<8);
 						if (ret < 0)
 							return -EINVAL;
-						printk("PWMCNT : 0x%04x\n", FL_table0[p-1]);
 					}else{
-						printk("Wrong number! level range from 0 to 100\n");
+						pr_err("Wrong number! level range from 0 to 100\n");
 					}
 					if (0 == last_FL_duty){
 						ret = msp430_write (0xA1, 0xFF00);
@@ -1065,7 +1062,6 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 					}
 				}
 				else if(last_FL_duty != 0){
-					printk ("FL PWM off command\n");
 					ret = msp430_write(0xA3, 0); 
 					if (ret < 0)
 						return -EINVAL;
@@ -1086,8 +1082,8 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			if(0!=gptHWCFG->m_val.bFrontLight)
 			{
 				if (p) {			
-					printk ("\nSet front light PWMCNT : 0x%4X\n",p);
-					printk ("Current front light Frequency : (8MHz/0x%4X)\n",current_FL_freq);		
+//					printk ("\nSet front light PWMCNT : 0x%4X\n",p);
+//					printk ("Current front light Frequency : (8MHz/0x%4X)\n",current_FL_freq);		
 					ret = msp430_write (0xA7, p&0xFF00);
 					if (ret < 0)
 						return -EINVAL;
@@ -1112,7 +1108,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 					}
 				}
 				else {
-					printk ("turn off front light\n");
+//					printk ("turn off front light\n");
 					ret = msp430_write (0xA3, 0);
 					if (ret < 0)
 						return -EINVAL;
@@ -1127,7 +1123,7 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 			if(0!=gptHWCFG->m_val.bFrontLight)
 			{
 				if (p) {
-					printk ("set front light Frequency : (8MHz/0x%4X)\n",p);		
+//					printk ("set front light Frequency : (8MHz/0x%4X)\n",p);		
 //					msp430_write (0xA4, (p<<8));
 					ret = msp430_write (0xA5, p&0xFF00);   
 					if (ret < 0)
