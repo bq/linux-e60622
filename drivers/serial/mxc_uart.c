@@ -25,6 +25,7 @@
  */
 #include <linux/module.h>
 #include <linux/interrupt.h>
+#include <linux/delay.h>
 #include <linux/tty.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
@@ -1239,16 +1240,21 @@ static int mxcuart_startup(struct uart_port *port)
 static void mxcuart_shutdown(struct uart_port *port)
 {
 	uart_mxc_port *umxc = (uart_mxc_port *) port;
+	unsigned long temp;
+
+	temp = readl(umxc->port.membase + MXC_UARTUCR2);
+	temp &= ~(MXC_UARTUCR2_TXEN | MXC_UARTUCR2_RXEN);
+	writel(temp, umxc->port.membase + MXC_UARTUCR2);
 
 	/* Disable the IOMUX for the UART */
 	gpio_uart_inactive(umxc->port.line, umxc->ir_mode);
-	mxcuart_free_interrupts(umxc);
 	/* Disable all interrupts, port and break condition */
 	writel(0, umxc->port.membase + MXC_UARTUCR1);
 	writel(0, umxc->port.membase + MXC_UARTUCR3);
 	if (umxc->dma_enabled == 1) {
 		mxcuart_freedma(dma_list + umxc->port.line, umxc);
 	}
+	mxcuart_free_interrupts(umxc);
 }
 
 /*!
@@ -1796,8 +1802,7 @@ static int mxcuart_suspend(struct platform_device *pdev, pm_message_t state)
 	if (umxc == NULL)
 		return 0;	/* skip disabled ports */
 
-	if (umxc && umxc->port.flags & ASYNC_INITIALIZED)
-		uart_suspend_port(&mxc_reg, &umxc->port);
+	uart_suspend_port(&mxc_reg, &umxc->port);
 
 	if (umxc && umxc->port.flags & ASYNC_SUSPENDED)
 		umxc->port.state->port.tty->hw_stopped = 1;
@@ -1824,8 +1829,9 @@ static int mxcuart_resume(struct platform_device *pdev)
 
 	if (umxc && umxc->port.flags & ASYNC_SUSPENDED) {
 		umxc->port.state->port.tty->hw_stopped = 0;
-		uart_resume_port(&mxc_reg, &umxc->port);
 	}
+
+	uart_resume_port(&mxc_reg, &umxc->port);
 
 	return 0;
 }
