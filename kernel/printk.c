@@ -955,7 +955,7 @@ EXPORT_SYMBOL(console_suspend_enabled);
 
 static int __init console_suspend_disable(char *str)
 {
-	console_suspend_enabled = 0;
+//	console_suspend_enabled = 0;
 	return 1;
 }
 __setup("no_console_suspend", console_suspend_disable);
