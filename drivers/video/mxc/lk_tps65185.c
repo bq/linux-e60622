@@ -556,7 +556,6 @@ static void _tps65185_pwrdwn(void)
 	unsigned long dwCurrentMode,dwNewMode;
 	int iIsWaitPwrOff;
 
-pr_info("%s: triggered\n", __func__);
 	// parameters setup ...
 	dwCurrentMode = gtTPS65185_DataA[0].dwCurrent_mode;
 	dwNewMode = gtPwrdwn_work_param.dwNewMode ;
@@ -594,11 +593,9 @@ exit:
 
 static void tps65185_pwrdwn_work_func(struct work_struct *work)
 {
-pr_info("%s: getting lock\n", __func__);
 	mutex_lock(&gtTPS65185_DataA[0].chmod_lock);
 	_tps65185_pwrdwn();
 	mutex_unlock(&gtTPS65185_DataA[0].chmod_lock);
-pr_info("%s: released lock\n", __func__);
 }
 
 
@@ -1264,13 +1261,11 @@ int tps65185_chg_mode(unsigned long *IO_pdwMode,int iIsWaitPwrOff)
 
 	//disable_irq(irq_INT);
 	//disable_irq(irq_PG);
-pr_info("%s: getting lock\n", __func__);
 	mutex_lock(&gtTPS65185_DataA[0].chmod_lock);
 	GALLEN_DBGLOCAL_BEGIN();
 
 	dwCurrent_mode = gtTPS65185_DataA[0].dwCurrent_mode;
 	dwNewMode = *IO_pdwMode;
-pr_info("%s: %lu -> %lu\n", __func__, dwCurrent_mode, dwNewMode);
 
 	if(0==giIsTPS65185_inited) {
 		ERR_MSG("[Error] %s : tps65185 must be initialized first !\n",__FUNCTION__);
@@ -1490,7 +1485,6 @@ exit:
 	GALLEN_DBGLOCAL_END();
 
 	mutex_unlock(&gtTPS65185_DataA[0].chmod_lock);
-pr_info("%s: released lock\n", __func__);
 	//enable_irq(irq_PG);
 	//enable_irq(irq_INT);
 
@@ -1694,12 +1688,10 @@ int tps65185_suspend(void)
 	int iRet = 0;
 
 	dbgENTER();
-printk("a");
 	//ERR_MSG(KERN_ERR "%s()\n",__FUNCTION__);
 
 	flush_workqueue(tps65185_pwrgood_workqueue);
 	flush_workqueue(tps65185_int_workqueue);
-printk("b");
 
 
 
@@ -1716,14 +1708,12 @@ printk("b");
 	disable_irq(irq);
 	irq = gpio_to_irq(GPIO_TPS65185_PWRGOOD);
 	disable_irq(irq);
-printk("c");
 
 #endif //] TPS65185_PWR_ONOFF_INT
 
 
 	dwTPS65185_mode = TPS65185_MODE_SLEEP;
 	tps65185_chg_mode(&dwTPS65185_mode,1);
-printk("d");
 	if(delayed_work_pending(&gtPwrdwn_work_param.pwrdwn_work)) {
 		DBG_MSG("pmic pwrdwn delay work pending !!\n");
 		//flush_delayed_work(&gtPwrdwn_work_param.pwrdwn_work);
