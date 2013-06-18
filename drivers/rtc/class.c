@@ -43,6 +43,10 @@ static void rtc_device_release(struct device *dev)
 static struct timespec	delta;
 static time_t		oldtime;
 
+static DEFINE_MUTEX(suspend_lock);
+static int catch_power_key;
+static struct rtc_device *catch_device;
+
 static int rtc_suspend(struct device *dev, pm_message_t mesg)
 {
 	struct rtc_device	*rtc = to_rtc_device(dev);
@@ -51,6 +55,8 @@ static int rtc_suspend(struct device *dev, pm_message_t mesg)
 
 	if (strcmp(dev_name(&rtc->dev), CONFIG_RTC_HCTOSYS_DEVICE) != 0)
 		return 0;
+
+	mutex_lock(&suspend_lock);
 
 	rtc_read_time(rtc, &tm);
 	rtc_tm_to_time(&tm, &oldtime);
@@ -63,25 +69,75 @@ static int rtc_suspend(struct device *dev, pm_message_t mesg)
 	return 0;
 }
 
+int rtc_delayed_time_sync(void)
+{
+	struct rtc_device	*rtc = catch_device;
+	struct rtc_time		tm;
+	time_t			newtime;
+	struct timespec		time;
+	int ret = 0;
+
+	if (!catch_power_key)
+		return 0;
+
+	printk("reading time again after power button release\n");
+	mutex_lock(&suspend_lock);
+
+	ret = rtc_read_time(rtc, &tm);
+	if (rtc_valid_tm(&tm) != 0) {
+		pr_info("%s:  bogus resume time\n", dev_name(&rtc->dev));
+		goto out;
+	}
+
+	rtc_tm_to_time(&tm, &newtime);
+	if (newtime <= oldtime) {
+		if (newtime < oldtime)
+			pr_debug("%s:  time travel!\n", dev_name(&rtc->dev));
+		goto out;
+	}
+
+	/* restore wall clock using delta against this RTC;
+	 * adjust again for avg 1/2 second RTC sampling error
+	 */
+	set_normalized_timespec(&time,
+				newtime + delta.tv_sec,
+				(NSEC_PER_SEC >> 1) + delta.tv_nsec);
+	do_settimeofday(&time);
+
+	catch_power_key = 0;
+
+out:
+	mutex_unlock(&suspend_lock);
+	return ret;
+}
+
 static int rtc_resume(struct device *dev)
 {
 	struct rtc_device	*rtc = to_rtc_device(dev);
 	struct rtc_time		tm;
 	time_t			newtime;
 	struct timespec		time;
+	int ret;
 
 	if (strcmp(dev_name(&rtc->dev), CONFIG_RTC_HCTOSYS_DEVICE) != 0)
 		return 0;
 
-	rtc_read_time(rtc, &tm);
+	ret = rtc_read_time(rtc, &tm);
 	if (rtc_valid_tm(&tm) != 0) {
 		pr_debug("%s:  bogus resume time\n", dev_name(&rtc->dev));
+
+		catch_power_key = 1;
+		catch_device = rtc;
+
+		mutex_unlock(&suspend_lock);
 		return 0;
 	}
 	rtc_tm_to_time(&tm, &newtime);
 	if (newtime <= oldtime) {
 		if (newtime < oldtime)
 			pr_debug("%s:  time travel!\n", dev_name(&rtc->dev));
+
+		mutex_unlock(&suspend_lock);
 		return 0;
 	}
 
@@ -93,6 +149,7 @@ static int rtc_resume(struct device *dev)
 				(NSEC_PER_SEC >> 1) + delta.tv_nsec);
 	do_settimeofday(&time);
 
+	mutex_unlock(&suspend_lock);
 	return 0;
 }
 

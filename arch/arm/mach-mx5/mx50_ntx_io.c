@@ -1498,6 +1498,8 @@ static void start_msp_i2c()
 	mxc_iomux_v3_setup_pad(MX50_PAD_I2C3_SDA__I2C3_SDA);
 }
 
+extern int rtc_delayed_time_sync(void);
+
 static void power_key_chk(struct work_struct *work)
 {
 	int pwr_key;
@@ -1546,6 +1548,7 @@ static void power_key_chk(struct work_struct *work)
 				if ((!power_key_ignore_next || !last_sleep_state) && power_key_pressed) {
 					printk("reporting power key up\n");
 					mxc_kpp_report_power(0);
+					rtc_delayed_time_sync();
 				}
 				power_key_pressed = 0;
 			}
