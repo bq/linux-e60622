@@ -22,8 +22,6 @@ struct zforce_ts_platdata {
 
 	unsigned int x_max;
 	unsigned int y_max;
-
-	uint32_t flags;
 };
 
 #endif /* _LINUX_ZFORCE_H */
