@@ -1540,6 +1540,7 @@ static void power_key_chk(struct work_struct *work)
 						pr_info("unlocking power_key_mutex\n");
 						start_msp_i2c();
 						mutex_unlock(&power_key_mutex);
+						rtc_delayed_time_sync();
 					}
 				} else {
 					pr_warn("double power key up\n");
@@ -1548,7 +1549,6 @@ static void power_key_chk(struct work_struct *work)
 				if ((!power_key_ignore_next || !last_sleep_state) && power_key_pressed) {
 					printk("reporting power key up\n");
 					mxc_kpp_report_power(0);
-					rtc_delayed_time_sync();
 				}
 				power_key_pressed = 0;
 			}
