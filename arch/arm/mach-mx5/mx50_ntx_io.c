@@ -1514,9 +1514,9 @@ static void power_key_chk(struct work_struct *work)
 	if (pwr_key) {
 		/* lock the mutex on initial down event */
 		if (!power_key_pressed) {
-			pr_info("locking power_key_mutex\n");
-			mutex_lock(&power_key_mutex);
-			kill_msp_i2c();
+//			pr_info("locking power_key_mutex\n");
+//			mutex_lock(&power_key_mutex);
+//			kill_msp_i2c();
 			power_key_pressed = 1;
 		}
 
@@ -1537,9 +1537,9 @@ static void power_key_chk(struct work_struct *work)
 			if (gIsCustomerUi) {
 				if (power_key_pressed) {
 					if (mutex_is_locked(&power_key_mutex)) {
-						pr_info("unlocking power_key_mutex\n");
-						start_msp_i2c();
-						mutex_unlock(&power_key_mutex);
+//						pr_info("unlocking power_key_mutex\n");
+//						start_msp_i2c();
+//						mutex_unlock(&power_key_mutex);
 					}
 				} else {
 					pr_warn("double power key up\n");
@@ -2426,10 +2426,10 @@ void ntx_msp430_i2c_force_release (void)
 	int ret1, ret2;
 	int retryCnt=20;
 
-	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex)) {
-		pr_warn("%s: mutex is locked\n", __func__);
-		return;
-	}
+//	if (/*!power_key_resuming &&*/ mutex_is_locked(&power_key_mutex)) {
+//		pr_warn("%s: mutex is locked\n", __func__);
+//		return;
+//	}
 
 	mxc_iomux_v3_setup_pad(MX50_PAD_I2C3_SDA__GPIO_6_23);
 	ret1 = gpio_request(GPIO_I2C3_SDA, "i2c3_sda");

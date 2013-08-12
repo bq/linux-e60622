@@ -296,6 +296,7 @@ extern struct mutex power_key_mutex;
 static inline int pwr_mutex_locked(struct i2c_adapter *adapter)
 {
 	int ret;
+return false;
 
 	/* only care about the msp i2c */
 	if (adapter->nr != 2)
@@ -315,8 +316,8 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 	dev_dbg(&i2c_imx->adapter.dev, "<%s> write slave address: addr=0x%x\n",
 		__func__, msgs->addr << 1);
 
-	if (pwr_mutex_locked(&i2c_imx->adapter))
-		return -EBUSY;
+//	if (pwr_mutex_locked(&i2c_imx->adapter))
+//		return -EBUSY;
 
 	/* write slave address */
 	writeb(msgs->addr << 1, i2c_imx->base + IMX_I2C_I2DR);
@@ -330,8 +331,8 @@ static int i2c_imx_write(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 
 	/* write data */
 	for (i = 0; i < msgs->len; i++) {
-		if (pwr_mutex_locked(&i2c_imx->adapter))
-			return -EBUSY;
+//		if (pwr_mutex_locked(&i2c_imx->adapter))
+//			return -EBUSY;
 
 		dev_dbg(&i2c_imx->adapter.dev,
 			"<%s> write byte: B%d=0x%X\n",
@@ -356,8 +357,8 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 		"<%s> write slave address: addr=0x%x\n",
 		__func__, (msgs->addr << 1) | 0x01);
 
-	if (pwr_mutex_locked(&i2c_imx->adapter))
-		return -EBUSY;
+//	if (pwr_mutex_locked(&i2c_imx->adapter))
+//		return -EBUSY;
 
 	/* write slave address */
 	writeb((msgs->addr << 1) | 0x01, i2c_imx->base + IMX_I2C_I2DR);
@@ -382,8 +383,8 @@ static int i2c_imx_read(struct imx_i2c_struct *i2c_imx, struct i2c_msg *msgs)
 
 	/* read data */
 	for (i = 0; i < msgs->len; i++) {
-		if (pwr_mutex_locked(&i2c_imx->adapter))
-			return -EBUSY;
+//		if (pwr_mutex_locked(&i2c_imx->adapter))
+//			return -EBUSY;
 
 		result = i2c_imx_trx_complete(i2c_imx);
 		if (result)
@@ -427,8 +428,8 @@ static int i2c_imx_xfer(struct i2c_adapter *adapter,
 /*if (i2c_imx->adapter.nr == 2)
 dev_warn(&i2c_imx->adapter.dev, "<%s>\n", __func__);*/
 
-	if (pwr_mutex_locked(adapter))
-		return -EBUSY;
+//	if (pwr_mutex_locked(adapter))
+//		return -EBUSY;
 
 	/* Start I2C transfer */
 	result = i2c_imx_start(i2c_imx);
@@ -437,10 +438,10 @@ dev_warn(&i2c_imx->adapter.dev, "<%s>\n", __func__);*/
 
 	/* read/write data */
 	for (i = 0; i < num; i++) {
-		if (pwr_mutex_locked(adapter)) {
+/*		if (pwr_mutex_locked(adapter)) {
 			result = -EBUSY;
 			goto fail0;
-		}
+		}*/
 
 		if (i) {
 			dev_dbg(&i2c_imx->adapter.dev,

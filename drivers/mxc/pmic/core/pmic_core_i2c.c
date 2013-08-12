@@ -450,8 +450,8 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 	/* Only wait for unlocking of mutex in resume situations
 	 * During normal operations skip conflicting accesses to the msp.
 	 */
-	if (mutex_is_locked(&power_key_mutex))
-		return -EIO;
+//	if (mutex_is_locked(&power_key_mutex))
+//		return -EIO;
 
 	buffer[0] = cmd;
 	buffer[1] = arg;
@@ -471,7 +471,7 @@ static int msp430_cmd(int cmd, int arg, u8 *indata, int nwrite, u8 *outdata, int
 		i2c_ret = i2c_transfer(client->adapter, msg, nmsg);
 		if (i2c_ret >= 0) break;
 		pr_err("%s: error: cmd 0x%02x (nwrite=%d nread=%d)\n", __func__, cmd, nwrite, nread);
-		if (i == 5 || mutex_is_locked(&power_key_mutex) || i2c_ret == -EBUSY) {
+		if (i == 5 || /*mutex_is_locked(&power_key_mutex) ||*/ i2c_ret == -EBUSY) {
 			return -EIO;
 		}
 		mdelay(50);
@@ -513,15 +513,15 @@ int msp430_read(unsigned int reg)
 	/* Only wait for unlocking of mutex in resume situations
 	 * During normal operations skip conflicting accesses to the msp.
 	 */
-	if (mutex_is_locked(&power_key_mutex))
-		return -EIO;
+//	if (mutex_is_locked(&power_key_mutex))
+//		return -EIO;
 	
 	msg[0].addr = client->addr;
 	msg[0].flags = client->flags;
 	msg[1].addr = client->addr;
 	msg[1].flags |= client->flags;
 	
-	while (retry_count-- && !mutex_is_locked(&power_key_mutex)) {
+	while (retry_count-- /*&& !mutex_is_locked(&power_key_mutex)*/) {
 		buf0[0] = reg & 0xff;
 		i2c_ret = i2c_transfer(client->adapter, msg, 2);
 		if (i2c_ret >= 0) {
@@ -557,8 +557,8 @@ int msp430_write(unsigned int reg, unsigned int value)
 	/* Only wait for unlocking of mutex in resume situations
 	 * During normal operations skip conflicting accesses to the msp.
 	 */
-	if (mutex_is_locked(&power_key_mutex))
-		return -EIO;
+//	if (mutex_is_locked(&power_key_mutex))
+//		return -EIO;
 
 //	printk ("[%s-%d] 0x%02X 0x%04X\n",__FUNCTION__,__LINE__,reg,value);
 	pr_debug("w r:%02x,v:%04x\n", reg, value);
