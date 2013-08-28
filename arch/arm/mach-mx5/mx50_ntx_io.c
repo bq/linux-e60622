@@ -181,6 +181,7 @@
 #define CM_FRONT_LIGHT_AVAILABLE	242
 #define CM_FRONT_LIGHT_DUTY		243
 #define CM_FRONT_LIGHT_FREQUENCY	244
+#define CM_FRONT_LIGHT_SLEEP		245
 
 #define CM_POWER_KEY_RAW		250
 
@@ -1051,6 +1052,39 @@ static int  ioctlDriver(struct inode *inode, struct file *filp, unsigned int com
 						if (ret < 0)
 							return -EINVAL;
 						ret = msp430_write (0xA4, 0x9000);
+						if (ret < 0)
+							return -EINVAL;
+						ret = msp430_write (0xA3, 0x0100);
+						if (ret < 0)
+							return -EINVAL;
+
+						msleep(100);
+						gpio_direction_output(FL_EN,0);
+					}
+				}
+				else if(last_FL_duty != 0){
+					ret = msp430_write(0xA3, 0); 
+					if (ret < 0)
+						return -EINVAL;
+					schedule_delayed_work(&FL_off, 120);
+				}
+				last_FL_duty = p;
+			}
+			break;
+
+		case CM_FRONT_LIGHT_SLEEP:
+printk("front light sleep %d\n", p);
+			if(0!=gptHWCFG->m_val.bFrontLight)
+			{
+				if (p) {
+					if(delayed_work_pending(&FL_off)){
+						cancel_delayed_work_sync(&FL_off);
+					}
+					if (0 == last_FL_duty){
+						ret = msp430_write (0xA1, 0xFF00);
+						if (ret < 0)
+							return -EINVAL;
+						ret = msp430_write (0xA2, 0xFF00);
 						if (ret < 0)
 							return -EINVAL;
 						ret = msp430_write (0xA3, 0x0100);
